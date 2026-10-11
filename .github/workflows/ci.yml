@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   static:
-    name: Lint and typecheck
+    name: Lint, typecheck, unit tests and build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -33,8 +33,12 @@ jobs:
       - run: npm ci
       - name: Lint (JS/shell syntax, shellcheck, secret scan)
         run: npm run lint
-      - name: Typecheck
+      - name: Typecheck (service layer strict, scripts and tests)
         run: npm run typecheck
+      - name: Unit tests (service-layer core)
+        run: npm run test:unit
+      - name: Build (compile the service layer to dist/)
+        run: npm run build
 
   database-plain:
     name: Migrations + pgTAP + concurrency (plain PostgreSQL 16)
@@ -77,9 +81,13 @@ jobs:
         run: npm run db:reset
       - name: Schema lint (plpgsql_check)
         run: npm run db:lint
+      - name: Generated database types are up to date
+        run: |
+          npm run db:types
+          git diff --exit-code -- services/database.types.ts
       - name: Database tests (pgTAP on real Supabase)
         run: npm run test:db
-      - name: Integration tests (Auth + Data API + Storage)
+      - name: Integration tests (Auth + Data API + Storage, and the service layer end to end)
         run: npm run test:integration
       - name: Stop Supabase
         if: always()

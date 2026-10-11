@@ -539,7 +539,7 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | communities.slug | `communities_slug_key` (unique) |
 | memberships.community_id | `memberships_community_user_key` (leading column) |
 | memberships.user_id | `memberships_user_id_idx` |
-| memberships.community_id + status | `memberships_community_status_idx` |
+| memberships.community_id + status (+ created_at, id for the member list) | `memberships_community_status_created_idx` (Stage 12) |
 | posts by community, newest first | `posts_community_feed_idx (community_id, created_at desc, id desc)` |
 | comments by post, oldest first | `comments_post_thread_idx (post_id, created_at, id)` |
 | comments by parent | `comments_parent_thread_idx (parent_comment_id, created_at, id)` (partial) |
