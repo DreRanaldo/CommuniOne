@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(79);
+select plan(86);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
@@ -13,7 +13,7 @@ from unnest(array[
   'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
   'alerts', 'alert_events', 'events', 'event_rsvps', 'notifications', 'notification_types',
   'documents', 'document_folders', 'document_upload_settings', 'document_mime_types',
-  'audit_logs', 'audit_actions'
+  'audit_logs', 'audit_actions', 'profile_private', 'invitations', 'invitation_redemptions'
 ]) as t;
 
 select is_empty(
@@ -24,6 +24,7 @@ select is_empty(
 
 select hasnt_column('public', 'profiles', 'email',    'profiles does not duplicate auth email');
 select hasnt_column('public', 'profiles', 'password', 'profiles stores no password');
+select hasnt_column('public', 'profiles', 'phone', 'phone numbers are not stored on the co-member-readable profile');
 
 -- Unique constraints / keys --------------------------------------------------
 select col_is_unique('public', 'communities', array['slug'], 'communities.slug is unique');
@@ -45,14 +46,14 @@ select results_eq(
      ('alert_events',              'alert_events_community_id_fkey',                 'communities',               'r'),
      ('alerts',                    'alerts_cancelled_by_fkey',                       'profiles',                  'n'),
      ('alerts',                    'alerts_community_id_fkey',                       'communities',               'r'),
-     ('alerts',                    'alerts_created_by_fkey',                         'profiles',                  'r'),
+     ('alerts',                    'alerts_created_by_fkey',                         'profiles',                  'n'),
      ('alerts',                    'alerts_published_by_fkey',                       'profiles',                  'n'),
      ('alerts',                    'alerts_updated_by_user_id_fkey',                 'profiles',                  'n'),
      ('announcements',             'announcements_author_user_id_fkey',              'profiles',                  'n'),
      ('announcements',             'announcements_community_id_fkey',                'communities',               'r'),
      ('announcements',             'announcements_updated_by_user_id_fkey',          'profiles',                  'n'),
      ('audit_logs',                'audit_logs_action_fkey',                         'audit_actions',             'r'),
-     ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'c'),
+     ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'n'),
      ('comments',                  'comments_moderated_by_user_id_fkey',             'profiles',                  'n'),
      ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
      ('comments',                  'comments_post_fk',                               'posts',                     'c'),
@@ -64,13 +65,20 @@ select results_eq(
      ('documents',                 'documents_folder_fk',                            'document_folders',          'n'),
      ('documents',                 'documents_mime_type_fkey',                       'document_mime_types',       'r'),
      ('documents',                 'documents_updated_by_user_id_fkey',              'profiles',                  'n'),
-     ('documents',                 'documents_uploaded_by_fkey',                     'profiles',                  'r'),
+     ('documents',                 'documents_uploaded_by_fkey',                     'profiles',                  'n'),
      ('event_rsvps',               'event_rsvps_event_fk',                           'events',                    'c'),
      ('event_rsvps',               'event_rsvps_user_id_fkey',                       'profiles',                  'c'),
      ('events',                    'events_cancelled_by_fkey',                       'profiles',                  'n'),
      ('events',                    'events_community_id_fkey',                       'communities',               'r'),
-     ('events',                    'events_created_by_fkey',                         'profiles',                  'r'),
+     ('events',                    'events_created_by_fkey',                         'profiles',                  'n'),
      ('events',                    'events_updated_by_user_id_fkey',                 'profiles',                  'n'),
+     ('invitation_redemptions',    'invitation_redemptions_community_id_fkey',       'communities',               'r'),
+     ('invitation_redemptions',    'invitation_redemptions_invitation_id_fkey',      'invitations',               'c'),
+     ('invitation_redemptions',    'invitation_redemptions_membership_id_fkey',      'memberships',               'n'),
+     ('invitation_redemptions',    'invitation_redemptions_user_id_fkey',            'profiles',                  'c'),
+     ('invitations',               'invitations_community_id_fkey',                  'communities',               'r'),
+     ('invitations',               'invitations_created_by_fkey',                    'profiles',                  'n'),
+     ('invitations',               'invitations_revoked_by_fkey',                    'profiles',                  'n'),
      ('membership_roles',          'membership_roles_membership_fk',                 'memberships',               'c'),
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
@@ -81,9 +89,10 @@ select results_eq(
      ('notifications',             'notifications_user_id_fkey',                     'profiles',                  'c'),
      ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
      ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
-     ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'c'),
+     ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'n'),
      ('posts',                     'posts_community_id_fkey',                        'communities',               'r'),
      ('posts',                     'posts_moderated_by_user_id_fkey',                'profiles',                  'n'),
+     ('profile_private',           'profile_private_user_id_fkey',                   'profiles',                  'c'),
      ('profiles',                  'profiles_id_fkey',                               'auth.users',                'c'),
      ('reactions',                 'reactions_comment_fk',                           'comments',                  'c'),
      ('reactions',                 'reactions_post_fk',                              'posts',                     'c'),
@@ -138,7 +147,10 @@ from (values
   ('documents',        array['storage_path']),
   ('audit_logs',       array['community_id', 'created_at']),
   ('audit_logs',       array['actor_user_id', 'created_at']),
-  ('audit_logs',       array['entity_type', 'entity_id'])
+  ('audit_logs',       array['entity_type', 'entity_id']),
+  ('invitations',      array['token_hash']),
+  ('invitations',      array['community_id', 'created_at']),
+  ('invitation_redemptions', array['invitation_id', 'user_id'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------

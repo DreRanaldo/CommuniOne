@@ -15,7 +15,7 @@ const CROWD = 25;
 const CAPACITY = 10;
 
 after(async () => {
-  // events.created_by is ON DELETE RESTRICT: remove events before their creators.
+  // Events block community deletion (communities RESTRICT): remove them first.
   for (const id of Object.values(c)) await admin.from('events').delete().eq('community_id', id);
   await deleteTrackedUsers();
 });

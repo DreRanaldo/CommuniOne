@@ -2,7 +2,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(24);
+select plan(25);
 
 -- ---------------------------------------------------------------------------
 -- Fixture (identical in every behavioural test file)
@@ -177,6 +177,13 @@ select throws_ok(
 delete from auth.users where id = pg_temp.fx('frank');
 select is_empty($$ select 1 from public.memberships where user_id = pg_temp.fx('frank') $$, 'deleting a user account removes their memberships');
 select isnt_empty($$ select 1 from public.communities where id = pg_temp.fx('B') $$, 'deleting a member does not delete the community');
+-- bob is B's only role manager; deleting his account is refused until
+-- someone else can manage roles (account-deletion policy).
+select throws_like(
+  format($$ delete from auth.users where id = %L $$, pg_temp.fx('bob')),
+  '%transfer the ability to manage roles%', 'the only role manager of a community with members cannot be deleted'
+);
+insert into public.membership_roles (membership_id, role_id) values (pg_temp.fx('alice@B'), pg_temp.role_id('B', 'Owner'));
 delete from auth.users where id = pg_temp.fx('bob');
 select is(
   (select created_by from public.communities where id = pg_temp.fx('B')), null::uuid,

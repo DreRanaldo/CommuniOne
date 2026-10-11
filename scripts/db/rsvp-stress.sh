@@ -70,7 +70,7 @@ commit;
 SQL
 BURST_CLIENTS=$(( CLIENTS * 2 ))
 echo "==> burst: ${BURST_CLIENTS} clients requesting 'going' simultaneously (capacity ${CAPACITY})"
-pgbench -n -d "${DB}" -c "${BURST_CLIENTS}" -j 8 -t 5 --max-tries=20 -f "${WORK}/burst.sql" > "${WORK}/burst.log" 2>&1 || true
+pgbench -n -c "${BURST_CLIENTS}" -j 8 -t 5 --max-tries=20 -f "${WORK}/burst.sql" "${DB}" > "${WORK}/burst.log" 2>&1 || true
 grep -E "number of (transactions actually processed|failed transactions)" "${WORK}/burst.log" || true
 "${PSQL[@]}" -At <<SQL
 do \$\$
@@ -106,7 +106,7 @@ commit;
 SQL
   echo "==> pgbench: ${CLIENTS} clients x ${TX} transactions, ${ISOLATION}"
   # --max-tries retries serialization failures (expected under REPEATABLE READ).
-  pgbench -n -d "${DB}" -c "${CLIENTS}" -j 4 -t "${TX}" --max-tries=20 -f "${WORK}/rsvp.sql" > "${WORK}/pgbench.log" 2>&1 || true
+  pgbench -n -c "${CLIENTS}" -j 4 -t "${TX}" --max-tries=20 -f "${WORK}/rsvp.sql" "${DB}" > "${WORK}/pgbench.log" 2>&1 || true
   grep -E "number of (transactions actually processed|failed transactions|transactions retried)" "${WORK}/pgbench.log" || true
   # READ COMMITTED (what the Data API uses): every transaction must complete.
   # REPEATABLE READ: one hot event row makes serialization failures the

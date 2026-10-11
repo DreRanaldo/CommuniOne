@@ -10,12 +10,19 @@
     "db:start": "supabase start -x studio,realtime,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
+    "db:lint": "supabase db lint --level warning --fail-on warning",
+    "lint": "bash scripts/lint.sh",
+    "typecheck": "tsc -p tsconfig.json",
     "test:db": "supabase test db",
+    "test:db:plain": "bash scripts/db/test.sh",
+    "test:db:concurrency": "bash scripts/db/invitation-race.sh && bash scripts/db/rsvp-stress.sh",
     "test:integration": "bash scripts/test-integration.sh",
     "test": "npm run test:db && npm run test:integration"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.117.3",
-    "supabase": "2.120.0"
+    "@types/node": "22.20.5",
+    "supabase": "2.120.0",
+    "typescript": "5.9.3"
   }
 }

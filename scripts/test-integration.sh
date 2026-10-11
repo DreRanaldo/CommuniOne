@@ -21,10 +21,11 @@ status_env="$(npx --no-install supabase status -o env 2>/dev/null)" || {
 
 get() { printf '%s\n' "${status_env}" | sed -n "s/^$1=\"\(.*\)\"$/\1/p"; }
 
-export SUPABASE_URL="$(get API_URL)"
-export SUPABASE_ANON_KEY="$(get ANON_KEY)"
-export SUPABASE_SERVICE_ROLE_KEY="$(get SERVICE_ROLE_KEY)"
-export SUPABASE_JWT_SECRET="$(get JWT_SECRET)"
-export MAILPIT_URL="$(get MAILPIT_URL)"
+SUPABASE_URL="$(get API_URL)"
+SUPABASE_ANON_KEY="$(get ANON_KEY)"
+SUPABASE_SERVICE_ROLE_KEY="$(get SERVICE_ROLE_KEY)"
+SUPABASE_JWT_SECRET="$(get JWT_SECRET)"
+MAILPIT_URL="$(get MAILPIT_URL)"
+export SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET MAILPIT_URL
 
-node --test --test-concurrency=1 'tests/integration/*.test.mjs'
+node --test --test-concurrency=1 "${@:-tests/integration/*.test.mjs}"

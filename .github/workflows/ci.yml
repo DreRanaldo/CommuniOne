@@ -1,0 +1,86 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Pushes to claude/**
+# branches also run so automated work is verified before a PR is opened.
+#
+# CI never talks to a hosted Supabase project: every database is created
+# from scratch inside the runner, and the only keys used are the local
+# development keys that `supabase start` generates for that throwaway stack.
+# No repository secrets are needed or read.
+on:
+  pull_request:
+  push:
+    branches: [main, 'claude/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Lint and typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint (JS/shell syntax, shellcheck, secret scan)
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+
+  database-plain:
+    name: Migrations + pgTAP + concurrency (plain PostgreSQL 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PGHOST: /var/run/postgresql
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pgTAP and pg_prove
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgtap libtap-parser-sourcehandler-pgtap-perl
+      - name: Start a throwaway PostgreSQL cluster
+        run: |
+          sudo systemctl start postgresql.service
+          until pg_isready -q; do sleep 1; done
+          sudo -u postgres createuser --superuser "$USER"
+      - name: Apply every migration to a clean database and run pgTAP
+        run: bash scripts/db/test.sh
+      - name: Invitation redemption race test
+        run: bash scripts/db/invitation-race.sh
+      - name: RSVP capacity stress test
+        run: bash scripts/db/rsvp-stress.sh 16 100
+
+  supabase:
+    name: Supabase stack (migrations, schema lint, pgTAP, integration)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start local Supabase (applies every migration to a clean database)
+        run: npm run db:start
+      - name: Build verification - migrations rebuild cleanly from scratch
+        run: npm run db:reset
+      - name: Schema lint (plpgsql_check)
+        run: npm run db:lint
+      - name: Database tests (pgTAP on real Supabase)
+        run: npm run test:db
+      - name: Integration tests (Auth + Data API + Storage)
+        run: npm run test:integration
+      - name: Stop Supabase
+        if: always()
+        run: npm run db:stop -- --no-backup

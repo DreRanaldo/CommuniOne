@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { addMember, admin, createConfirmedUser, deleteTrackedUsers, roleId, signIn, trackCommunity } from './helpers.mjs';
 
 after(async () => {
-  // alerts.created_by is ON DELETE RESTRICT: remove alerts before their creators.
+  // Alerts block community deletion (communities RESTRICT): remove them first.
   for (const id of Object.values(c)) await admin.from('alerts').delete().eq('community_id', id);
   await deleteTrackedUsers();
 });
@@ -219,8 +219,16 @@ describe('isolation, RLS and the notification outbox', () => {
     assert.equal((await u.ownerA.client.from('alerts').delete().eq('id', al.gas)).error?.code, '42501');
   });
 
-  test('an alert creator\'s account cannot be deleted while their alerts exist (accountability)', async () => {
-    const { error } = await admin.auth.admin.deleteUser(u.alerter.id);
-    assert.ok(error, 'account deletion is blocked by alerts.created_by ON DELETE RESTRICT');
+  test('deleting an alert creator\'s account keeps their alerts, attributed to a deleted user', async () => {
+    const before = await alert(al.water);
+    assert.equal(before.created_by, u.alerter.id);
+    const memberView = async () => (await u.memberA.client.from('alerts').select('id, title, status').eq('id', al.water)).data;
+    const seenBefore = await memberView();
+    const { error } = await u.alerter.client.rpc('delete_my_account');
+    assert.equal(error, null);
+    const after = await alert(al.water);
+    assert.equal(after.created_by, null, 'creator is cleared (shown as "Deleted User")');
+    assert.deepEqual([after.title, after.status], [before.title, before.status]);
+    assert.deepEqual(await memberView(), seenBefore, 'members see the alert exactly as before');
   });
 });

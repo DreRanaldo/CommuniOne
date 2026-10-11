@@ -118,7 +118,11 @@ export async function deleteTrackedUsers() {
   createdUserIds.clear();
 }
 
-/** Raw Data API request with an arbitrary bearer token. */
+/**
+ * Raw Data API request with an arbitrary bearer token.
+ * @param {string} path
+ * @param {{ token?: string, method?: string, body?: unknown }} [options]
+ */
 export async function rest(path, { token, method = 'GET', body } = {}) {
   const headers = { apikey: ANON_KEY, 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
