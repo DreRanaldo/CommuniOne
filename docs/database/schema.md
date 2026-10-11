@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–7)
+# CommuniOne Database Schema (Stages 1–8)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -10,7 +10,8 @@ Stage 5 added posts, comments and reactions (see
 [`docs/features/posts.md`](../features/posts.md)). Stage 6 added announcements (see
 [`docs/features/announcements.md`](../features/announcements.md)). Stage 7 added
 alerts and the alert event outbox (see
-[`docs/features/alerts.md`](../features/alerts.md)). Stage 4
+[`docs/features/alerts.md`](../features/alerts.md)). Stage 8 added events and
+RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 4
 (invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -35,6 +36,7 @@ With plain PostgreSQL 15+ and pgTAP (no Docker), for example in CI:
 ```bash
 # libpq env vars select the server: PGHOST, PGPORT, PGUSER, PGPASSWORD
 scripts/db/test.sh
+scripts/db/rsvp-stress.sh # optional: pgbench concurrency stress test for event capacity
 ```
 
 `scripts/db/test.sh` drops and recreates a throwaway database
@@ -60,6 +62,7 @@ runs `pg_prove`.
 | 11 | `20261011001100_posts_comments_reactions.sql` | Stage 5: posts, comments, reactions, their RLS, lifecycle triggers, `list_community_posts()`, `list_post_comments()`, `get_reaction_summary()` |
 | 12 | `20261011001200_announcements.sql` | Stage 6: announcements, their RLS, lifecycle trigger, `list_current_announcements()`, `list_announcement_history()` |
 | 13 | `20261011001300_alerts.sql` | Stage 7: alerts, alert_events outbox, RLS, severity and lifecycle trigger, expiry sweep, active/history list functions |
+| 14 | `20261011001400_events.sql` | Stage 8: events, event_rsvps, RLS, lifecycle trigger, lock-based capacity and FIFO waitlist, RSVP / attendance / list functions |
 
 ## Entity relationships
 
@@ -292,6 +295,31 @@ Transactional outbox and audit trail, written only by trigger:
 - `actor_user_id` (FK → profiles **SET NULL**; NULL = system);
 - `occurred_at`, and `dispatched_at` (for the future notification worker).
 
+### `events` (Stage 8)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | `UNIQUE (id, community_id)` for the RSVP composite FK |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| created_by | uuid NOT NULL | FK → `profiles.id` **RESTRICT**; session default |
+| title / description / location_text | text | 1–200 / ≤ 10 000 / ≤ 500 |
+| starts_at, ends_at | timestamptz NOT NULL | `ends_at >= starts_at` |
+| timezone | text NOT NULL | IANA, validated |
+| capacity | integer | NULL = unlimited; 1–100 000 |
+| status | text NOT NULL | `draft` \| `published` \| `cancelled` \| `completed` |
+| published_at, cancelled_at, cancelled_by, cancellation_reason, completed_at, edited_at, updated_by_user_id, rsvp_changed_at | | Server-stamped (`rsvp_changed_at` is the capacity lock) |
+
+### `event_rsvps` (Stage 8)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | Derived from the event |
+| event_id | uuid NOT NULL | FK `(event_id, community_id)` → `events` **CASCADE** |
+| user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; session default |
+| status | text NOT NULL | `going` \| `maybe` \| `not_going` \| `waitlisted` (server-assigned) |
+| waitlisted_at | timestamptz | Set exactly while waitlisted (CHECK) |
+
+`UNIQUE (event_id, user_id)`.
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -348,6 +376,10 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
 | comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
 | comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
+| events.created_by → profiles | RESTRICT | Same accountability decision as alerts |
+| events.community_id → communities | RESTRICT | Same as other community children |
+| event_rsvps → events | CASCADE | RSVPs belong to their event |
+| event_rsvps.user_id → profiles | CASCADE | Account deletion removes the person's RSVPs |
 | alerts.created_by → profiles | RESTRICT | Safety records keep an accountable creator. Account deletion of an alert creator needs an operator step (see `alerts.md`). |
 | alerts.community_id, alert_events.community_id → communities | RESTRICT | Same as other community children |
 | alert_events.alert_id → alerts | CASCADE | Events belong to their alert |
@@ -378,6 +410,10 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | active alerts, emergencies first | `alerts_community_active_idx (community_id, severity_rank desc, published_at desc) WHERE status = 'published'` |
 | alert expiry sweep | `alerts_due_expiry_idx (expires_at) WHERE status = 'published'` |
 | undispatched alert events | `alert_events_undispatched_idx (occurred_at) WHERE dispatched_at IS NULL` |
+| events by community and start time | `events_community_starts_idx (community_id, starts_at, id)` |
+| events by community, status, start | `events_community_status_starts_idx` |
+| RSVPs by event / by user | `event_rsvps_event_user_key` (leading), `event_rsvps_user_idx` |
+| capacity count and waitlist order | `event_rsvps_going_idx`, `event_rsvps_waitlist_idx (event_id, waitlisted_at, id)` (partial) |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -418,6 +454,8 @@ the full model. In short:
 | announcements (Stage 6) | published or archived: `announcements.view` / `manage`; draft or deleted: `announcements.manage`, or the author holding `announcements.create` | `announcements.create`, as yourself, draft or published; columns: community_id, title, body, priority, status, expires_at | `announcements.manage`, or the author holding `announcements.create`; columns: title, body, priority, status, expires_at; trigger enforces the lifecycle | ✗ (soft delete) |
 | alerts (Stage 7) | non-draft: `alerts.view` / `manage`; draft: `alerts.manage` or the creator holding `alerts.create` | `alerts.create`, as yourself, draft or published; `emergency` needs `alerts.manage` | `alerts.manage`, or the creator holding `alerts.create`; columns: title, body, severity, status, expires_at, cancellation_reason; trigger enforces lifecycle and severity rules | ✗ |
 | alert_events (Stage 7) | `alerts.manage` | ✗ (trigger only) | ✗ | ✗ |
+| events (Stage 8) | non-draft: `events.view` / `manage`; draft: `events.manage` or the creator holding `events.create` | `events.create`, as yourself, draft or published | `events.manage`, or the creator holding `events.create`; trigger enforces lifecycle and capacity | ✗ |
+| event_rsvps (Stage 8) | own; `going` RSVPs of visible events; all with `events.manage` | own, while the event is published, not started, and you have `events.view`; status is sanitised by the capacity trigger | own, same conditions; `status` only | own, same conditions |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -437,7 +475,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3, 5, 6 and 7)
+### Client RPCs (Stages 3, 5, 6, 7 and 8)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -449,6 +487,9 @@ restricted by it.
 | `public.list_current_announcements(...)` / `public.list_announcement_history(...)` | cursor-paginated pages | Stage 6, SECURITY INVOKER |
 | `public.list_active_alerts(...)` / `public.list_my_active_alerts()` / `public.list_alert_history(...)` | alerts, emergencies first | Stage 7, SECURITY INVOKER |
 | `public.expire_due_alerts()` | count | Stage 7, **service role only** (scheduler) |
+| `public.rsvp_to_event(event_id, status)` / `public.cancel_rsvp(event_id)` | stored status / boolean | Stage 8, SECURITY INVOKER; take the event lock first |
+| `public.get_event_attendance(event_id)` | counts, my status, queue position | Stage 8, SECURITY DEFINER (totals only, visible events only) |
+| `public.list_upcoming_events(...)` / `public.list_events(...)` | events | Stage 8, SECURITY INVOKER |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 

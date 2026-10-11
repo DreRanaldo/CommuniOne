@@ -252,3 +252,18 @@ emergency rule is enforced by both the policy and the trigger.
   but trusted writes such as the expiry sweep need it.
 - Events written by server code record a NULL actor.
 
+## Events and RSVPs (Stage 8)
+
+Details are in [`../features/events.md`](../features/events.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an event | `private.can_view_event_row()`: non-draft needs `events.view` or `manage`; a draft needs `events.manage`, or being the creator plus `events.create` |
+| Can create or change an event | INSERT policy (`events.create`); `private.can_manage_event_row()` (`events.manage`, or creator plus `events.create`); lifecycle trigger |
+| Can RSVP | `private.can_rsvp()`: the event is published and not started, and the caller has `events.view` in its community; only your own RSVP (`user_id` is the session user) |
+| Capacity | `private.apply_rsvp_capacity()`, SECURITY DEFINER: locks the event row, counts under the lock, waitlists overflow. It applies to every writer, including server code. |
+| Attendance totals | `public.get_event_attendance()`, SECURITY DEFINER: totals only, and only for events the caller can see |
+
+- Members never see other people's `maybe` or `not_going` answers.
+- `waitlisted` and the queue position are server-controlled.
+

@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(56);
+select plan(62);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
@@ -11,7 +11,7 @@ from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
   'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
-  'alerts', 'alert_events'
+  'alerts', 'alert_events', 'events', 'event_rsvps'
 ]) as t;
 
 select is_empty(
@@ -54,6 +54,12 @@ select results_eq(
      ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
      ('comments',                  'comments_post_fk',                               'posts',                     'c'),
      ('communities',               'communities_created_by_fkey',                    'auth.users',                'n'),
+     ('event_rsvps',               'event_rsvps_event_fk',                           'events',                    'c'),
+     ('event_rsvps',               'event_rsvps_user_id_fkey',                       'profiles',                  'c'),
+     ('events',                    'events_cancelled_by_fkey',                       'profiles',                  'n'),
+     ('events',                    'events_community_id_fkey',                       'communities',               'r'),
+     ('events',                    'events_created_by_fkey',                         'profiles',                  'r'),
+     ('events',                    'events_updated_by_user_id_fkey',                 'profiles',                  'n'),
      ('membership_roles',          'membership_roles_membership_fk',                 'memberships',               'c'),
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
@@ -105,7 +111,11 @@ from (values
   ('announcements',    array['community_id', 'expires_at']),
   ('alerts',           array['community_id', 'status', 'published_at']),
   ('alerts',           array['expires_at']),
-  ('alert_events',     array['alert_id', 'occurred_at'])
+  ('alert_events',     array['alert_id', 'occurred_at']),
+  ('events',           array['community_id', 'starts_at']),
+  ('events',           array['community_id', 'status', 'starts_at']),
+  ('event_rsvps',      array['event_id']),
+  ('event_rsvps',      array['user_id'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------
