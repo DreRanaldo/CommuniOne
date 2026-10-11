@@ -1,0 +1,12 @@
+# Minimal Supabase CLI configuration. Unspecified settings use CLI defaults.
+# Run `supabase start`, then `supabase db reset` (applies migrations + seed)
+# and `supabase test db` (runs supabase/tests/database/*.test.sql).
+project_id = "communione"
+
+[db]
+# Match your hosted project (Settings > Infrastructure). The schema needs 15+.
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]

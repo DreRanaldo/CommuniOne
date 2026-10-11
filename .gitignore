@@ -1,0 +1,16 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.branches
+supabase/.temp
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Dependencies (future application code)
+node_modules/
