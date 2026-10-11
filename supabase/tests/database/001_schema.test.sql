@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(62);
+select plan(67);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
@@ -11,7 +11,7 @@ from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
   'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
-  'alerts', 'alert_events', 'events', 'event_rsvps'
+  'alerts', 'alert_events', 'events', 'event_rsvps', 'notifications', 'notification_types'
 ]) as t;
 
 select is_empty(
@@ -65,6 +65,9 @@ select results_eq(
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
      ('memberships',               'memberships_user_id_fkey',                       'auth.users',                'c'),
      ('memberships',               'memberships_user_profile_fkey',                  'profiles',                  'c'),
+     ('notifications',             'notifications_community_id_fkey',                'communities',               'c'),
+     ('notifications',             'notifications_type_fkey',                        'notification_types',        'r'),
+     ('notifications',             'notifications_user_id_fkey',                     'profiles',                  'c'),
      ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
      ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
      ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'c'),
@@ -115,7 +118,10 @@ from (values
   ('events',           array['community_id', 'starts_at']),
   ('events',           array['community_id', 'status', 'starts_at']),
   ('event_rsvps',      array['event_id']),
-  ('event_rsvps',      array['user_id'])
+  ('event_rsvps',      array['user_id']),
+  ('notifications',    array['user_id', 'created_at']),
+  ('notifications',    array['user_id', 'read_at']),
+  ('notifications',    array['community_id', 'created_at'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------

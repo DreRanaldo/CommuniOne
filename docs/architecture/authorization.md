@@ -267,3 +267,25 @@ Details are in [`../features/events.md`](../features/events.md).
 - Members never see other people's `maybe` or `not_going` answers.
 - `waitlisted` and the queue position are server-controlled.
 
+## Notifications (Stage 9)
+
+Details are in [`../features/notifications.md`](../features/notifications.md).
+
+- **Ownership.** A notification is readable and manageable only by its
+  recipient (`private.can_read_notification()`). There is no
+  community-permission override, so not even a community Owner can read a
+  member's notifications.
+- **Access follows membership.** Community-scoped notifications of
+  membership-requiring types are readable only while the recipient still has
+  `community.view` in that community. Suspension or removal also cuts off old
+  notifications.
+- **Creation is a server privilege:**
+  - clients have no INSERT grant;
+  - the internal service (`private.create_notification`,
+    `private.notify_community`) is executable only by other SECURITY DEFINER
+    code;
+  - `public.create_notification` is executable by the service role only.
+- **Recipients are resolved by permission key** (e.g. `alerts.view`) through
+  `private.community_members_with_permission()`. It computes permissions for
+  arbitrary users, so it is internal only.
+

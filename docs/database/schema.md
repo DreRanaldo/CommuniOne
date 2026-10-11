@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–8)
+# CommuniOne Database Schema (Stages 1–9)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -11,7 +11,9 @@ Stage 5 added posts, comments and reactions (see
 [`docs/features/announcements.md`](../features/announcements.md)). Stage 7 added
 alerts and the alert event outbox (see
 [`docs/features/alerts.md`](../features/alerts.md)). Stage 8 added events and
-RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 4
+RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 9 added
+in-app notifications and the notification service (see
+[`docs/features/notifications.md`](../features/notifications.md)). Stage 4
 (invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -63,6 +65,7 @@ runs `pg_prove`.
 | 12 | `20261011001200_announcements.sql` | Stage 6: announcements, their RLS, lifecycle trigger, `list_current_announcements()`, `list_announcement_history()` |
 | 13 | `20261011001300_alerts.sql` | Stage 7: alerts, alert_events outbox, RLS, severity and lifecycle trigger, expiry sweep, active/history list functions |
 | 14 | `20261011001400_events.sql` | Stage 8: events, event_rsvps, RLS, lifecycle trigger, lock-based capacity and FIFO waitlist, RSVP / attendance / list functions |
+| 15 | `20261011001500_notifications.sql` | Stage 9: notifications, notification_types, RLS, notification service, producers for announcements / alerts / events / waitlist / comments / membership, client RPCs |
 
 ## Entity relationships
 
@@ -320,6 +323,25 @@ Transactional outbox and audit trail, written only by trigger:
 
 `UNIQUE (event_id, user_id)`.
 
+### `notifications` (Stage 9)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; the recipient |
+| community_id | uuid | FK → `communities.id` **CASCADE** (derived data) |
+| type | text NOT NULL | FK → `notification_types.key` **RESTRICT** |
+| title / body | text | 1–200 / ≤ 1 000 |
+| data | jsonb NOT NULL | Object, ≤ 8 KiB, deep-link ids |
+| dedupe_key | text | Unique per user (idempotency) |
+| read_at, archived_at | timestamptz | Server-stamped; the only client-writable columns |
+| created_at | timestamptz NOT NULL | |
+
+### `notification_types` (Stage 9)
+Catalog: `key` PK, `description`, `requires_membership`, `default_priority`.
+
+Seeded with `announcement`, `alert`, `event_created`, `event_updated`,
+`event_cancelled`, `comment`, `membership` and `system`.
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -376,6 +398,9 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
 | comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
 | comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
+| notifications.user_id → profiles | CASCADE | A user's notifications go with their account |
+| notifications.community_id → communities | CASCADE | Notifications are derived data |
+| notifications.type → notification_types | RESTRICT | A type in use cannot be removed |
 | events.created_by → profiles | RESTRICT | Same accountability decision as alerts |
 | events.community_id → communities | RESTRICT | Same as other community children |
 | event_rsvps → events | CASCADE | RSVPs belong to their event |
@@ -414,6 +439,9 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | events by community, status, start | `events_community_status_starts_idx` |
 | RSVPs by event / by user | `event_rsvps_event_user_key` (leading), `event_rsvps_user_idx` |
 | capacity count and waitlist order | `event_rsvps_going_idx`, `event_rsvps_waitlist_idx (event_id, waitlisted_at, id)` (partial) |
+| a user's notifications, newest first | `notifications_user_created_idx (user_id, created_at desc, id desc)` |
+| unread notifications | `notifications_user_unread_idx (user_id, read_at) WHERE archived_at IS NULL` |
+| notifications by community | `notifications_community_created_idx (community_id, created_at desc)` (partial) |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -456,6 +484,8 @@ the full model. In short:
 | alert_events (Stage 7) | `alerts.manage` | ✗ (trigger only) | ✗ | ✗ |
 | events (Stage 8) | non-draft: `events.view` / `manage`; draft: `events.manage` or the creator holding `events.create` | `events.create`, as yourself, draft or published | `events.manage`, or the creator holding `events.create`; trigger enforces lifecycle and capacity | ✗ |
 | event_rsvps (Stage 8) | own; `going` RSVPs of visible events; all with `events.manage` | own, while the event is published, not started, and you have `events.view`; status is sanitised by the capacity trigger | own, same conditions; `status` only | own, same conditions |
+| notifications (Stage 9) | own, and (for membership-requiring types) only while the caller can view the community | ✗ (server-side service only) | own; `read_at`, `archived_at` only (server time) | own |
+| notification_types (Stage 9) | any authenticated user | ✗ | ✗ | ✗ |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -475,7 +505,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3, 5, 6, 7 and 8)
+### Client RPCs (Stages 3 and 5–9)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -490,6 +520,8 @@ restricted by it.
 | `public.rsvp_to_event(event_id, status)` / `public.cancel_rsvp(event_id)` | stored status / boolean | Stage 8, SECURITY INVOKER; take the event lock first |
 | `public.get_event_attendance(event_id)` | counts, my status, queue position | Stage 8, SECURITY DEFINER (totals only, visible events only) |
 | `public.list_upcoming_events(...)` / `public.list_events(...)` | events | Stage 8, SECURITY INVOKER |
+| `public.list_my_notifications(...)`, `unread_notification_count(...)`, `mark_notification_read / unread(id)`, `mark_all_notifications_read(...)`, `archive_notification(id)` | | Stage 9, SECURITY INVOKER |
+| `public.create_notification(...)` | id | Stage 9, **service role only** |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 
