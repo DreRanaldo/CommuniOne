@@ -135,6 +135,6 @@ integration tests.
 - **Link invitations only.** There are no person-targeted invitations (by email
   or phone) yet, so there is no `community_invitation` notification.
 - **No join requests** without an invitation.
-- **No rate limit on invitation creation** beyond `members.invite`.
+- **Rate limits** (Stage 12): 50 invitations created and 30 redemptions per user per hour (`53400`); see `docs/architecture/service-layer.md`. Invalid tokens are refused before anything is written and are not counted; the 244-bit tokens make guessing infeasible.
 - **Default role only.** An invitation always grants the default Member role;
   higher roles are assigned afterwards by a role manager.

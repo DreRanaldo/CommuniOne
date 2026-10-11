@@ -142,6 +142,10 @@ Hosted-project Auth settings (email confirmation, redirect URLs, password
 policy, SMTP) are deployment prerequisites, documented in
 [`../deployment/supabase-auth.md`](../deployment/supabase-auth.md).
 
+Apps use `services.auth` (Stage 12) for sign-up, sign-in, sign-out, password
+reset, profile, phone number and account deletion; see
+[`../api/README.md`](../api/README.md).
+
 ## Client contract (for the mobile and admin apps in later stages)
 
 1. **Use `supabase-js` with the anon or publishable key only.** Never ship the

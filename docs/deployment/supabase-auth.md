@@ -111,6 +111,7 @@ global upload limit (Storage → Settings) is at least 50 MiB.
 | Invitation housekeeping | `select public.expire_invitations();` | hourly |
 | Document purge | `list_document_files_to_purge()` then delete files | daily |
 | Audit retention | `select public.purge_audit_logs(interval '730 days');` | monthly |
+| Rate-limit counters | `select public.purge_rate_limit_counters();` | hourly |
 
 Use pg_cron (Database → Integrations → Cron) or a scheduled Edge Function.
 

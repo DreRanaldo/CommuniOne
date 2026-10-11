@@ -73,6 +73,9 @@ draft ──publish──► published ──complete──► completed (termin
 
 - Other transitions are rejected with `22023`.
 - Changing a cancelled or completed event is rejected with `42501`.
+- An RSVP to an event that does not exist, belongs to another community, is not
+  published or has started is refused with the same `42501` "you cannot RSVP to
+  this event", before any event row is locked (Stage 12, migration 22).
 
 ## RSVP lifecycle
 

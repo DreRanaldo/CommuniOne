@@ -16,15 +16,15 @@ All three run in parallel; a pull request is green only when all three pass.
 
 | Job | Steps | Local equivalent |
 |---|---|---|
-| **Lint and typecheck** | `npm ci` → `npm run lint` (JS syntax, `bash -n`, shellcheck, secret scan) → `npm run typecheck` (`tsc --checkJs` over tests and scripts) | `npm run lint && npm run typecheck` |
+| **Lint, typecheck, unit tests and build** | `npm ci` → `npm run lint` (JS syntax, `bash -n`, shellcheck, secret scan) → `npm run typecheck` (strict TypeScript for `services/` and `tests/**/*.ts`; `--checkJs` for scripts and `.mjs` tests) → `npm run test:unit` (service-layer core) → `npm run build` (compiles `services/` to `dist/`) | `npm run lint && npm run typecheck && npm run test:unit && npm run build` |
 | **Migrations + pgTAP + concurrency (plain PostgreSQL 16)** | install pgTAP / pg_prove → start a fresh cluster → `scripts/db/test.sh` (create an empty database, apply the Supabase shim and **every migration in order**, run all pgTAP files) → `scripts/db/invitation-race.sh` → `scripts/db/rsvp-stress.sh 16 100` | `npm run test:db:plain && npm run test:db:concurrency` |
-| **Supabase stack** | `npm ci` → `npm run db:start` (real Supabase in Docker; applies every migration to a clean database) → `npm run db:reset` (**build verification**: rebuild from scratch) → `npm run db:lint` (plpgsql_check, fails on warnings) → `npm run test:db` (pgTAP on real Supabase) → `npm run test:integration` (Auth, Data API, Storage end to end) | same commands |
+| **Supabase stack** | `npm ci` → `npm run db:start` (real Supabase in Docker; applies every migration to a clean database) → `npm run db:reset` (**build verification**: rebuild from scratch) → `npm run db:lint` (plpgsql_check, fails on warnings) → `npm run db:types` + `git diff --exit-code` (generated types match the schema) → `npm run test:db` (pgTAP on real Supabase) → `npm run test:integration` (Auth, Data API, Storage end to end, then every service-layer suite in `tests/services/`) | same commands |
 
-**Build verification:** there is no application bundle yet (the React Native
-app starts in a later stage). The build that exists is the database, so CI
-verifies that the full migration chain builds a clean database twice (plain
-PostgreSQL and Supabase), that the schema lints clean, and that the JavaScript
-type-checks. When the app is added, add its `build` step to the static job.
+**Build verification:** the build compiles the service layer (`services/`) to
+JavaScript with declarations in `dist/` (Stage 12), and the full migration chain
+is rebuilt from an empty database twice (plain PostgreSQL and Supabase). There
+is no app bundle yet; add the React Native / admin builds to the static job
+when those apps exist.
 
 ## Secret protection
 

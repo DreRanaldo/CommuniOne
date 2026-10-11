@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–11 and Pre-Stage 12)
+# CommuniOne Database Schema (Stages 1–12)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -21,7 +21,10 @@ The Pre-Stage 12 hardening milestone added account deletion (see
 [`docs/architecture/account-deletion.md`](../architecture/account-deletion.md)),
 private phone numbers (see [`docs/architecture/privacy.md`](../architecture/privacy.md))
 and invitations, which complete Stage 4 (see
-[`docs/features/invitations.md`](../features/invitations.md)).
+[`docs/features/invitations.md`](../features/invitations.md)). Stage 12 added the
+service layer on top of the schema, plus database rate limits and an RSVP
+hardening fix (see
+[`docs/architecture/service-layer.md`](../architecture/service-layer.md)).
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -82,6 +85,8 @@ runs `pg_prove`.
 | 18 | `20261011001800_account_deletion.sql` | Pre-Stage 12: creator columns nullable + `ON DELETE SET NULL` (posts, comments, alerts, events, documents), erasure-aware write triggers, sole-role-manager deletion guard, `delete_my_account()` |
 | 19 | `20261011001900_phone_privacy.sql` | Pre-Stage 12: `profile_private` (owner-only phone number); `profiles.phone` migrated and dropped |
 | 20 | `20261011002000_invitations.sql` | Pre-Stage 12 / Stage 4: invitations, invitation_redemptions, hashed tokens, create / revoke / redeem / list RPCs, audit actions |
+| 21 | `20261011002100_rate_limits.sql` | Stage 12: `private.rate_limit_rules` / `rate_limit_counters`, `private.enforce_rate_limit()`, BEFORE INSERT limit triggers on posts, comments, alerts, invitations, invitation_redemptions, documents; `purge_rate_limit_counters()` |
+| 22 | `20261011002200_service_layer_hardening.sql` | Stage 12: member-list keyset index (replaces `memberships_community_status_idx`); RSVP capacity trigger refuses missing, foreign and closed events identically before locking any event |
 
 ## Entity relationships
 
@@ -442,6 +447,15 @@ Readable and writable **only by its owner**. No administrator access (see
 
 `UNIQUE (invitation_id, user_id)`.
 
+### `private.rate_limit_rules` / `private.rate_limit_counters` (Stage 12)
+
+Not exposed to clients (private schema, no grants).
+
+| Table | Columns |
+|---|---|
+| `rate_limit_rules` | `action` PK, `max_count`, `window_seconds` (1–86 400), `description`. Tunable by operators. |
+| `rate_limit_counters` | PK `(user_id, action, window_start)`, `hits`. User ids and counts only; purged after a day by `purge_rate_limit_counters()`. |
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -669,6 +683,7 @@ restricted by it.
 | `public.redeem_invitation(token)` | community_id, membership_id, status | Pre-Stage 12, SECURITY DEFINER, row-locked and atomic |
 | `public.list_invitations(community_id, include_inactive)` | invitations without hashes | Pre-Stage 12, SECURITY INVOKER |
 | `public.expire_invitations()` | count | Pre-Stage 12, **service role only** (housekeeping) |
+| `public.purge_rate_limit_counters()` | count | Stage 12, **service role only** (housekeeping) |
 
 ## Key security decisions
 

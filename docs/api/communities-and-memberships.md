@@ -1,5 +1,9 @@
 # API Contract: Communities and Memberships (Stage 3)
 
+> **Apps should call the Stage 12 service layer** (`services.communities`,
+> `services.memberships`, `services.roles`), documented in [`README.md`](README.md).
+> This page documents the database-level API those services use.
+
 Clients (the Expo mobile app and the Next.js admin app) use the Supabase Data
 API through `supabase-js`, signed in as the user with the anon or publishable
 key. **Every rule below is enforced by Postgres (RLS, column grants, triggers

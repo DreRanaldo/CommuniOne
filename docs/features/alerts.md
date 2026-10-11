@@ -251,6 +251,7 @@ for anyone who had created an alert. That decision has been resolved (see
 
 ## Known limitations
 
+- **Rate limit** (Stage 12): 20 alerts created per user per hour (`53400`), so a compromised account cannot flood members.
 - No delivery (push, in-app, email, SMS), recipient resolution or preferences.
 - No geographic or audience targeting within a community.
 - No acknowledgement or "I'm safe" responses.

@@ -348,3 +348,20 @@ Details are in [`../features/invitations.md`](../features/invitations.md).
   permission that lets administrators read them (see
   [`privacy.md`](privacy.md)).
 - Details: [`account-deletion.md`](account-deletion.md).
+
+## Service layer and rate limits (Stage 12)
+
+The apps call business operations in `services/` (see
+[`service-layer.md`](service-layer.md) and [`../api/README.md`](../api/README.md)).
+The service layer adds validation, uniform errors and pagination, but it
+holds no privileges: it uses the anon key and the user's session, so every
+rule in this document still applies, and a client that skips the service
+layer gets exactly the same answers from the database.
+
+- **Unknown or foreign ids look the same.** Services return `NOT_FOUND` for
+  rows the caller cannot see. RSVPs to a missing, foreign or closed event are
+  refused with one identical error before any event row is touched
+  (migration 22).
+- **Rate limits are authorization-adjacent rules in the database**
+  (migration 21): per user and action, client requests only, `53400` when
+  exceeded.

@@ -235,6 +235,7 @@ await supabase.rpc('list_documents', { p_community_id, p_folder_id, p_root_only,
 
 ## Known limitations
 
+- **Rate limit** (Stage 12): 60 uploads started per user per hour (`53400`).
 - **No byte-level type detection or malware scanning** (see above).
 - **No per-community storage quota.**
 - **No versioning.** A new version is a new document.

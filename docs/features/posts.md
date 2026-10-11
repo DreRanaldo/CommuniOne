@@ -186,7 +186,7 @@ Supporting indexes:
 
 - **Deleted bodies are kept** for moderation, including after the author's
   account is deleted. There is no purge job yet.
-- **No rate limiting** on posting, commenting or reacting.
+- **Rate limits** (Stage 12): 60 posts and 120 comments per user per 10 minutes (`53400`). Reactions are not limited (one per user per target by constraint).
 - **No edit history,** only `edited_at`.
 - **Realtime is not enabled** for these tables.
 - **Account deletion cascades** to the user's posts, including other users'
