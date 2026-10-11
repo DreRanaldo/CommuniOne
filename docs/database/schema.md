@@ -1,21 +1,26 @@
-# CommuniOne Database Schema (Stage 1)
+# CommuniOne Database Schema (Stages 1–2)
 
-Stage 1 sets up the multi-tenant foundation: identity, communities, memberships,
-roles and permissions. No application features (posts, events and so on) exist yet.
+Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
+roles and permissions. Stage 2 added session-validated identity, account status
+enforcement, profile behaviour and platform administrators (see
+[`docs/architecture/authentication.md`](../architecture/authentication.md)).
+No application features (posts, events and so on) exist yet.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
   from empty by applying the migrations in order.
-- **Tests:** `supabase/tests/database/*.test.sql` (pgTAP).
+- **Tests:** `supabase/tests/database/*.test.sql` (pgTAP) and
+  `tests/integration/*.test.mjs` (end to end against local Supabase).
 
 ## Running and verifying
 
 With the Supabase CLI (Docker):
 
 ```bash
-supabase start
-supabase db reset     # applies all migrations to an empty database, then seed.sql
-supabase test db      # runs the pgTAP suite
+npm install
+npm run db:start      # supabase start (only the services CommuniOne uses)
+npm run db:reset      # applies all migrations to an empty database, then seed.sql
+npm test              # pgTAP suite + end-to-end auth suite
 ```
 
 With plain PostgreSQL 15+ and pgTAP (no Docker), for example in CI:
@@ -42,11 +47,14 @@ runs `pg_prove`.
 | 5 | `20261011000500_authorization.sql` | `has_community_permission()`, private helpers, membership-transition trigger |
 | 6 | `20261011000600_row_level_security.sql` | GRANTs, RLS enablement and every policy |
 | 7 | `20261011000700_create_community.sql` | Atomic `create_community()` RPC |
+| 8 | `20261011000800_session_validated_identity.sql` | Stage 2: `current_session_user_id()` / `current_active_user_id()`; Stage 1 functions and policies switched to the validated identity |
+| 9 | `20261011000900_profiles_and_platform_admins.sql` | Stage 2: `platform_admins`, `admin_set_account_status()`, profile normalisation, https-only avatars, hardened sign-up trigger, profile policies |
 
 ## Entity relationships
 
 ```
 auth.users ─┬─1:1── profiles
+            ├─1:1── platform_admins (optional)
             ├─1:N── memberships ──N:1── communities ──1:N── roles
             └─1:N── communities.created_by                    │
                                                               │
@@ -62,16 +70,29 @@ role_templates ──1:N── role_template_permissions ──N:1── permiss
 |---|---|---|
 | id | uuid PK | FK → `auth.users.id` **ON DELETE CASCADE** |
 | first_name, last_name, display_name | text | ≤ 100 chars |
-| avatar_url | text | ≤ 2048 chars |
+| avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes) |
 | phone | text | `^\+?[0-9 ().-]{5,32}$` |
 | bio | text | ≤ 1000 chars |
-| status | text NOT NULL | `active` \| `suspended` \| `deactivated`, default `active`. Clients cannot write it. |
+| status | text NOT NULL | `active` \| `suspended` \| `deactivated`, default `active`. Only changed through `admin_set_account_status()`. Anything other than `active` removes all access immediately. |
 | created_at, updated_at | timestamptz NOT NULL | `updated_at` is maintained by a trigger |
 
 - This table holds no credentials. Email, password and tokens stay in `auth.users`.
 - The trigger `on_auth_user_created` on `auth.users` creates the profile, filling it
   from sign-up metadata (`first_name`, `last_name`, `display_name`/`full_name`/`name`,
-  `avatar_url`). Values are trimmed and truncated, so bad metadata can never block sign-up.
+  `avatar_url`). Values are trimmed and truncated, and only `https://` avatars are kept, so bad
+  metadata can never block sign-up. Later metadata changes never overwrite the profile.
+- The `profiles_normalize` trigger trims every text field and turns blanks into NULL.
+
+### `platform_admins`
+| Column | Type | Notes |
+|---|---|---|
+| user_id | uuid PK | FK → `auth.users.id` **ON DELETE CASCADE** |
+| granted_by | uuid | FK → `auth.users.id` **ON DELETE SET NULL** |
+| created_at | timestamptz NOT NULL | |
+
+Platform-level administrators, the only way to edit another user's profile or
+account status. RLS is enabled and there are no client grants or policies, so it
+can only be managed server-side (service role or SQL).
 
 ### `communities`
 | Column | Type | Notes |
@@ -252,7 +273,8 @@ the full model. In short:
 
 | Table | SELECT | INSERT | UPDATE | DELETE |
 |---|---|---|---|---|
-| profiles | self, or the target has a live membership in a community where the caller has `members.view` | ✗ (sign-up trigger) | self only; columns: names, avatar, phone, bio | ✗ (account deletion cascades) |
+| profiles | self (live session, any account status), platform admin, or the target has a live membership in a community where the caller has `members.view` | ✗ (sign-up trigger) | self (active account) or platform admin; columns: names, avatar, phone, bio | ✗ (account deletion cascades) |
+| platform_admins | ✗ | ✗ | ✗ | ✗ (server-side only) |
 | communities | `community.view` | ✗ (only via `create_community()`) | `community.update`; columns: name, description, type, logo, cover, timezone, settings | ✗ |
 | memberships | own row, or `members.view` | ✗ (Stage 2 invitations) | `status` only; transitions are checked by trigger (see below) | `members.remove`, not self, and the caller covers the target |
 | roles | `roles.view` | `roles.manage`, custom roles only | `roles.manage`, custom roles only; name and description | `roles.manage`, custom roles, and the caller covers the role |
@@ -283,7 +305,7 @@ restricted by it.
    labels that communities can rename or replace.
 2. **SECURITY DEFINER only where needed:** `has_community_permission()`, the
    `private.*` lookup helpers, `create_community()` and the sign-up trigger.
-   Each pins `search_path = ''`, takes the actor from `auth.uid()` and never from
+   Each pins `search_path = ''`, takes the actor from `private.current_active_user_id()` (Stage 2) and never from
    a parameter, and runs no dynamic SQL. A test checks the `search_path` pinning.
 3. **Helpers live in the `private` schema,** which the Supabase Data API does not
    expose, so clients cannot call them as RPCs.
@@ -295,3 +317,9 @@ restricted by it.
 6. **Permission and template seed data lives in migrations,** not `seed.sql`,
    because production needs it too.
 7. **A community cannot be orphaned by its last role manager leaving.**
+8. **Identity is validated server-side on every request (Stage 2).** A token
+   only counts if its `auth.sessions` row still exists and the account is
+   `active`, so sign-out, session revocation and account suspension take effect
+   immediately instead of when the token expires.
+9. **Profiles are global, so community permissions never grant profile edits
+   (Stage 2).** Only the user, or a platform admin, can edit a profile.

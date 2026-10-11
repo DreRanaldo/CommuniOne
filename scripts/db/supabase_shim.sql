@@ -7,7 +7,7 @@
 --
 -- It reproduces only what the CommuniOne schema depends on:
 --   * roles anon / authenticated / service_role (service_role bypasses RLS)
---   * schema auth with a minimal auth.users and auth.uid() / auth.jwt()
+--   * schema auth with minimal auth.users / auth.sessions and auth.uid() / auth.jwt()
 --   * schema extensions with pgTAP
 --   * Supabase's default privileges (ALL on public objects to the API roles),
 --     so the migrations' explicit REVOKEs are exercised exactly as in Supabase.
@@ -42,6 +42,16 @@ create table if not exists auth.users (
   raw_app_meta_data  jsonb,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
+);
+
+-- Subset of Supabase Auth's session table (one row per signed-in session;
+-- deleted on sign-out).
+create table if not exists auth.sessions (
+  id         uuid primary key,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  not_after  timestamptz
 );
 
 -- Same semantics as Supabase: identity comes from the verified JWT claims

@@ -3,13 +3,14 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
 from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
-  'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions'
+  'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
+  'platform_admins'
 ]) as t;
 
 select is_empty(
@@ -41,6 +42,8 @@ select results_eq(
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
      ('memberships',               'memberships_user_id_fkey',                       'auth.users',                'c'),
+     ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
+     ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
      ('profiles',                  'profiles_id_fkey',                               'auth.users',                'c'),
      ('role_permissions',          'role_permissions_permission_id_fkey',            'permissions',               'r'),
      ('role_permissions',          'role_permissions_role_id_fkey',                  'roles',                     'c'),

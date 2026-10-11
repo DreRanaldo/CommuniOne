@@ -1,6 +1,7 @@
 # Authorization Architecture
 
-**Status:** Stage 1, implemented and tested.
+**Status:** Stage 1, implemented and tested. Identity tightened in Stage 2 (see
+[`authentication.md`](authentication.md)).
 **Decision:** Authorization is permission-based and community-scoped, and it is
 enforced inside PostgreSQL with Row Level Security. Client applications are never
 trusted to enforce it.
@@ -8,7 +9,7 @@ trusted to enforce it.
 ## The chain
 
 ```
-user (auth.uid(), from the verified Supabase JWT)
+user (private.current_active_user_id(): verified JWT + live session + active account)
   └─ membership          one per (community, user); must be status = 'active'
        │                 and the community must be status = 'active'
        └─ membership_roles     a membership can hold several roles
@@ -19,9 +20,10 @@ user (auth.uid(), from the verified Supabase JWT)
 
 A user holds permission **P** in community **C** if and only if:
 
-1. they have a membership in **C** with `status = 'active'`, and
-2. **C** has `status = 'active'`, and
-3. at least one role assigned to that membership grants **P**.
+1. they have a live session and an `active` account (Stage 2), and
+2. they have a membership in **C** with `status = 'active'`, and
+3. **C** has `status = 'active'`, and
+4. at least one role assigned to that membership grants **P**.
 
 A user's effective permissions are the union of all their roles in that one
 community. Nothing carries over between communities. Owning Community A grants
@@ -41,9 +43,11 @@ select public.has_community_permission('…community uuid…', 'members.approve'
 
 - Returns a boolean **for the current user only.** There is no user parameter,
   so a caller cannot ask about anyone else or impersonate them. The identity
-  always comes from `auth.uid()`.
+  always comes from `private.current_active_user_id()`: the JWT's user, but only
+  while their session still exists and their account is `active` (Stage 2).
 - Returns `false` for anonymous callers, unknown communities, unknown keys,
-  pending, suspended or departed members, and suspended or archived communities.
+  pending, suspended or departed members, suspended or archived communities, and
+  (Stage 2) signed-out or revoked sessions and suspended or deactivated accounts.
 - RLS policies use it, and clients can call it as an RPC (for example to decide
   what to show in a UI). The UI result is only a hint: the database enforces the
   same check again on every query.
@@ -70,7 +74,7 @@ Every SECURITY DEFINER function:
 
 - sets `search_path = ''` and schema-qualifies every object, so a hijacked
   search path cannot redirect it;
-- takes the acting user from `auth.uid()` and never from a parameter;
+- takes the acting user from `private.current_active_user_id()` and never from a parameter;
 - has no dynamic SQL and no side effects (except `create_community()`, which
   does one fixed set of inserts);
 - returns only a boolean about the caller, except `create_community()`, which
@@ -127,7 +131,7 @@ produces the expected hierarchy without any hard-coded role ranking.
 `public.create_community(p_name, p_slug, p_community_type, p_description, p_timezone)`
 does all of the following in one transaction:
 
-1. inserts the community with `created_by = auth.uid()`;
+1. inserts the community with `created_by` set to the calling user;
 2. copies each `role_templates` row into a community-scoped system role, along
    with its permissions;
 3. creates an `active` membership for the caller;
@@ -154,7 +158,9 @@ only way to create a community.
 - **New features** (posts, events and so on) add a `community_id NOT NULL`
   column and write RLS policies like
   `using (public.has_community_permission(community_id, 'posts.view'))`.
-  For "own" permissions, combine with `author_id = auth.uid()`.
+  For "own" permissions, combine with
+  `author_id = (select private.current_active_user_id())`. Never use bare
+  `auth.uid()` in new policies: it ignores sign-out and suspension.
 - **New permissions:** insert them into `permissions` (and into
   `role_template_permissions` if they belong in defaults) in a migration. Decide
   explicitly whether existing communities' system roles should receive them,

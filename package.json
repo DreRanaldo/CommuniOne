@@ -1,0 +1,21 @@
+{
+  "name": "communione",
+  "private": true,
+  "type": "module",
+  "description": "CommuniOne: One Platform. Every Community.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:start": "supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "test:db": "supabase test db",
+    "test:integration": "bash scripts/test-integration.sh",
+    "test": "npm run test:db && npm run test:integration"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.117.3",
+    "supabase": "2.120.0"
+  }
+}
