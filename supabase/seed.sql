@@ -1,0 +1,8 @@
+-- Local development seed (runs only on `supabase db reset`, never in production).
+--
+-- Intentionally empty in Stage 1:
+--   * Permissions and default role templates are reference data required in
+--     every environment, so they are seeded by migration
+--     20261011000400_seed_permissions_and_role_templates.sql.
+--   * No fake users or communities are created. Sign up through Supabase Auth
+--     locally and call public.create_community() to create test data.
