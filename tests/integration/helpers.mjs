@@ -68,7 +68,49 @@ export async function signIn(email, password = PASSWORD) {
   return { client, session: data.session };
 }
 
+const createdCommunityIds = new Set();
+export const trackCommunity = (id) => createdCommunityIds.add(id);
+
+/** Looks up a role id by name (test setup only; never authorize on names). */
+export async function roleId(communityId, name) {
+  const { data, error } = await admin.from('roles').select('id').eq('community_id', communityId).eq('name', name).single();
+  if (error) throw error;
+  return data.id;
+}
+
+/**
+ * Adds a membership as trusted backend code would. Clients cannot insert
+ * memberships; invitation / join flows will do this in a later stage.
+ */
+export async function addMember(communityId, userId, roleName, status = 'active') {
+  const { data, error } = await admin
+    .from('memberships')
+    .insert({ community_id: communityId, user_id: userId, status })
+    .select('id')
+    .single();
+  if (error) throw error;
+  if (roleName) {
+    await admin
+      .from('membership_roles')
+      .insert({ membership_id: data.id, role_id: await roleId(communityId, roleName) })
+      .throwOnError();
+  }
+  return data.id;
+}
+
+/** Hard-deletes tracked communities (communities RESTRICT, so children first). */
+export async function deleteTrackedCommunities() {
+  for (const id of createdCommunityIds) {
+    await admin.from('membership_roles').delete().eq('community_id', id);
+    await admin.from('memberships').delete().eq('community_id', id);
+    await admin.from('roles').delete().eq('community_id', id);
+    await admin.from('communities').delete().eq('id', id);
+  }
+  createdCommunityIds.clear();
+}
+
 export async function deleteTrackedUsers() {
+  await deleteTrackedCommunities();
   for (const id of createdUserIds) {
     await admin.from('platform_admins').delete().eq('user_id', id);
     await admin.auth.admin.deleteUser(id);

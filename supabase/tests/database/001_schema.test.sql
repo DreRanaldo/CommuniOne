@@ -42,6 +42,7 @@ select results_eq(
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
      ('memberships',               'memberships_user_id_fkey',                       'auth.users',                'c'),
+     ('memberships',               'memberships_user_profile_fkey',                  'profiles',                  'c'),
      ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
      ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
      ('profiles',                  'profiles_id_fkey',                               'auth.users',                'c'),

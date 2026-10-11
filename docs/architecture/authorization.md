@@ -92,7 +92,9 @@ does not expose, so clients cannot call them directly:
 | `private.current_user_covers_role(r)` | does the caller hold every permission role `r` grants? |
 | `private.can_manage_role_permission(r, p)` | can the caller add or remove permission `p` on role `r`? |
 | `private.can_view_role(r)` | does the caller have `roles.view` in `r`'s community? |
-| `private.can_view_profile(u)` | does user `u` have a live membership somewhere the caller has `members.view`? |
+| `private.can_view_membership(c, status)` | Stage 3: `active` needs `members.view`; any other status needs `members.approve`, `members.suspend` or `members.remove` |
+| `private.can_view_membership_id(m)` | the same rule, looked up by membership id |
+| `private.can_view_profile(u)` | does user `u` have a pending, active or suspended membership the caller may see? |
 | `private.is_sole_role_manager(m)` | is `m` the only active membership with `roles.manage` in its community? |
 
 ## Anti-escalation rules
@@ -165,3 +167,25 @@ only way to create a community.
   `role_template_permissions` if they belong in defaults) in a migration. Decide
   explicitly whether existing communities' system roles should receive them,
   because template changes do not apply retroactively.
+
+## Membership management (Stage 3)
+
+The full client contract is in
+[`../api/communities-and-memberships.md`](../api/communities-and-memberships.md).
+The authorization-relevant points:
+
+- **Visibility follows permissions.** `members.view` shows *active* members.
+  Applications, suspensions and departures are visible only to members who
+  manage membership (`members.approve`, `members.suspend` or `members.remove`).
+- **Every status change is checked against a permission and the coverage rule**
+  (`private.enforce_membership_update`). Nothing checks a role name.
+- **Roles follow the membership lifecycle:**
+  - admission assigns the community's flagged default role (no name lookup);
+  - leaving or rejection removes all assignments, so re-admission can never
+    silently restore old powers;
+  - suspension keeps assignments, but they are inert while the membership is not
+    active.
+- **Communities are isolated.** Holding any permission in one community grants
+  nothing in another. The tests attempt cross-community reads, updates, status
+  changes, removals and role grants using real ids, and all of them fail.
+

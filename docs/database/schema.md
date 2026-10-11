@@ -1,9 +1,11 @@
-# CommuniOne Database Schema (Stages 1–2)
+# CommuniOne Database Schema (Stages 1–3)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
 enforcement, profile behaviour and platform administrators (see
 [`docs/architecture/authentication.md`](../architecture/authentication.md)).
+Stage 3 completed the community and membership API (see
+[`docs/api/communities-and-memberships.md`](../api/communities-and-memberships.md)).
 No application features (posts, events and so on) exist yet.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -49,6 +51,7 @@ runs `pg_prove`.
 | 7 | `20261011000700_create_community.sql` | Atomic `create_community()` RPC |
 | 8 | `20261011000800_session_validated_identity.sql` | Stage 2: `current_session_user_id()` / `current_active_user_id()`; Stage 1 functions and policies switched to the validated identity |
 | 9 | `20261011000900_profiles_and_platform_admins.sql` | Stage 2: `platform_admins`, `admin_set_account_status()`, profile normalisation, https-only avatars, hardened sign-up trigger, profile policies |
+| 10 | `20261011001000_community_membership_api.sql` | Stage 3: memberships → profiles FK (member-profile embedding), status-based membership visibility, `my_communities()`, `my_community_permissions()`, default role for new members and the role lifecycle on status changes, community creation limit, `settings` size cap |
 
 ## Entity relationships
 
@@ -114,7 +117,7 @@ can only be managed server-side (service role or SQL).
 |---|---|---|
 | id | uuid PK | |
 | community_id | uuid NOT NULL | FK → `communities.id` **ON DELETE RESTRICT** |
-| user_id | uuid NOT NULL | FK → `auth.users.id` **ON DELETE CASCADE** |
+| user_id | uuid NOT NULL | FK → `auth.users.id` **ON DELETE CASCADE**; also FK → `profiles.id` **ON DELETE CASCADE** (Stage 3, so the Data API can embed member profiles) |
 | status | text NOT NULL | `pending` \| `active` \| `suspended` \| `rejected` \| `left`, default `pending` |
 | joined_at | timestamptz | Set the first time the status becomes `active` |
 | created_at, updated_at | timestamptz NOT NULL | |
@@ -122,6 +125,10 @@ can only be managed server-side (service role or SQL).
 - `UNIQUE (community_id, user_id)` allows at most one membership per user per community.
 - `UNIQUE (id, community_id)` is the target of the composite FK from `membership_roles`.
 - `community_id` and `user_id` can never change once set (enforced by trigger).
+- Role lifecycle (Stage 3, trigger `memberships_role_lifecycle`):
+  - → `active` with no roles assigns the community's default role for new members;
+  - → `left` / `rejected` removes all role assignments;
+  - suspension keeps them.
 
 ### `permissions`
 | Column | Type | Notes |
@@ -149,6 +156,7 @@ This is a global catalog. Migration 4 seeds it with exactly these 31 keys:
 | community_id | uuid NOT NULL | FK → `communities.id` **ON DELETE RESTRICT** |
 | name | text NOT NULL | 1–60 chars; **unique per community, case-insensitive** (`lower(name)`) |
 | description | text | ≤ 500 chars |
+| is_default_for_new_members | boolean NOT NULL | Stage 3. The role given to newly admitted members (at most one per community, by partial unique index). Copied from the template and not client-writable. |
 | is_system_role | boolean NOT NULL | `true` for roles copied from templates. Clients cannot create, edit or delete system roles, or change their permissions. |
 | created_at, updated_at | timestamptz NOT NULL | |
 
@@ -181,7 +189,9 @@ This is a global catalog. Migration 4 seeds it with exactly these 31 keys:
 These hold the default role definitions. `create_community()` copies them into
 each new community as system roles. Exactly one template has
 `assign_to_creator = true` (enforced by a partial unique index), and that template
-is granted to the creator. Editing a template changes only communities created
+is granted to the creator. Exactly one template has `assign_to_new_members = true`
+(Member; Stage 3), and its copy becomes each community's default role for new
+members. Editing a template changes only communities created
 afterwards. Existing communities are not touched.
 
 ## Default roles and permissions
@@ -229,6 +239,7 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | communities.created_by → auth.users | SET NULL | A community outlives its creator's account. |
 | memberships.community_id → communities | RESTRICT | Communities are archived, not hard-deleted. RESTRICT stops one mistaken DELETE from wiping a tenant's membership history. |
 | memberships.user_id → auth.users | CASCADE | Account deletion must not be blocked. The user's memberships go with the account. |
+| memberships.user_id → profiles | CASCADE | Same lifecycle as the account (the profile is deleted with it). Exists for Data API embedding. |
 | roles.community_id → communities | RESTRICT | Same reason as memberships. |
 | membership_roles → memberships | CASCADE | An assignment means nothing without its membership. |
 | membership_roles → roles | RESTRICT | Deleting a role that is still assigned would silently change people's access, so unassigning must be explicit. |
@@ -247,6 +258,7 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | memberships.community_id | `memberships_community_user_key` (leading column) |
 | memberships.user_id | `memberships_user_id_idx` |
 | memberships.community_id + status | `memberships_community_status_idx` |
+| communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
 | membership_roles.role_id | `membership_roles_role_id_idx` |
@@ -273,12 +285,12 @@ the full model. In short:
 
 | Table | SELECT | INSERT | UPDATE | DELETE |
 |---|---|---|---|---|
-| profiles | self (live session, any account status), platform admin, or the target has a live membership in a community where the caller has `members.view` | ✗ (sign-up trigger) | self (active account) or platform admin; columns: names, avatar, phone, bio | ✗ (account deletion cascades) |
+| profiles | self (live session, any account status), platform admin, or the target has a membership the caller may see (see the memberships row) | ✗ (sign-up trigger) | self (active account) or platform admin; columns: names, avatar, phone, bio | ✗ (account deletion cascades) |
 | platform_admins | ✗ | ✗ | ✗ | ✗ (server-side only) |
 | communities | `community.view` | ✗ (only via `create_community()`) | `community.update`; columns: name, description, type, logo, cover, timezone, settings | ✗ |
-| memberships | own row, or `members.view` | ✗ (Stage 2 invitations) | `status` only; transitions are checked by trigger (see below) | `members.remove`, not self, and the caller covers the target |
+| memberships | own row; `active` rows with `members.view`; other statuses with `members.approve`, `members.suspend` or `members.remove` (Stage 3) | ✗ (invitations in a later stage) | `status` only; transitions are checked by trigger (see below) | `members.remove`, not self, and the caller covers the target |
 | roles | `roles.view` | `roles.manage`, custom roles only | `roles.manage`, custom roles only; name and description | `roles.manage`, custom roles, and the caller covers the role |
-| membership_roles | own, or `members.view` | `roles.manage`, not own membership, the caller covers the target membership **and** the role | ✗ | same as insert |
+| membership_roles | own, or the membership is visible (as above) | `roles.manage`, not own membership, the caller covers the target membership **and** the role | ✗ | same as insert |
 | role_permissions | `roles.view` in the role's community | `roles.manage`, custom role, and the caller holds that permission | ✗ | same as insert |
 | permissions, role_templates, role_template_permissions | any authenticated user | ✗ | ✗ | ✗ |
 
@@ -298,6 +310,16 @@ also held by the caller in that community. This is the anti-escalation rule.
 The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
+
+### Client RPCs (Stage 3)
+
+| Function | Returns | Notes |
+|---|---|---|
+| `public.create_community(...)` | the new community | Atomic. At most 10 per user per rolling 24 hours (`53400`). |
+| `public.my_communities()` | the caller's pending, active and suspended memberships, with community basics and role names | SECURITY DEFINER, so pending and suspended members can see their status even though they cannot read `communities` |
+| `public.my_community_permissions(community_id)` | the caller's permission keys | For UI gating only |
+| `public.has_community_permission(community_id, key)` | boolean | Stage 1 |
+| `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 
 ## Key security decisions
 
