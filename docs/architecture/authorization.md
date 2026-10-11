@@ -314,3 +314,13 @@ Details are in [`../features/documents.md`](../features/documents.md).
 **Client inputs that are never trusted:** file name, MIME type, size, storage
 path, community and uploader. Every one is validated or derived on the server.
 
+## Audit logs (Stage 11)
+
+Details are in [`../features/audit-logs.md`](../features/audit-logs.md).
+
+| Concern | Rule |
+|---|---|
+| Read | `audit.view` in the community (Owners and Admins by default); system events are for platform admins only |
+| Write | Only database triggers, through `private.record_audit_event()`. The actor comes from `private.actor_user_id()` and is never a parameter. The service role can record only actorless system events. |
+| Change | Nobody. Append-only triggers apply to every role; retention purge only (service role, at least 90 days). |
+

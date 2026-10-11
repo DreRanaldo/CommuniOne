@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(74);
+select plan(79);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
@@ -12,7 +12,8 @@ from unnest(array[
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
   'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
   'alerts', 'alert_events', 'events', 'event_rsvps', 'notifications', 'notification_types',
-  'documents', 'document_folders', 'document_upload_settings', 'document_mime_types'
+  'documents', 'document_folders', 'document_upload_settings', 'document_mime_types',
+  'audit_logs', 'audit_actions'
 ]) as t;
 
 select is_empty(
@@ -50,6 +51,7 @@ select results_eq(
      ('announcements',             'announcements_author_user_id_fkey',              'profiles',                  'n'),
      ('announcements',             'announcements_community_id_fkey',                'communities',               'r'),
      ('announcements',             'announcements_updated_by_user_id_fkey',          'profiles',                  'n'),
+     ('audit_logs',                'audit_logs_action_fkey',                         'audit_actions',             'r'),
      ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'c'),
      ('comments',                  'comments_moderated_by_user_id_fkey',             'profiles',                  'n'),
      ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
@@ -133,7 +135,10 @@ from (values
   ('notifications',    array['community_id', 'created_at']),
   ('documents',        array['community_id', 'status', 'created_at']),
   ('documents',        array['folder_id', 'created_at']),
-  ('documents',        array['storage_path'])
+  ('documents',        array['storage_path']),
+  ('audit_logs',       array['community_id', 'created_at']),
+  ('audit_logs',       array['actor_user_id', 'created_at']),
+  ('audit_logs',       array['entity_type', 'entity_id'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------

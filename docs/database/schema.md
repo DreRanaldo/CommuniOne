@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–10)
+# CommuniOne Database Schema (Stages 1–11)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -15,7 +15,9 @@ RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 9 added
 in-app notifications and the notification service (see
 [`docs/features/notifications.md`](../features/notifications.md)). Stage 10
 added documents and file storage (see
-[`docs/features/documents.md`](../features/documents.md)). Stage 4
+[`docs/features/documents.md`](../features/documents.md)). Stage 11 added the
+audit log (see [`docs/features/audit-logs.md`](../features/audit-logs.md)).
+Stage 4
 (invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -69,6 +71,7 @@ runs `pg_prove`.
 | 14 | `20261011001400_events.sql` | Stage 8: events, event_rsvps, RLS, lifecycle trigger, lock-based capacity and FIFO waitlist, RSVP / attendance / list functions |
 | 15 | `20261011001500_notifications.sql` | Stage 9: notifications, notification_types, RLS, notification service, producers for announcements / alerts / events / waitlist / comments / membership, client RPCs |
 | 16 | `20261011001600_documents.sql` | Stage 10: documents, document_folders, upload settings and MIME allow-list, private `documents` bucket, metadata RLS, storage.objects policies, two-phase upload RPCs, listing, purge listing |
+| 17 | `20261011001700_audit_logs.sql` | Stage 11: audit_logs, audit_actions, append-only protection, redaction, audit service, producers on all audited tables, read RPC, retention purge |
 
 ## Entity relationships
 
@@ -374,6 +377,24 @@ Configuration, writable only by the service role:
 Files are stored in the private Storage bucket `documents`, whose access is
 governed by RLS policies on `storage.objects` (see `documents.md`).
 
+### `audit_logs` (Stage 11)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid | NULL = system event; **no FK** (history outlives the community) |
+| actor_user_id | uuid | Session user or NULL (system); **no FK** |
+| action | text NOT NULL | FK → `audit_actions.action` **RESTRICT** |
+| entity_type / entity_id | text / uuid | What was acted on |
+| metadata | jsonb NOT NULL | ≤ 8 KiB; credential-like keys redacted on insert |
+| created_at | timestamptz NOT NULL | `clock_timestamp()` |
+
+Append-only: UPDATE, DELETE and TRUNCATE are rejected by triggers for every
+role. Rows leave only through `purge_audit_logs()` (service role, at least
+90 days).
+
+### `audit_actions` (Stage 11)
+Catalog `(action PK, entity_type, description)`.
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -481,6 +502,9 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | documents by community, status, date | `documents_community_created_idx (community_id, status, created_at desc, id desc)` |
 | documents by folder | `documents_folder_idx` (partial) |
 | document by storage path (storage policies) | `documents_storage_path_key` (unique) |
+| audit log by community, newest first | `audit_logs_community_created_idx (community_id, created_at desc, id desc)` |
+| system audit events | `audit_logs_system_created_idx` (partial) |
+| audit by actor / by entity | `audit_logs_actor_created_idx`, `audit_logs_entity_idx` |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -528,6 +552,8 @@ the full model. In short:
 | documents (Stage 10) | active `members`: `documents.view` / `manage`; active `managers` or archived: `documents.manage`; pending or deleted: manager or uploader | ✗ (`create_document_upload()` only) | manager, or uploader with `documents.upload`; name, folder_id, visibility, status; trigger enforces rules | ✗ (soft delete) |
 | document_folders (Stage 10) | `documents.view` / `manage` | `documents.manage` | `documents.manage` | `documents.manage` |
 | storage.objects, bucket `documents` (Stage 10) | file of a visible active or archived document (and the uploader's own pending upload) | exact path of your own pending document, while you hold `documents.upload` | never (no replacement) | only abandoned pending uploads |
+| audit_logs (Stage 11) | community events: `audit.view`; system events: platform admins | ✗ (database triggers / service only) | ✗ (never, any role) | ✗ (retention purge only) |
+| audit_actions (Stage 11) | any authenticated user | ✗ | ✗ | ✗ |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -547,7 +573,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3 and 5–10)
+### Client RPCs (Stages 3 and 5–11)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -567,6 +593,8 @@ restricted by it.
 | `public.create_document_upload(...)` / `public.complete_document_upload(id)` | path / document | Stage 10, SECURITY DEFINER, fully validated |
 | `public.list_documents(...)` | documents | Stage 10, SECURITY INVOKER |
 | `public.list_document_files_to_purge(retention)` | paths | Stage 10, **service role only** (purge job) |
+| `public.list_audit_logs(...)` | audit entries | Stage 11, SECURITY INVOKER |
+| `public.record_system_audit_event(...)` / `public.purge_audit_logs(interval)` | id / count | Stage 11, **service role only** |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 
