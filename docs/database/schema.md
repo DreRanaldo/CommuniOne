@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–9)
+# CommuniOne Database Schema (Stages 1–10)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -13,7 +13,9 @@ alerts and the alert event outbox (see
 [`docs/features/alerts.md`](../features/alerts.md)). Stage 8 added events and
 RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 9 added
 in-app notifications and the notification service (see
-[`docs/features/notifications.md`](../features/notifications.md)). Stage 4
+[`docs/features/notifications.md`](../features/notifications.md)). Stage 10
+added documents and file storage (see
+[`docs/features/documents.md`](../features/documents.md)). Stage 4
 (invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -66,6 +68,7 @@ runs `pg_prove`.
 | 13 | `20261011001300_alerts.sql` | Stage 7: alerts, alert_events outbox, RLS, severity and lifecycle trigger, expiry sweep, active/history list functions |
 | 14 | `20261011001400_events.sql` | Stage 8: events, event_rsvps, RLS, lifecycle trigger, lock-based capacity and FIFO waitlist, RSVP / attendance / list functions |
 | 15 | `20261011001500_notifications.sql` | Stage 9: notifications, notification_types, RLS, notification service, producers for announcements / alerts / events / waitlist / comments / membership, client RPCs |
+| 16 | `20261011001600_documents.sql` | Stage 10: documents, document_folders, upload settings and MIME allow-list, private `documents` bucket, metadata RLS, storage.objects policies, two-phase upload RPCs, listing, purge listing |
 
 ## Entity relationships
 
@@ -342,6 +345,35 @@ Catalog: `key` PK, `description`, `requires_membership`, `default_priority`.
 Seeded with `announcement`, `alert`, `event_created`, `event_updated`,
 `event_cancelled`, `comment`, `membership` and `system`.
 
+### `documents` (Stage 10)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| uploaded_by | uuid NOT NULL | FK → `profiles.id` **RESTRICT**; session user; immutable |
+| folder_id | uuid | FK `(folder_id, community_id)` → `document_folders` **SET NULL (folder_id)** |
+| name | text NOT NULL | Sanitised display name |
+| mime_type / file_extension | text NOT NULL | Allow-listed (FK → `document_mime_types`) |
+| storage_path | text | **Generated** `communities/{community_id}/documents/{id}/file.{ext}`; unique |
+| file_size | bigint NOT NULL | As recorded by Storage |
+| visibility | text NOT NULL | `members` \| `managers` |
+| status | text NOT NULL | `pending_upload` \| `active` \| `archived` \| `deleted` |
+| uploaded_at, archived_at, deleted_at, file_purged_at, updated_by_user_id | | Server-stamped |
+
+### `document_folders` (Stage 10)
+- `community_id`, `parent_folder_id`;
+- FK `(parent_folder_id, community_id)` for same-community nesting, **SET NULL** on parent deletion;
+- `name` unique per parent; `created_by`;
+- cycles are rejected.
+
+### `document_upload_settings` / `document_mime_types` (Stage 10)
+Configuration, writable only by the service role:
+- the maximum file size (default 25 MiB, at most the 50 MiB bucket ceiling);
+- the MIME allow-list, mapping each type to its extension.
+
+Files are stored in the private Storage bucket `documents`, whose access is
+governed by RLS policies on `storage.objects` (see `documents.md`).
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -401,6 +433,10 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | notifications.user_id → profiles | CASCADE | A user's notifications go with their account |
 | notifications.community_id → communities | CASCADE | Notifications are derived data |
 | notifications.type → notification_types | RESTRICT | A type in use cannot be removed |
+| documents.uploaded_by → profiles | RESTRICT | Same accountability decision as alerts and events |
+| documents.community_id, document_folders.community_id → communities | RESTRICT | Same as other community children |
+| documents.folder_id / document_folders.parent_folder_id | SET NULL (column only) | Deleting a folder moves its contents to the top level |
+| documents.mime_type → document_mime_types | RESTRICT | Types in use cannot be removed (disable them instead) |
 | events.created_by → profiles | RESTRICT | Same accountability decision as alerts |
 | events.community_id → communities | RESTRICT | Same as other community children |
 | event_rsvps → events | CASCADE | RSVPs belong to their event |
@@ -442,6 +478,9 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | a user's notifications, newest first | `notifications_user_created_idx (user_id, created_at desc, id desc)` |
 | unread notifications | `notifications_user_unread_idx (user_id, read_at) WHERE archived_at IS NULL` |
 | notifications by community | `notifications_community_created_idx (community_id, created_at desc)` (partial) |
+| documents by community, status, date | `documents_community_created_idx (community_id, status, created_at desc, id desc)` |
+| documents by folder | `documents_folder_idx` (partial) |
+| document by storage path (storage policies) | `documents_storage_path_key` (unique) |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -486,6 +525,9 @@ the full model. In short:
 | event_rsvps (Stage 8) | own; `going` RSVPs of visible events; all with `events.manage` | own, while the event is published, not started, and you have `events.view`; status is sanitised by the capacity trigger | own, same conditions; `status` only | own, same conditions |
 | notifications (Stage 9) | own, and (for membership-requiring types) only while the caller can view the community | ✗ (server-side service only) | own; `read_at`, `archived_at` only (server time) | own |
 | notification_types (Stage 9) | any authenticated user | ✗ | ✗ | ✗ |
+| documents (Stage 10) | active `members`: `documents.view` / `manage`; active `managers` or archived: `documents.manage`; pending or deleted: manager or uploader | ✗ (`create_document_upload()` only) | manager, or uploader with `documents.upload`; name, folder_id, visibility, status; trigger enforces rules | ✗ (soft delete) |
+| document_folders (Stage 10) | `documents.view` / `manage` | `documents.manage` | `documents.manage` | `documents.manage` |
+| storage.objects, bucket `documents` (Stage 10) | file of a visible active or archived document (and the uploader's own pending upload) | exact path of your own pending document, while you hold `documents.upload` | never (no replacement) | only abandoned pending uploads |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -505,7 +547,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3 and 5–9)
+### Client RPCs (Stages 3 and 5–10)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -522,6 +564,9 @@ restricted by it.
 | `public.list_upcoming_events(...)` / `public.list_events(...)` | events | Stage 8, SECURITY INVOKER |
 | `public.list_my_notifications(...)`, `unread_notification_count(...)`, `mark_notification_read / unread(id)`, `mark_all_notifications_read(...)`, `archive_notification(id)` | | Stage 9, SECURITY INVOKER |
 | `public.create_notification(...)` | id | Stage 9, **service role only** |
+| `public.create_document_upload(...)` / `public.complete_document_upload(id)` | path / document | Stage 10, SECURITY DEFINER, fully validated |
+| `public.list_documents(...)` | documents | Stage 10, SECURITY INVOKER |
+| `public.list_document_files_to_purge(retention)` | paths | Stage 10, **service role only** (purge job) |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 

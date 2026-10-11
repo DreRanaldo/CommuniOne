@@ -86,3 +86,14 @@ max_frequency = "5s"
 # enabled = true
 # client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 # secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+
+# ---------------------------------------------------------------------------
+# Storage (documents). See docs/features/documents.md.
+# The 'documents' bucket itself (private, 50 MiB ceiling, MIME allow-list) is
+# created by migration 20261011001600_documents.sql so every environment gets
+# the same configuration; the application limit is in
+# public.document_upload_settings.
+# ---------------------------------------------------------------------------
+[storage]
+enabled = true
+file_size_limit = "50MiB"

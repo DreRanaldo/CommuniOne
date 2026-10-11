@@ -289,3 +289,28 @@ Details are in [`../features/notifications.md`](../features/notifications.md).
   `private.community_members_with_permission()`. It computes permissions for
   arbitrary users, so it is internal only.
 
+## Documents and file storage (Stage 10)
+
+Details are in [`../features/documents.md`](../features/documents.md).
+
+**Two independent layers:**
+
+| Layer | Rules |
+|---|---|
+| Metadata | RLS on `documents` and `document_folders` (`private.can_view_document_row`, `private.can_manage_document_row`) plus the `enforce_document_write` trigger |
+| Files | RLS policies on `storage.objects` for bucket `documents` |
+
+- The file policies use `private.can_read_document_object`,
+  `private.can_upload_document_object` and `private.can_delete_document_object`,
+  and require an **exact** generated `storage_path` match.
+- They never rely on the metadata layer having filtered anything.
+
+| Permission | Allows |
+|---|---|
+| `documents.view` | Members-visible active documents |
+| `documents.upload` | Upload; manage your own documents |
+| `documents.manage` | Any document, restricted visibility, archive, folders |
+
+**Client inputs that are never trusted:** file name, MIME type, size, storage
+path, community and uploader. Every one is validated or derived on the server.
+
