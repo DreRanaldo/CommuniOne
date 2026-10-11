@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–5)
+# CommuniOne Database Schema (Stages 1–6)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -7,8 +7,9 @@ enforcement, profile behaviour and platform administrators (see
 Stage 3 completed the community and membership API (see
 [`docs/api/communities-and-memberships.md`](../api/communities-and-memberships.md)).
 Stage 5 added posts, comments and reactions (see
-[`docs/features/posts.md`](../features/posts.md)). Stage 4 (invitations and the
-audit log) has not been built.
+[`docs/features/posts.md`](../features/posts.md)). Stage 6 added announcements (see
+[`docs/features/announcements.md`](../features/announcements.md)). Stage 4
+(invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -55,6 +56,7 @@ runs `pg_prove`.
 | 9 | `20261011000900_profiles_and_platform_admins.sql` | Stage 2: `platform_admins`, `admin_set_account_status()`, profile normalisation, https-only avatars, hardened sign-up trigger, profile policies |
 | 10 | `20261011001000_community_membership_api.sql` | Stage 3: memberships → profiles FK (member-profile embedding), status-based membership visibility, `my_communities()`, `my_community_permissions()`, default role for new members and the role lifecycle on status changes, community creation limit, `settings` size cap |
 | 11 | `20261011001100_posts_comments_reactions.sql` | Stage 5: posts, comments, reactions, their RLS, lifecycle triggers, `list_community_posts()`, `list_post_comments()`, `get_reaction_summary()` |
+| 12 | `20261011001200_announcements.sql` | Stage 6: announcements, their RLS, lifecycle trigger, `list_current_announcements()`, `list_announcement_history()` |
 
 ## Entity relationships
 
@@ -247,6 +249,24 @@ afterwards. Existing communities are not touched.
 - `CHECK (num_nonnulls(post_id, comment_id) = 1)` means each reaction has exactly one target.
 - Partial unique indexes allow one reaction per user per post and per comment.
 
+### `announcements` (Stage 6)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| author_user_id | uuid | FK → `profiles.id` **SET NULL**; session default; not client-writable |
+| title | text NOT NULL | 1–200 chars |
+| body | text NOT NULL | 1–20 000 chars |
+| priority | text NOT NULL | `normal` \| `important` |
+| status | text NOT NULL | `draft` \| `published` \| `archived` \| `deleted`, default `draft` |
+| published_at | timestamptz | Server-stamped on (re)publication |
+| expires_at | timestamptz | Optional; `> published_at` |
+| archived_at, edited_at | timestamptz | Server-stamped |
+| updated_by_user_id | uuid | FK → `profiles.id` **SET NULL**; server-stamped |
+| created_at, updated_at | timestamptz NOT NULL | |
+
+Constraints: published and archived rows have `published_at`; `expires_at > published_at`.
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -303,6 +323,8 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
 | comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
 | comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
+| announcements.community_id → communities | RESTRICT | Same as other community children |
+| announcements.author_user_id / updated_by_user_id → profiles | SET NULL | Official communications outlive their author's account |
 | moderated_by_user_id → profiles | SET NULL | Moderation records outlive the moderator's account |
 
 To hard-delete a community, an operator using the service role must explicitly
@@ -322,6 +344,8 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | reactions by post / comment (+ one per user) | `reactions_one_per_user_post (post_id, user_id)`, `reactions_one_per_user_comment (comment_id, user_id)` (partial unique) |
 | reactions by user | `reactions_user_idx` |
 | posts / comments by author | `posts_author_idx`, `comments_author_idx` |
+| announcements by community, status, publication date | `announcements_community_status_published_idx (community_id, status, published_at desc, id desc)` |
+| announcement expiry | `announcements_community_expiry_idx (community_id, expires_at) WHERE status = 'published'` |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -359,6 +383,7 @@ the full model. In short:
 | permissions, role_templates, role_template_permissions | any authenticated user | ✗ | ✗ | ✗ |
 | posts (Stage 5) | published: `posts.view`; hidden or deleted: `posts.moderate` or the author | `posts.create`, as yourself, always `published`; columns: community_id, body | author (`edit_own` / `delete_own`) or `posts.moderate`; columns: body, status, moderation_reason; trigger enforces the lifecycle | ✗ (soft delete) |
 | comments (Stage 5) | post visible, and published, or `comments.moderate`, or the author | `comments.create` on a published visible post (published parent on the same post); columns: post_id, parent_comment_id, body | as posts, with `comments.*` | ✗ |
+| announcements (Stage 6) | published or archived: `announcements.view` / `manage`; draft or deleted: `announcements.manage`, or the author holding `announcements.create` | `announcements.create`, as yourself, draft or published; columns: community_id, title, body, priority, status, expires_at | `announcements.manage`, or the author holding `announcements.create`; columns: title, body, priority, status, expires_at; trigger enforces the lifecycle | ✗ (soft delete) |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -378,7 +403,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3 and 5)
+### Client RPCs (Stages 3, 5 and 6)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -387,6 +412,7 @@ restricted by it.
 | `public.my_community_permissions(community_id)` | the caller's permission keys | For UI gating only |
 | `public.has_community_permission(community_id, key)` | boolean | Stage 1 |
 | `public.list_community_posts(...)` / `public.list_post_comments(...)` | cursor-paginated pages | Stage 5, SECURITY INVOKER |
+| `public.list_current_announcements(...)` / `public.list_announcement_history(...)` | cursor-paginated pages | Stage 6, SECURITY INVOKER |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 

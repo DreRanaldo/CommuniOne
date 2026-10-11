@@ -3,14 +3,14 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(51);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
 from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
-  'platform_admins', 'posts', 'comments', 'reactions'
+  'platform_admins', 'posts', 'comments', 'reactions', 'announcements'
 ]) as t;
 
 select is_empty(
@@ -37,6 +37,9 @@ select results_eq(
      where contype = 'f' and connamespace = 'public'::regnamespace
      order by 1, 2 $$,
   $$ values
+     ('announcements',             'announcements_author_user_id_fkey',              'profiles',                  'n'),
+     ('announcements',             'announcements_community_id_fkey',                'communities',               'r'),
+     ('announcements',             'announcements_updated_by_user_id_fkey',          'profiles',                  'n'),
      ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'c'),
      ('comments',                  'comments_moderated_by_user_id_fkey',             'profiles',                  'n'),
      ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
@@ -88,7 +91,9 @@ from (values
   ('comments',         array['parent_comment_id', 'created_at', 'id']),
   ('reactions',        array['post_id', 'user_id']),
   ('reactions',        array['comment_id', 'user_id']),
-  ('reactions',        array['user_id'])
+  ('reactions',        array['user_id']),
+  ('announcements',    array['community_id', 'status', 'published_at']),
+  ('announcements',    array['community_id', 'expires_at'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------

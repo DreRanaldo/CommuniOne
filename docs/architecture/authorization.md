@@ -215,3 +215,18 @@ same as everywhere else, resolved per community through
   post. This is a deliberate difference from membership actions, which are
   hierarchical.
 
+## Announcements (Stage 6)
+
+Details are in [`../features/announcements.md`](../features/announcements.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an announcement | `private.can_view_announcement_row()`: published or archived needs `announcements.view` or `manage`; draft or deleted needs `announcements.manage`, or authorship plus `announcements.create` |
+| Can create | INSERT policy: `announcements.create` in the target community, author is the session user, status is draft or published |
+| Can change a given announcement | `private.can_manage_announcement_row()`: `announcements.manage` (any announcement) or authorship plus `announcements.create` (your own) |
+| What may change | `private.enforce_announcement_write()` trigger: allowed transitions, server-stamped dates, editing only while draft or published, deleted is terminal |
+
+`create` versus `manage` is the only distinction, and it is made by permission
+keys. Default Owners and Admins hold both; communities can grant `create`
+alone to custom roles.
+
