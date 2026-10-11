@@ -2,7 +2,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(47);
+select plan(48);
 
 -- ---------------------------------------------------------------------------
 -- Fixture (identical in every behavioural test file)
@@ -272,6 +272,14 @@ select pg_temp.invite('for_suspended', 'A');
 reset role;
 update public.profiles set status = 'suspended' where id = pg_temp.fx('j4');
 select throws_ok($$ select pg_temp.redeem('j4', 'for_suspended') $$, '42501', null, 'a suspended account cannot redeem invitations');
+
+-- Invitations into an archived community are refused.
+reset role;
+select pg_temp.login(pg_temp.fx('bob'));
+select pg_temp.invite('archived_b', 'B');
+reset role;
+update public.communities set status = 'archived' where id = pg_temp.fx('B');
+select throws_like($$ select pg_temp.redeem('j5', 'archived_b') $$, '%no longer valid%', 'an invitation into an archived community cannot be redeemed');
 
 select * from finish();
 rollback;

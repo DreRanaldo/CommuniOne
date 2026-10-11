@@ -157,7 +157,8 @@ await supabase.from('announcements').select('*').eq('id', announcementId).single
   history function.
 - **Accountability:** `updated_by_user_id` and `edited_at` record who last
   changed an announcement and whether published content was edited. A full
-  change history needs the audit log, which belongs to the not-yet-built Stage 4.
+  history of the text is not kept; the audit log (Stage 11) records creation,
+  publication and deletion with the actor.
 - Deleted announcements are kept (soft delete) as a record.
 
 ## Hooks for later stages

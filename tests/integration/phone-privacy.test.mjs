@@ -39,7 +39,11 @@ describe('owner access', () => {
   test('a user updates and clears their phone number', async () => {
     await u.memberA.client.from('profile_private').update({ phone: '+44 20 7946 0001' }).eq('user_id', u.memberA.id).throwOnError();
     assert.equal((await admin.from('profile_private').select('phone').eq('user_id', u.memberA.id).single()).data.phone, '+44 20 7946 0001');
-    await u.memberA.client.from('profile_private').update({ phone: PHONE }).eq('user_id', u.memberA.id).throwOnError();
+    await u.memberA.client.from('profile_private').update({ phone: null }).eq('user_id', u.memberA.id).throwOnError();
+    assert.equal((await admin.from('profile_private').select('phone').eq('user_id', u.memberA.id).single()).data.phone, null);
+    // upsert (the documented "set my phone" call) works on an existing row
+    await u.memberA.client.from('profile_private').upsert({ phone: PHONE }).throwOnError();
+    assert.equal((await admin.from('profile_private').select('phone').eq('user_id', u.memberA.id).single()).data.phone, PHONE);
   });
 
   test('nobody can write a phone number for someone else', async () => {

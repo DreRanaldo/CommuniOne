@@ -65,6 +65,10 @@ are listed. Add a new one together with its producer.
 | `event.created` / `event.cancelled` | event lifecycle | status, starts_at, capacity, reason |
 | `document.uploaded` / `document.deleted` | upload completed / soft delete | uploaded_by, mime_type, file_size, visibility |
 | `account.status_changed` | a platform admin changes an account status | from, to (system event, no community) |
+| `account.deleted` | a user deletes their own account (`delete_my_account()`) | none: actor and entity are the pseudonymous user id only (system event, no community) |
+| `invitation.created` | `create_invitation()` | expires_at, max_uses (**never** the token or its hash) |
+| `invitation.revoked` | `revoke_invitation()` | use_count, previous_status |
+| `invitation.redeemed` | `redeem_invitation()` | membership_id, user_id |
 
 **Deliberately not recorded:**
 
@@ -76,7 +80,6 @@ are listed. Add a new one together with its producer.
 
 **Planned, added with their producers:**
 
-- `invitation.created` / `invitation.revoked` (Stage 4);
 - `platform_admin.granted` / `revoked`, once platform-admin management gets an API.
 
 ## Security model
@@ -136,10 +139,13 @@ await supabase.rpc('list_audit_logs', {
 - Ordinary keys such as `shipping` or `note` are kept.
 - Tests confirm that no secret value survives anywhere in the table.
 
-**Personal data:** actor and subject ids are pseudonymous identifiers. On an
-erasure request, keep the entries (security records), since the ids no longer
-resolve to a profile once the account is deleted. If full anonymisation is
-legally required, run a documented one-off operation as the database owner.
+**Personal data and account deletion:** actor and subject ids are pseudonymous
+identifiers, and entries never contain names, emails, phone numbers or content.
+When an account is deleted the entries are **kept** (security records) and the
+ids no longer resolve to any profile (see
+[`../architecture/account-deletion.md`](../architecture/account-deletion.md)).
+If full anonymisation is ever legally required, run a documented one-off
+operation as the database owner.
 
 ## Retention considerations
 
@@ -158,6 +164,5 @@ legally required, run a documented one-off operation as the database owner.
 
 - No IP address or user-agent capture (see above).
 - No hash-chain tamper evidence.
-- Invitation events wait for Stage 4.
 - Audit writes happen synchronously in the same transaction as the change.
   This guarantees completeness at a small write cost.

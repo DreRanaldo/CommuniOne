@@ -16,7 +16,7 @@ ticketing and no payments. Every rule here is enforced in Postgres.
 | Column | Notes |
 |---|---|
 | `community_id` | NOT NULL, FK **RESTRICT**, immutable |
-| `created_by` | NOT NULL. Session default, not client-writable. FK → profiles **RESTRICT** (same accountability decision as alerts). |
+| `created_by` | Session default, not client-writable. FK → profiles **ON DELETE SET NULL**: NULL means the creator deleted their account; `events.manage` holders still manage the event. |
 | `title` | 1–200 chars |
 | `description` | ≤ 10 000 chars |
 | `location_text` | ≤ 500 chars |
@@ -213,6 +213,6 @@ List functions are `SECURITY INVOKER` and paginate by keyset on
 - **No ticketing, payments, recurring events or reminders.**
 - **`updated_at` on events moves with RSVP activity,** because of the lock. Use
   `edited_at` for "details changed".
-- **Account deletion is blocked for event creators.** `created_by` is
-  `ON DELETE RESTRICT`, which is the open accountability decision shared with
-  alerts.
+- **Events outlive their creator.** On account deletion `created_by` becomes
+  NULL and the event stays; the creator's own RSVPs are removed (see
+  [`account-deletion.md`](../architecture/account-deletion.md)).

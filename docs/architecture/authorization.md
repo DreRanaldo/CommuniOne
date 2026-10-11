@@ -122,8 +122,8 @@ permission check, these rules apply:
 6. **No orphaned communities.** The last active member holding `roles.manage`
    cannot leave.
 7. **No direct membership creation.** Clients cannot insert memberships. The
-   only paths are `create_community()` (for the creator) and, from Stage 2,
-   consent-based invitation and join flows.
+   only paths are `create_community()` (for the creator) and
+   `redeem_invitation()` (the joining user, Pre-Stage 12).
 
 The default role tiers nest (Member ⊂ Moderator ⊂ Admin ⊂ Owner), so rule 3
 produces the expected hierarchy without any hard-coded role ranking.
@@ -324,3 +324,27 @@ Details are in [`../features/audit-logs.md`](../features/audit-logs.md).
 | Write | Only database triggers, through `private.record_audit_event()`. The actor comes from `private.actor_user_id()` and is never a parameter. The service role can record only actorless system events. |
 | Change | Nobody. Append-only triggers apply to every role; retention purge only (service role, at least 90 days). |
 
+## Invitations (Pre-Stage 12 / Stage 4)
+
+Details are in [`../features/invitations.md`](../features/invitations.md).
+
+| Concern | Rule |
+|---|---|
+| Create | `create_invitation()`: `members.invite` in the community (Owners and Admins by default) |
+| Read | `members.invite`; `token_hash` is never selectable; the raw token is shown once at creation |
+| Revoke | `revoke_invitation()`: `members.invite` in the invitation's community; anything else looks like "not found" |
+| Redeem | `redeem_invitation()`: any signed-in **active** account holding the token. The invitation row is locked, every check is re-done inside the lock, and the creator must **still** hold `members.invite` in an active community |
+| Effect | Creates or re-activates the membership; the default Member role comes from the Stage 3 lifecycle trigger. Never reinstates a suspended member, never duplicates an active one |
+
+## Account deletion and privacy (Pre-Stage 12)
+
+- `delete_my_account()` has no parameters: it can only delete the caller. No
+  community permission (not even Owner) allows deleting someone else's account.
+- The only active role manager of a community with other members must transfer
+  `roles.manage` before deleting their account (anti-orphan rule 6, extended).
+- Creator columns become NULL only through the database's own FK action. The
+  write triggers reject a client or service-role change of a creator column.
+- Phone numbers are visible to their owner only. There is deliberately **no**
+  permission that lets administrators read them (see
+  [`privacy.md`](privacy.md)).
+- Details: [`account-deletion.md`](account-deletion.md).

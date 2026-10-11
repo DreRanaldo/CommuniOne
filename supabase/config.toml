@@ -14,8 +14,9 @@ sql_paths = ["./seed.sql"]
 # ---------------------------------------------------------------------------
 # Authentication (Supabase Auth). See docs/architecture/authentication.md.
 #
-# This file configures the LOCAL stack. Hosted projects take the same values
-# from the dashboard (Authentication > Settings) or `supabase config push`.
+# This file configures the LOCAL stack. Hosted projects are configured in the
+# dashboard; see docs/deployment/supabase-auth.md for the required values and
+# `supabase config diff` to compare them with this file.
 # Secrets (SMTP passwords, OAuth client secrets) must use env(...) and must
 # never be committed.
 # ---------------------------------------------------------------------------

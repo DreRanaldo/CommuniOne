@@ -18,7 +18,7 @@ are delivered yet.** The integration point for that is below.
 |---|---|
 | `id` | uuid PK |
 | `community_id` | NOT NULL, FK → communities **RESTRICT**, immutable |
-| `created_by` | NOT NULL. Session default, not client-writable. FK → profiles **ON DELETE RESTRICT** (see "Accountability" below). |
+| `created_by` | Session default, not client-writable. FK → profiles **ON DELETE SET NULL**: NULL means the creator deleted their account ("Deleted User"; see "Accountability" below). |
 | `title` | 1–160 chars |
 | `body` | 1–5 000 chars |
 | `severity` | `info` \| `warning` \| `urgent` \| `emergency` (default `info`) |
@@ -234,16 +234,20 @@ How each event type should be delivered:
 Delivery channels (push tokens, email and SMS providers) and user preferences are
 **not** implemented in this stage.
 
-## Accountability: `created_by` is `ON DELETE RESTRICT`
+## Accountability after account deletion (Pre-Stage 12)
 
-The specification requires `created_by` to be NOT NULL. Alerts are safety
-records, so neither losing them (CASCADE) nor losing their creator (SET NULL) is
-acceptable. As a result, **deleting the account of a user who created alerts is
-blocked** until an operator deals with those alerts.
+Originally `created_by` was `ON DELETE RESTRICT`, which blocked account deletion
+for anyone who had created an alert. That decision has been resolved (see
+[`account-deletion.md`](../architecture/account-deletion.md)):
 
-Options for that operator step have not been decided. They include reassigning
-`created_by` to a designated system profile, or pseudonymising the account
-instead of deleting it. This is recorded as an open decision.
+- `created_by` is nullable and `ON DELETE SET NULL`. The alert, its lifecycle
+  stamps and its `alert_events` log are **kept**; the UI shows the creator as
+  "Deleted User".
+- Accountability is preserved by the audit log (`alert.created`, `published`,
+  `cancelled` keep the actor's pseudonymous id) and by the remaining
+  `alerts.manage` holders, who can still edit and cancel creator-less alerts.
+- Only the database itself can clear `created_by` (the FK action). Clients
+  cannot, and nobody can reassign it.
 
 ## Known limitations
 

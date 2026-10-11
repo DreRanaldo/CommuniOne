@@ -22,7 +22,7 @@ re-check the rules through SECURITY DEFINER helpers.
 | Column | Notes |
 |---|---|
 | `community_id` | NOT NULL, FK **RESTRICT**, immutable |
-| `uploaded_by` | NOT NULL. Always the validated session user, immutable. FK **RESTRICT** (same accountability decision as alerts and events). |
+| `uploaded_by` | Always the validated session user, immutable. FK **ON DELETE SET NULL**: NULL means the uploader deleted their account; the document and its file are kept. |
 | `folder_id` | Optional. FK `(folder_id, community_id)` → `document_folders(id, community_id)`, so the folder must be in the **same community**. **SET NULL** if the folder is deleted. |
 | `name` | **Display name only,** sanitised (see "File security"), ≤ 255 chars. Never part of the storage path. |
 | `mime_type` | FK → `document_mime_types` (allow-list) |
@@ -241,6 +241,6 @@ await supabase.rpc('list_documents', { p_community_id, p_folder_id, p_root_only,
 - **The purge job must be scheduled by operations,** for example with an Edge
   Function on a cron. Until it runs, deleted files remain in Storage, but
   unreadable.
-- **Account deletion is blocked for uploaders.** `uploaded_by` is
-  `ON DELETE RESTRICT`, which is the same open accountability decision as alerts
-  and events.
+- **Documents outlive their uploader.** On account deletion `uploaded_by`
+  becomes NULL; the metadata row and the Storage object are kept (see
+  [`account-deletion.md`](../architecture/account-deletion.md)).

@@ -157,8 +157,10 @@ membership; set it to `left` instead.
 ### Add a member
 
 Clients **cannot** create memberships directly (`42501`). Memberships are created
-by `create_community()` (for the creator) and, in a later stage, by invitation
-and join-request flows.
+by `create_community()` (for the creator) and by the joining user redeeming an
+invitation with `redeem_invitation()` (see
+[`../features/invitations.md`](../features/invitations.md)). Join requests
+without an invitation are not built yet.
 
 ## Roles (summary)
 

@@ -49,6 +49,7 @@ comment on table public.invitations is
 
 create index invitations_community_created_idx on public.invitations (community_id, created_at desc);
 create index invitations_created_by_idx on public.invitations (created_by);
+create index invitations_revoked_by_idx on public.invitations (revoked_by) where revoked_by is not null;
 
 create trigger invitations_set_updated_at
   before update on public.invitations
@@ -68,6 +69,8 @@ create table public.invitation_redemptions (
 
 create index invitation_redemptions_community_idx on public.invitation_redemptions (community_id, redeemed_at desc);
 create index invitation_redemptions_user_idx on public.invitation_redemptions (user_id);
+-- Member removal sets membership_id to NULL here; keep that lookup indexed.
+create index invitation_redemptions_membership_idx on public.invitation_redemptions (membership_id);
 
 -- Nothing in an invitation is editable after creation except by the
 -- functions below (no client UPDATE grant exists). Belt and braces for
