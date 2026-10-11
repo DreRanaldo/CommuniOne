@@ -189,3 +189,29 @@ The authorization-relevant points:
   nothing in another. The tests attempt cross-community reads, updates, status
   changes, removals and role grants using real ids, and all of them fail.
 
+## Content: posts, comments and reactions (Stage 5)
+
+Details are in [`../features/posts.md`](../features/posts.md). The model is the
+same as everywhere else, resolved per community through
+`has_community_permission()`:
+
+| Check | Implemented by |
+|---|---|
+| Can see a post | `private.can_view_post_row()`: published needs `posts.view`; hidden or deleted needs `posts.moderate` or authorship |
+| Can see a comment | `private.can_view_comment_row()`: the post must be visible; non-published comments need `comments.moderate` or authorship |
+| Can comment | `private.can_comment_on()`: `comments.create`, the post is published and visible, and any parent is published and on the same post |
+| Can react | `private.can_react_to()`: the target is published and visible, plus `posts.view` |
+| Edits and status changes | `private.enforce_content_update()` trigger: authors edit their own published content (`*.edit_own`) and delete it (`*.delete_own`); moderators hide, restore and delete (`*.moderate`) but never edit text; deleted is terminal |
+
+- **Identity is never client-supplied.** Author and reaction-owner columns
+  default to `private.current_active_user_id()` and are not writable.
+- **Community scope is never client-supplied** for comments and reactions. It is
+  derived from the target, and composite foreign keys bind it, so content from
+  two communities can never be mixed.
+- **The read RPCs add no privileges.** `list_community_posts`,
+  `list_post_comments` and `get_reaction_summary` are `SECURITY INVOKER`, so RLS
+  filters every row they return.
+- **No coverage rule for content moderation.** A Moderator may hide an Admin's
+  post. This is a deliberate difference from membership actions, which are
+  hierarchical.
+

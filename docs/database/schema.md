@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–3)
+# CommuniOne Database Schema (Stages 1–5)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -6,7 +6,9 @@ enforcement, profile behaviour and platform administrators (see
 [`docs/architecture/authentication.md`](../architecture/authentication.md)).
 Stage 3 completed the community and membership API (see
 [`docs/api/communities-and-memberships.md`](../api/communities-and-memberships.md)).
-No application features (posts, events and so on) exist yet.
+Stage 5 added posts, comments and reactions (see
+[`docs/features/posts.md`](../features/posts.md)). Stage 4 (invitations and the
+audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -52,6 +54,7 @@ runs `pg_prove`.
 | 8 | `20261011000800_session_validated_identity.sql` | Stage 2: `current_session_user_id()` / `current_active_user_id()`; Stage 1 functions and policies switched to the validated identity |
 | 9 | `20261011000900_profiles_and_platform_admins.sql` | Stage 2: `platform_admins`, `admin_set_account_status()`, profile normalisation, https-only avatars, hardened sign-up trigger, profile policies |
 | 10 | `20261011001000_community_membership_api.sql` | Stage 3: memberships → profiles FK (member-profile embedding), status-based membership visibility, `my_communities()`, `my_community_permissions()`, default role for new members and the role lifecycle on status changes, community creation limit, `settings` size cap |
+| 11 | `20261011001100_posts_comments_reactions.sql` | Stage 5: posts, comments, reactions, their RLS, lifecycle triggers, `list_community_posts()`, `list_post_comments()`, `get_reaction_summary()` |
 
 ## Entity relationships
 
@@ -64,6 +67,11 @@ auth.users ─┬─1:1── profiles
 memberships ──1:N── membership_roles ──N:1── roles ──1:N── role_permissions ──N:1── permissions
 
 role_templates ──1:N── role_template_permissions ──N:1── permissions
+
+communities ──1:N── posts ──1:N── comments ──(parent_comment_id, same post)──┐
+                      │             │  ◄──────────────────────────────────────┘
+                      └── reactions ┘   (exactly one of post_id / comment_id)
+profiles ──1:N── posts / comments / reactions (author / user)
 ```
 
 ## Tables
@@ -194,6 +202,51 @@ is granted to the creator. Exactly one template has `assign_to_new_members = tru
 members. Editing a template changes only communities created
 afterwards. Existing communities are not touched.
 
+### `posts` (Stage 5)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT** |
+| author_user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; defaults to the validated session user; not client-writable |
+| body | text NOT NULL | 1–10 000 chars (trimmed) |
+| status | text NOT NULL | `published` \| `hidden` \| `deleted`, default `published` |
+| visibility | text NOT NULL | `members` (only value today; new values need new RLS) |
+| edited_at | timestamptz | Set when the body changes |
+| moderated_by_user_id | uuid | FK → `profiles.id` **SET NULL**; stamped by trigger |
+| moderated_at | timestamptz | Stamped by trigger |
+| moderation_reason | text | ≤ 500 chars; moderators only |
+| created_at, updated_at | timestamptz NOT NULL | |
+
+`UNIQUE (id, community_id)` is the target of the composite FKs from comments and reactions.
+
+### `comments` (Stage 5)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | Derived from the post by trigger |
+| post_id | uuid NOT NULL | FK `(post_id, community_id)` → `posts(id, community_id)` **CASCADE** |
+| author_user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; session default |
+| parent_comment_id | uuid | FK `(parent_comment_id, post_id)` → `comments(id, post_id)` **SET NULL (parent_comment_id)**: same post only; replies become top-level if the parent is physically removed |
+| depth | smallint NOT NULL | 0–9, derived from the parent |
+| body | text NOT NULL | 1–5 000 chars |
+| status, edited_at, moderated_by_user_id, moderated_at, moderation_reason, created_at, updated_at | | As for posts |
+
+`UNIQUE (id, post_id)` and `UNIQUE (id, community_id)` exist; `CHECK (parent_comment_id <> id)`.
+
+### `reactions` (Stage 5)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | Derived from the target by trigger; immutable |
+| user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; session default; not client-writable |
+| post_id | uuid | FK `(post_id, community_id)` → `posts` **CASCADE** |
+| comment_id | uuid | FK `(comment_id, community_id)` → `comments` **CASCADE** |
+| reaction_type | text NOT NULL | `like` \| `love` \| `celebrate` \| `support` \| `laugh` \| `sad` |
+| created_at, updated_at | timestamptz NOT NULL | |
+
+- `CHECK (num_nonnulls(post_id, comment_id) = 1)` means each reaction has exactly one target.
+- Partial unique indexes allow one reaction per user per post and per comment.
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -246,6 +299,11 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | role_permissions → roles | CASCADE | Grants belong to the role. |
 | role_permissions → permissions | RESTRICT | Retiring a permission that is in use must be a deliberate migration. |
 | role_template_permissions → role_templates / permissions | CASCADE / RESTRICT | Same reasoning as above. |
+| posts.community_id → communities | RESTRICT | Same as other community children |
+| posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
+| comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
+| comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
+| moderated_by_user_id → profiles | SET NULL | Moderation records outlive the moderator's account |
 
 To hard-delete a community, an operator using the service role must explicitly
 delete its `membership_roles`, `memberships` and `roles` first.
@@ -258,6 +316,12 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | memberships.community_id | `memberships_community_user_key` (leading column) |
 | memberships.user_id | `memberships_user_id_idx` |
 | memberships.community_id + status | `memberships_community_status_idx` |
+| posts by community, newest first | `posts_community_feed_idx (community_id, created_at desc, id desc)` |
+| comments by post, oldest first | `comments_post_thread_idx (post_id, created_at, id)` |
+| comments by parent | `comments_parent_thread_idx (parent_comment_id, created_at, id)` (partial) |
+| reactions by post / comment (+ one per user) | `reactions_one_per_user_post (post_id, user_id)`, `reactions_one_per_user_comment (comment_id, user_id)` (partial unique) |
+| reactions by user | `reactions_user_idx` |
+| posts / comments by author | `posts_author_idx`, `comments_author_idx` |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -293,6 +357,9 @@ the full model. In short:
 | membership_roles | own, or the membership is visible (as above) | `roles.manage`, not own membership, the caller covers the target membership **and** the role | ✗ | same as insert |
 | role_permissions | `roles.view` in the role's community | `roles.manage`, custom role, and the caller holds that permission | ✗ | same as insert |
 | permissions, role_templates, role_template_permissions | any authenticated user | ✗ | ✗ | ✗ |
+| posts (Stage 5) | published: `posts.view`; hidden or deleted: `posts.moderate` or the author | `posts.create`, as yourself, always `published`; columns: community_id, body | author (`edit_own` / `delete_own`) or `posts.moderate`; columns: body, status, moderation_reason; trigger enforces the lifecycle | ✗ (soft delete) |
+| comments (Stage 5) | post visible, and published, or `comments.moderate`, or the author | `comments.create` on a published visible post (published parent on the same post); columns: post_id, parent_comment_id, body | as posts, with `comments.*` | ✗ |
+| reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
 also held by the caller in that community. This is the anti-escalation rule.
@@ -311,7 +378,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stage 3)
+### Client RPCs (Stages 3 and 5)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -319,6 +386,8 @@ restricted by it.
 | `public.my_communities()` | the caller's pending, active and suspended memberships, with community basics and role names | SECURITY DEFINER, so pending and suspended members can see their status even though they cannot read `communities` |
 | `public.my_community_permissions(community_id)` | the caller's permission keys | For UI gating only |
 | `public.has_community_permission(community_id, key)` | boolean | Stage 1 |
+| `public.list_community_posts(...)` / `public.list_post_comments(...)` | cursor-paginated pages | Stage 5, SECURITY INVOKER |
+| `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 
 ## Key security decisions

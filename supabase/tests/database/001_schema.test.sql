@@ -3,14 +3,14 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(39);
+select plan(48);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
 from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
-  'platform_admins'
+  'platform_admins', 'posts', 'comments', 'reactions'
 ]) as t;
 
 select is_empty(
@@ -37,6 +37,10 @@ select results_eq(
      where contype = 'f' and connamespace = 'public'::regnamespace
      order by 1, 2 $$,
   $$ values
+     ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'c'),
+     ('comments',                  'comments_moderated_by_user_id_fkey',             'profiles',                  'n'),
+     ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
+     ('comments',                  'comments_post_fk',                               'posts',                     'c'),
      ('communities',               'communities_created_by_fkey',                    'auth.users',                'n'),
      ('membership_roles',          'membership_roles_membership_fk',                 'memberships',               'c'),
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
@@ -45,7 +49,13 @@ select results_eq(
      ('memberships',               'memberships_user_profile_fkey',                  'profiles',                  'c'),
      ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
      ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
+     ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'c'),
+     ('posts',                     'posts_community_id_fkey',                        'communities',               'r'),
+     ('posts',                     'posts_moderated_by_user_id_fkey',                'profiles',                  'n'),
      ('profiles',                  'profiles_id_fkey',                               'auth.users',                'c'),
+     ('reactions',                 'reactions_comment_fk',                           'comments',                  'c'),
+     ('reactions',                 'reactions_post_fk',                              'posts',                     'c'),
+     ('reactions',                 'reactions_user_id_fkey',                         'profiles',                  'c'),
      ('role_permissions',          'role_permissions_permission_id_fkey',            'permissions',               'r'),
      ('role_permissions',          'role_permissions_role_id_fkey',                  'roles',                     'c'),
      ('role_template_permissions', 'role_template_permissions_permission_id_fkey',   'permissions',               'r'),
@@ -72,7 +82,13 @@ from (values
   ('roles',            array['community_id']),
   ('membership_roles', array['membership_id']),
   ('membership_roles', array['role_id']),
-  ('role_permissions', array['role_id'])
+  ('role_permissions', array['role_id']),
+  ('posts',            array['community_id', 'created_at', 'id']),
+  ('comments',         array['post_id', 'created_at', 'id']),
+  ('comments',         array['parent_comment_id', 'created_at', 'id']),
+  ('reactions',        array['post_id', 'user_id']),
+  ('reactions',        array['comment_id', 'user_id']),
+  ('reactions',        array['user_id'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------
