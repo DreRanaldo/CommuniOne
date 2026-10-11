@@ -230,3 +230,25 @@ Details are in [`../features/announcements.md`](../features/announcements.md).
 keys. Default Owners and Admins hold both; communities can grant `create`
 alone to custom roles.
 
+## Alerts (Stage 7)
+
+Details are in [`../features/alerts.md`](../features/alerts.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an alert | `private.can_view_alert_row()`: non-draft needs `alerts.view` or `manage`; a draft needs `alerts.manage`, or being the creator plus `alerts.create` |
+| Can create | INSERT policy: `alerts.create`; **`emergency` additionally needs `alerts.manage`** |
+| Can change a given alert | `private.can_manage_alert_row()`: `alerts.manage` (any) or creator plus `alerts.create` (own) |
+| What may change | `private.enforce_alert_write()`: lifecycle transitions; emergency and post-draft severity changes need `alerts.manage`; all identity and time columns server-stamped |
+| Audit log | `alert_events`: readable with `alerts.manage`; written only by trigger |
+
+**Severity is an authorization input, so it is checked on the server.** The
+emergency rule is enforced by both the policy and the trigger.
+
+**Server-side identity:**
+
+- The service role may execute `private.current_session_user_id()` and
+  `current_active_user_id()`. They return NULL for it, so this grants nothing,
+  but trusted writes such as the expiry sweep need it.
+- Events written by server code record a NULL actor.
+

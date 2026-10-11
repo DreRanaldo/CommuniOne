@@ -3,14 +3,15 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(51);
+select plan(56);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
 from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
   'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
-  'platform_admins', 'posts', 'comments', 'reactions', 'announcements'
+  'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
+  'alerts', 'alert_events'
 ]) as t;
 
 select is_empty(
@@ -37,6 +38,14 @@ select results_eq(
      where contype = 'f' and connamespace = 'public'::regnamespace
      order by 1, 2 $$,
   $$ values
+     ('alert_events',              'alert_events_actor_user_id_fkey',                'profiles',                  'n'),
+     ('alert_events',              'alert_events_alert_id_fkey',                     'alerts',                    'c'),
+     ('alert_events',              'alert_events_community_id_fkey',                 'communities',               'r'),
+     ('alerts',                    'alerts_cancelled_by_fkey',                       'profiles',                  'n'),
+     ('alerts',                    'alerts_community_id_fkey',                       'communities',               'r'),
+     ('alerts',                    'alerts_created_by_fkey',                         'profiles',                  'r'),
+     ('alerts',                    'alerts_published_by_fkey',                       'profiles',                  'n'),
+     ('alerts',                    'alerts_updated_by_user_id_fkey',                 'profiles',                  'n'),
      ('announcements',             'announcements_author_user_id_fkey',              'profiles',                  'n'),
      ('announcements',             'announcements_community_id_fkey',                'communities',               'r'),
      ('announcements',             'announcements_updated_by_user_id_fkey',          'profiles',                  'n'),
@@ -93,7 +102,10 @@ from (values
   ('reactions',        array['comment_id', 'user_id']),
   ('reactions',        array['user_id']),
   ('announcements',    array['community_id', 'status', 'published_at']),
-  ('announcements',    array['community_id', 'expires_at'])
+  ('announcements',    array['community_id', 'expires_at']),
+  ('alerts',           array['community_id', 'status', 'published_at']),
+  ('alerts',           array['expires_at']),
+  ('alert_events',     array['alert_id', 'occurred_at'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------

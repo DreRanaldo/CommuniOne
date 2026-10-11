@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–6)
+# CommuniOne Database Schema (Stages 1–7)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -8,7 +8,9 @@ Stage 3 completed the community and membership API (see
 [`docs/api/communities-and-memberships.md`](../api/communities-and-memberships.md)).
 Stage 5 added posts, comments and reactions (see
 [`docs/features/posts.md`](../features/posts.md)). Stage 6 added announcements (see
-[`docs/features/announcements.md`](../features/announcements.md)). Stage 4
+[`docs/features/announcements.md`](../features/announcements.md)). Stage 7 added
+alerts and the alert event outbox (see
+[`docs/features/alerts.md`](../features/alerts.md)). Stage 4
 (invitations and the audit log) has not been built.
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
@@ -57,6 +59,7 @@ runs `pg_prove`.
 | 10 | `20261011001000_community_membership_api.sql` | Stage 3: memberships → profiles FK (member-profile embedding), status-based membership visibility, `my_communities()`, `my_community_permissions()`, default role for new members and the role lifecycle on status changes, community creation limit, `settings` size cap |
 | 11 | `20261011001100_posts_comments_reactions.sql` | Stage 5: posts, comments, reactions, their RLS, lifecycle triggers, `list_community_posts()`, `list_post_comments()`, `get_reaction_summary()` |
 | 12 | `20261011001200_announcements.sql` | Stage 6: announcements, their RLS, lifecycle trigger, `list_current_announcements()`, `list_announcement_history()` |
+| 13 | `20261011001300_alerts.sql` | Stage 7: alerts, alert_events outbox, RLS, severity and lifecycle trigger, expiry sweep, active/history list functions |
 
 ## Entity relationships
 
@@ -267,6 +270,28 @@ afterwards. Existing communities are not touched.
 
 Constraints: published and archived rows have `published_at`; `expires_at > published_at`.
 
+### `alerts` (Stage 7)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| created_by | uuid NOT NULL | FK → `profiles.id` **RESTRICT** (accountability); session default; not client-writable |
+| title / body | text NOT NULL | 1–160 / 1–5 000 chars |
+| severity | text NOT NULL | `info` \| `warning` \| `urgent` \| `emergency` |
+| severity_rank / is_emergency | generated | 1–4 / `severity = 'emergency'` |
+| status | text NOT NULL | `draft` \| `published` \| `expired` \| `cancelled` \| `archived` |
+| published_at, published_by, expired_at, cancelled_at, cancelled_by, archived_at, edited_at, updated_by_user_id | | Server-stamped; user columns FK → profiles **SET NULL** |
+| expires_at | timestamptz | Optional; in the future when publishing |
+| cancellation_reason | text | ≤ 500; only with cancellation |
+
+### `alert_events` (Stage 7)
+Transactional outbox and audit trail, written only by trigger:
+- `alert_id` (FK → alerts **CASCADE**) and `community_id` (FK **RESTRICT**);
+- `event_type`: `published` \| `updated` \| `cancelled` \| `expired`;
+- `severity` at the time of the event;
+- `actor_user_id` (FK → profiles **SET NULL**; NULL = system);
+- `occurred_at`, and `dispatched_at` (for the future notification worker).
+
 ## Default roles and permissions
 
 Each tier is a strict superset of the tier below it (a test checks this).
@@ -323,6 +348,9 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
 | comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
 | comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
+| alerts.created_by → profiles | RESTRICT | Safety records keep an accountable creator. Account deletion of an alert creator needs an operator step (see `alerts.md`). |
+| alerts.community_id, alert_events.community_id → communities | RESTRICT | Same as other community children |
+| alert_events.alert_id → alerts | CASCADE | Events belong to their alert |
 | announcements.community_id → communities | RESTRICT | Same as other community children |
 | announcements.author_user_id / updated_by_user_id → profiles | SET NULL | Official communications outlive their author's account |
 | moderated_by_user_id → profiles | SET NULL | Moderation records outlive the moderator's account |
@@ -346,6 +374,10 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | posts / comments by author | `posts_author_idx`, `comments_author_idx` |
 | announcements by community, status, publication date | `announcements_community_status_published_idx (community_id, status, published_at desc, id desc)` |
 | announcement expiry | `announcements_community_expiry_idx (community_id, expires_at) WHERE status = 'published'` |
+| alerts by community, status, publication date | `alerts_community_status_published_idx` |
+| active alerts, emergencies first | `alerts_community_active_idx (community_id, severity_rank desc, published_at desc) WHERE status = 'published'` |
+| alert expiry sweep | `alerts_due_expiry_idx (expires_at) WHERE status = 'published'` |
+| undispatched alert events | `alert_events_undispatched_idx (occurred_at) WHERE dispatched_at IS NULL` |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
@@ -384,6 +416,8 @@ the full model. In short:
 | posts (Stage 5) | published: `posts.view`; hidden or deleted: `posts.moderate` or the author | `posts.create`, as yourself, always `published`; columns: community_id, body | author (`edit_own` / `delete_own`) or `posts.moderate`; columns: body, status, moderation_reason; trigger enforces the lifecycle | ✗ (soft delete) |
 | comments (Stage 5) | post visible, and published, or `comments.moderate`, or the author | `comments.create` on a published visible post (published parent on the same post); columns: post_id, parent_comment_id, body | as posts, with `comments.*` | ✗ |
 | announcements (Stage 6) | published or archived: `announcements.view` / `manage`; draft or deleted: `announcements.manage`, or the author holding `announcements.create` | `announcements.create`, as yourself, draft or published; columns: community_id, title, body, priority, status, expires_at | `announcements.manage`, or the author holding `announcements.create`; columns: title, body, priority, status, expires_at; trigger enforces the lifecycle | ✗ (soft delete) |
+| alerts (Stage 7) | non-draft: `alerts.view` / `manage`; draft: `alerts.manage` or the creator holding `alerts.create` | `alerts.create`, as yourself, draft or published; `emergency` needs `alerts.manage` | `alerts.manage`, or the creator holding `alerts.create`; columns: title, body, severity, status, expires_at, cancellation_reason; trigger enforces lifecycle and severity rules | ✗ |
+| alert_events (Stage 7) | `alerts.manage` | ✗ (trigger only) | ✗ | ✗ |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -403,7 +437,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3, 5 and 6)
+### Client RPCs (Stages 3, 5, 6 and 7)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -413,6 +447,8 @@ restricted by it.
 | `public.has_community_permission(community_id, key)` | boolean | Stage 1 |
 | `public.list_community_posts(...)` / `public.list_post_comments(...)` | cursor-paginated pages | Stage 5, SECURITY INVOKER |
 | `public.list_current_announcements(...)` / `public.list_announcement_history(...)` | cursor-paginated pages | Stage 6, SECURITY INVOKER |
+| `public.list_active_alerts(...)` / `public.list_my_active_alerts()` / `public.list_alert_history(...)` | alerts, emergencies first | Stage 7, SECURITY INVOKER |
+| `public.expire_due_alerts()` | count | Stage 7, **service role only** (scheduler) |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
 
