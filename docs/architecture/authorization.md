@@ -1,6 +1,7 @@
 # Authorization Architecture
 
-**Status:** Stage 1, implemented and tested.
+**Status:** Stage 1, implemented and tested. Identity tightened in Stage 2 (see
+[`authentication.md`](authentication.md)).
 **Decision:** Authorization is permission-based and community-scoped, and it is
 enforced inside PostgreSQL with Row Level Security. Client applications are never
 trusted to enforce it.
@@ -8,7 +9,7 @@ trusted to enforce it.
 ## The chain
 
 ```
-user (auth.uid(), from the verified Supabase JWT)
+user (private.current_active_user_id(): verified JWT + live session + active account)
   └─ membership          one per (community, user); must be status = 'active'
        │                 and the community must be status = 'active'
        └─ membership_roles     a membership can hold several roles
@@ -19,9 +20,10 @@ user (auth.uid(), from the verified Supabase JWT)
 
 A user holds permission **P** in community **C** if and only if:
 
-1. they have a membership in **C** with `status = 'active'`, and
-2. **C** has `status = 'active'`, and
-3. at least one role assigned to that membership grants **P**.
+1. they have a live session and an `active` account (Stage 2), and
+2. they have a membership in **C** with `status = 'active'`, and
+3. **C** has `status = 'active'`, and
+4. at least one role assigned to that membership grants **P**.
 
 A user's effective permissions are the union of all their roles in that one
 community. Nothing carries over between communities. Owning Community A grants
@@ -41,9 +43,11 @@ select public.has_community_permission('…community uuid…', 'members.approve'
 
 - Returns a boolean **for the current user only.** There is no user parameter,
   so a caller cannot ask about anyone else or impersonate them. The identity
-  always comes from `auth.uid()`.
+  always comes from `private.current_active_user_id()`: the JWT's user, but only
+  while their session still exists and their account is `active` (Stage 2).
 - Returns `false` for anonymous callers, unknown communities, unknown keys,
-  pending, suspended or departed members, and suspended or archived communities.
+  pending, suspended or departed members, suspended or archived communities, and
+  (Stage 2) signed-out or revoked sessions and suspended or deactivated accounts.
 - RLS policies use it, and clients can call it as an RPC (for example to decide
   what to show in a UI). The UI result is only a hint: the database enforces the
   same check again on every query.
@@ -70,7 +74,7 @@ Every SECURITY DEFINER function:
 
 - sets `search_path = ''` and schema-qualifies every object, so a hijacked
   search path cannot redirect it;
-- takes the acting user from `auth.uid()` and never from a parameter;
+- takes the acting user from `private.current_active_user_id()` and never from a parameter;
 - has no dynamic SQL and no side effects (except `create_community()`, which
   does one fixed set of inserts);
 - returns only a boolean about the caller, except `create_community()`, which
@@ -88,7 +92,9 @@ does not expose, so clients cannot call them directly:
 | `private.current_user_covers_role(r)` | does the caller hold every permission role `r` grants? |
 | `private.can_manage_role_permission(r, p)` | can the caller add or remove permission `p` on role `r`? |
 | `private.can_view_role(r)` | does the caller have `roles.view` in `r`'s community? |
-| `private.can_view_profile(u)` | does user `u` have a live membership somewhere the caller has `members.view`? |
+| `private.can_view_membership(c, status)` | Stage 3: `active` needs `members.view`; any other status needs `members.approve`, `members.suspend` or `members.remove` |
+| `private.can_view_membership_id(m)` | the same rule, looked up by membership id |
+| `private.can_view_profile(u)` | does user `u` have a pending, active or suspended membership the caller may see? |
 | `private.is_sole_role_manager(m)` | is `m` the only active membership with `roles.manage` in its community? |
 
 ## Anti-escalation rules
@@ -127,7 +133,7 @@ produces the expected hierarchy without any hard-coded role ranking.
 `public.create_community(p_name, p_slug, p_community_type, p_description, p_timezone)`
 does all of the following in one transaction:
 
-1. inserts the community with `created_by = auth.uid()`;
+1. inserts the community with `created_by` set to the calling user;
 2. copies each `role_templates` row into a community-scoped system role, along
    with its permissions;
 3. creates an `active` membership for the caller;
@@ -154,8 +160,132 @@ only way to create a community.
 - **New features** (posts, events and so on) add a `community_id NOT NULL`
   column and write RLS policies like
   `using (public.has_community_permission(community_id, 'posts.view'))`.
-  For "own" permissions, combine with `author_id = auth.uid()`.
+  For "own" permissions, combine with
+  `author_id = (select private.current_active_user_id())`. Never use bare
+  `auth.uid()` in new policies: it ignores sign-out and suspension.
 - **New permissions:** insert them into `permissions` (and into
   `role_template_permissions` if they belong in defaults) in a migration. Decide
   explicitly whether existing communities' system roles should receive them,
   because template changes do not apply retroactively.
+
+## Membership management (Stage 3)
+
+The full client contract is in
+[`../api/communities-and-memberships.md`](../api/communities-and-memberships.md).
+The authorization-relevant points:
+
+- **Visibility follows permissions.** `members.view` shows *active* members.
+  Applications, suspensions and departures are visible only to members who
+  manage membership (`members.approve`, `members.suspend` or `members.remove`).
+- **Every status change is checked against a permission and the coverage rule**
+  (`private.enforce_membership_update`). Nothing checks a role name.
+- **Roles follow the membership lifecycle:**
+  - admission assigns the community's flagged default role (no name lookup);
+  - leaving or rejection removes all assignments, so re-admission can never
+    silently restore old powers;
+  - suspension keeps assignments, but they are inert while the membership is not
+    active.
+- **Communities are isolated.** Holding any permission in one community grants
+  nothing in another. The tests attempt cross-community reads, updates, status
+  changes, removals and role grants using real ids, and all of them fail.
+
+## Content: posts, comments and reactions (Stage 5)
+
+Details are in [`../features/posts.md`](../features/posts.md). The model is the
+same as everywhere else, resolved per community through
+`has_community_permission()`:
+
+| Check | Implemented by |
+|---|---|
+| Can see a post | `private.can_view_post_row()`: published needs `posts.view`; hidden or deleted needs `posts.moderate` or authorship |
+| Can see a comment | `private.can_view_comment_row()`: the post must be visible; non-published comments need `comments.moderate` or authorship |
+| Can comment | `private.can_comment_on()`: `comments.create`, the post is published and visible, and any parent is published and on the same post |
+| Can react | `private.can_react_to()`: the target is published and visible, plus `posts.view` |
+| Edits and status changes | `private.enforce_content_update()` trigger: authors edit their own published content (`*.edit_own`) and delete it (`*.delete_own`); moderators hide, restore and delete (`*.moderate`) but never edit text; deleted is terminal |
+
+- **Identity is never client-supplied.** Author and reaction-owner columns
+  default to `private.current_active_user_id()` and are not writable.
+- **Community scope is never client-supplied** for comments and reactions. It is
+  derived from the target, and composite foreign keys bind it, so content from
+  two communities can never be mixed.
+- **The read RPCs add no privileges.** `list_community_posts`,
+  `list_post_comments` and `get_reaction_summary` are `SECURITY INVOKER`, so RLS
+  filters every row they return.
+- **No coverage rule for content moderation.** A Moderator may hide an Admin's
+  post. This is a deliberate difference from membership actions, which are
+  hierarchical.
+
+## Announcements (Stage 6)
+
+Details are in [`../features/announcements.md`](../features/announcements.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an announcement | `private.can_view_announcement_row()`: published or archived needs `announcements.view` or `manage`; draft or deleted needs `announcements.manage`, or authorship plus `announcements.create` |
+| Can create | INSERT policy: `announcements.create` in the target community, author is the session user, status is draft or published |
+| Can change a given announcement | `private.can_manage_announcement_row()`: `announcements.manage` (any announcement) or authorship plus `announcements.create` (your own) |
+| What may change | `private.enforce_announcement_write()` trigger: allowed transitions, server-stamped dates, editing only while draft or published, deleted is terminal |
+
+`create` versus `manage` is the only distinction, and it is made by permission
+keys. Default Owners and Admins hold both; communities can grant `create`
+alone to custom roles.
+
+## Alerts (Stage 7)
+
+Details are in [`../features/alerts.md`](../features/alerts.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an alert | `private.can_view_alert_row()`: non-draft needs `alerts.view` or `manage`; a draft needs `alerts.manage`, or being the creator plus `alerts.create` |
+| Can create | INSERT policy: `alerts.create`; **`emergency` additionally needs `alerts.manage`** |
+| Can change a given alert | `private.can_manage_alert_row()`: `alerts.manage` (any) or creator plus `alerts.create` (own) |
+| What may change | `private.enforce_alert_write()`: lifecycle transitions; emergency and post-draft severity changes need `alerts.manage`; all identity and time columns server-stamped |
+| Audit log | `alert_events`: readable with `alerts.manage`; written only by trigger |
+
+**Severity is an authorization input, so it is checked on the server.** The
+emergency rule is enforced by both the policy and the trigger.
+
+**Server-side identity:**
+
+- The service role may execute `private.current_session_user_id()` and
+  `current_active_user_id()`. They return NULL for it, so this grants nothing,
+  but trusted writes such as the expiry sweep need it.
+- Events written by server code record a NULL actor.
+
+## Events and RSVPs (Stage 8)
+
+Details are in [`../features/events.md`](../features/events.md).
+
+| Check | Implemented by |
+|---|---|
+| Can see an event | `private.can_view_event_row()`: non-draft needs `events.view` or `manage`; a draft needs `events.manage`, or being the creator plus `events.create` |
+| Can create or change an event | INSERT policy (`events.create`); `private.can_manage_event_row()` (`events.manage`, or creator plus `events.create`); lifecycle trigger |
+| Can RSVP | `private.can_rsvp()`: the event is published and not started, and the caller has `events.view` in its community; only your own RSVP (`user_id` is the session user) |
+| Capacity | `private.apply_rsvp_capacity()`, SECURITY DEFINER: locks the event row, counts under the lock, waitlists overflow. It applies to every writer, including server code. |
+| Attendance totals | `public.get_event_attendance()`, SECURITY DEFINER: totals only, and only for events the caller can see |
+
+- Members never see other people's `maybe` or `not_going` answers.
+- `waitlisted` and the queue position are server-controlled.
+
+## Notifications (Stage 9)
+
+Details are in [`../features/notifications.md`](../features/notifications.md).
+
+- **Ownership.** A notification is readable and manageable only by its
+  recipient (`private.can_read_notification()`). There is no
+  community-permission override, so not even a community Owner can read a
+  member's notifications.
+- **Access follows membership.** Community-scoped notifications of
+  membership-requiring types are readable only while the recipient still has
+  `community.view` in that community. Suspension or removal also cuts off old
+  notifications.
+- **Creation is a server privilege:**
+  - clients have no INSERT grant;
+  - the internal service (`private.create_notification`,
+    `private.notify_community`) is executable only by other SECURITY DEFINER
+    code;
+  - `public.create_notification` is executable by the service role only.
+- **Recipients are resolved by permission key** (e.g. `alerts.view`) through
+  `private.community_members_with_permission()`. It computes permissions for
+  arbitrary users, so it is internal only.
+

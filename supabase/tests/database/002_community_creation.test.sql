@@ -18,10 +18,13 @@ select plan(22);
 -- users. Other memberships are inserted as a trusted backend would (the
 -- Stage 2 invitation / join flows), because clients cannot insert them.
 -- ---------------------------------------------------------------------------
+-- Impersonates a signed-in user exactly as PostgREST does: role
+-- `authenticated` plus verified JWT claims. Every fixture user has a live
+-- auth.sessions row whose id equals the user id (see below).
 create function pg_temp.login(p_user uuid) returns void language plpgsql as $$
 begin
   perform set_config('request.jwt.claims',
-    json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+    json_build_object('sub', p_user, 'role', 'authenticated', 'session_id', p_user, 'is_anonymous', false)::text, true);
   perform set_config('role', 'authenticated', true);
 end;
 $$;
@@ -63,6 +66,8 @@ insert into fx values
 
 insert into auth.users (id, email)
 select id, key || '@example.test' from fx;
+insert into auth.sessions (id, user_id)
+select id, id from fx;
 
 select pg_temp.login(pg_temp.fx('alice'));
 insert into fx select 'A', id from public.create_community('Community A', 'community-a', 'residential');

@@ -3,13 +3,15 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(67);
 
 -- Tables --------------------------------------------------------------------
 select has_table('public', t, 'table public.' || t || ' exists')
 from unnest(array[
   'profiles', 'communities', 'memberships', 'roles', 'permissions',
-  'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions'
+  'membership_roles', 'role_permissions', 'role_templates', 'role_template_permissions',
+  'platform_admins', 'posts', 'comments', 'reactions', 'announcements',
+  'alerts', 'alert_events', 'events', 'event_rsvps', 'notifications', 'notification_types'
 ]) as t;
 
 select is_empty(
@@ -36,12 +38,45 @@ select results_eq(
      where contype = 'f' and connamespace = 'public'::regnamespace
      order by 1, 2 $$,
   $$ values
+     ('alert_events',              'alert_events_actor_user_id_fkey',                'profiles',                  'n'),
+     ('alert_events',              'alert_events_alert_id_fkey',                     'alerts',                    'c'),
+     ('alert_events',              'alert_events_community_id_fkey',                 'communities',               'r'),
+     ('alerts',                    'alerts_cancelled_by_fkey',                       'profiles',                  'n'),
+     ('alerts',                    'alerts_community_id_fkey',                       'communities',               'r'),
+     ('alerts',                    'alerts_created_by_fkey',                         'profiles',                  'r'),
+     ('alerts',                    'alerts_published_by_fkey',                       'profiles',                  'n'),
+     ('alerts',                    'alerts_updated_by_user_id_fkey',                 'profiles',                  'n'),
+     ('announcements',             'announcements_author_user_id_fkey',              'profiles',                  'n'),
+     ('announcements',             'announcements_community_id_fkey',                'communities',               'r'),
+     ('announcements',             'announcements_updated_by_user_id_fkey',          'profiles',                  'n'),
+     ('comments',                  'comments_author_user_id_fkey',                   'profiles',                  'c'),
+     ('comments',                  'comments_moderated_by_user_id_fkey',             'profiles',                  'n'),
+     ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
+     ('comments',                  'comments_post_fk',                               'posts',                     'c'),
      ('communities',               'communities_created_by_fkey',                    'auth.users',                'n'),
+     ('event_rsvps',               'event_rsvps_event_fk',                           'events',                    'c'),
+     ('event_rsvps',               'event_rsvps_user_id_fkey',                       'profiles',                  'c'),
+     ('events',                    'events_cancelled_by_fkey',                       'profiles',                  'n'),
+     ('events',                    'events_community_id_fkey',                       'communities',               'r'),
+     ('events',                    'events_created_by_fkey',                         'profiles',                  'r'),
+     ('events',                    'events_updated_by_user_id_fkey',                 'profiles',                  'n'),
      ('membership_roles',          'membership_roles_membership_fk',                 'memberships',               'c'),
      ('membership_roles',          'membership_roles_role_fk',                       'roles',                     'r'),
      ('memberships',               'memberships_community_id_fkey',                  'communities',               'r'),
      ('memberships',               'memberships_user_id_fkey',                       'auth.users',                'c'),
+     ('memberships',               'memberships_user_profile_fkey',                  'profiles',                  'c'),
+     ('notifications',             'notifications_community_id_fkey',                'communities',               'c'),
+     ('notifications',             'notifications_type_fkey',                        'notification_types',        'r'),
+     ('notifications',             'notifications_user_id_fkey',                     'profiles',                  'c'),
+     ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
+     ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
+     ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'c'),
+     ('posts',                     'posts_community_id_fkey',                        'communities',               'r'),
+     ('posts',                     'posts_moderated_by_user_id_fkey',                'profiles',                  'n'),
      ('profiles',                  'profiles_id_fkey',                               'auth.users',                'c'),
+     ('reactions',                 'reactions_comment_fk',                           'comments',                  'c'),
+     ('reactions',                 'reactions_post_fk',                              'posts',                     'c'),
+     ('reactions',                 'reactions_user_id_fkey',                         'profiles',                  'c'),
      ('role_permissions',          'role_permissions_permission_id_fkey',            'permissions',               'r'),
      ('role_permissions',          'role_permissions_role_id_fkey',                  'roles',                     'c'),
      ('role_template_permissions', 'role_template_permissions_permission_id_fkey',   'permissions',               'r'),
@@ -68,7 +103,25 @@ from (values
   ('roles',            array['community_id']),
   ('membership_roles', array['membership_id']),
   ('membership_roles', array['role_id']),
-  ('role_permissions', array['role_id'])
+  ('role_permissions', array['role_id']),
+  ('posts',            array['community_id', 'created_at', 'id']),
+  ('comments',         array['post_id', 'created_at', 'id']),
+  ('comments',         array['parent_comment_id', 'created_at', 'id']),
+  ('reactions',        array['post_id', 'user_id']),
+  ('reactions',        array['comment_id', 'user_id']),
+  ('reactions',        array['user_id']),
+  ('announcements',    array['community_id', 'status', 'published_at']),
+  ('announcements',    array['community_id', 'expires_at']),
+  ('alerts',           array['community_id', 'status', 'published_at']),
+  ('alerts',           array['expires_at']),
+  ('alert_events',     array['alert_id', 'occurred_at']),
+  ('events',           array['community_id', 'starts_at']),
+  ('events',           array['community_id', 'status', 'starts_at']),
+  ('event_rsvps',      array['event_id']),
+  ('event_rsvps',      array['user_id']),
+  ('notifications',    array['user_id', 'created_at']),
+  ('notifications',    array['user_id', 'read_at']),
+  ('notifications',    array['community_id', 'created_at'])
 ) as t(tbl, cols);
 
 -- Privileges -----------------------------------------------------------------
