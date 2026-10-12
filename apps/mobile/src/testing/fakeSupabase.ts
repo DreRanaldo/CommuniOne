@@ -55,7 +55,37 @@ export interface FakeOptions {
   phone?: string | null;
   /** delete_my_account refuses: the user is the only Owner of a community with members. */
   deleteConflict?: boolean;
+  /** Invitations by token (preview_invitation / redeem_invitation). */
+  invitations?: Record<string, FakeInvitation>;
+  /** create_community refuses: the daily creation limit was reached. */
+  creationLimitReached?: boolean;
+  /** The first N create_community calls find their address (slug) already taken. */
+  slugsTaken?: number;
 }
+
+/**
+ * A server-side invitation. `state` mirrors the database checks: revoked,
+ * expired (time or used up) and stale (its creator lost members.invite).
+ */
+export interface FakeInvitation {
+  /** The community, as a my_communities() row (see makeCommunity) plus optional details. */
+  community: {
+    community_id: string;
+    membership_id: string;
+    name: string;
+    community_type: string;
+    logo_url: string | null;
+    logo_path?: string | null;
+    description?: string | null;
+    cover_image_path?: string | null;
+    [key: string]: unknown;
+  };
+  state?: 'valid' | 'revoked' | 'expired' | 'stale';
+  memberCount?: number;
+}
+
+/** An invitation token as the database issues them (ci_ + 64 hex). Built at runtime: tests hold no secret-like literals. */
+export const invitationToken = (n: number) => `ci_${n.toString(16).padStart(64, '0')}`;
 
 export interface ProfileRow {
   id: string;
@@ -206,6 +236,24 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const AUTH_REQUIRED: DbError = { code: '42501', message: 'authentication required' };
   const OFFLINE: DbError = { code: '', message: 'TypeError: Network request failed', status: 0 };
 
+  // ---- communities table (rows for the user's memberships and created communities) ----
+  type CommunityRow = Record<string, unknown> & { id: string; slug: string };
+  const communityRows = new Map<string, CommunityRow>();
+  const addCommunityRow = (c: Record<string, unknown>) =>
+    communityRows.set(c.community_id as string, {
+      id: c.community_id as string,
+      name: c.name,
+      slug: c.slug as string,
+      community_type: c.community_type,
+      description: (c.description as string | null | undefined) ?? null,
+      timezone: 'UTC',
+      status: c.community_status,
+      logo_url: c.logo_url ?? null,
+      logo_path: c.logo_path ?? null,
+      cover_image_url: null,
+      cover_image_path: c.cover_image_path ?? null,
+    });
+
   const runQuery = async (
     table: string,
     op: string,
@@ -239,6 +287,39 @@ export function fakeSupabase(options: FakeOptions = {}) {
         }
         own.forEach((row) => Object.assign(row, values, { updated_at: new Date().toISOString() }));
         return { data: own.map((row) => pick(row, columns)), error: null };
+      }
+    }
+    if (table === 'communities') {
+      // RLS: active members read; community.update holders (Owner, Admin) write.
+      const membership = (id: string) =>
+        communities.find((c) => (c as { community_id: string }).community_id === id) as
+          { membership_status: string } | undefined;
+      const visible = [...communityRows.values()].filter(
+        (row) => membership(row.id)?.membership_status === 'active' && matches({ ...row }),
+      );
+      if (op === 'select') {
+        const rows = visible.map((row) => pick(row, columns));
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        const writable = visible.filter((row) => manages(row.id));
+        for (const key of ['logo_path', 'cover_image_path'] as const) {
+          const path = values?.[key];
+          if (
+            typeof path === 'string' &&
+            writable.some((row) => !path.startsWith(`${row.id}/`) || !mediaFiles.has(path))
+          ) {
+            return {
+              data: null,
+              error: {
+                code: '42501',
+                message: "community images must be uploaded to that community's folder",
+              },
+            };
+          }
+        }
+        writable.forEach((row) => Object.assign(row, values));
+        return { data: writable.map((row) => pick(row, columns)), error: null };
       }
     }
     if (table === 'profile_private') {
@@ -319,12 +400,49 @@ export function fakeSupabase(options: FakeOptions = {}) {
         : { data: null, error: { message: 'Object not found' } },
     ),
   };
-  const storage = { from: jest.fn((_bucket: string) => storageBucket) };
+  // ---- Storage: the public community-media bucket (community managers only) ----
+  const mediaFiles = new Set<string>();
+  const manages = (communityId: string) =>
+    communities.some(
+      (c) =>
+        (c as { community_id: string }).community_id === communityId &&
+        (c as { membership_status: string }).membership_status === 'active' &&
+        (c as { role_names: string[] }).role_names.some((r) => r === 'Owner' || r === 'Admin'),
+    );
+  const mediaBucket = {
+    upload: jest.fn(async (path: string, _body: unknown, _options?: unknown) => {
+      if (offline) return { data: null, error: { message: 'Network request failed' } };
+      const user = me();
+      if (!user || !manages(path.split('/')[0] ?? '')) {
+        return {
+          data: null,
+          error: { message: 'new row violates row-level security policy', statusCode: '403' },
+        };
+      }
+      mediaFiles.add(path);
+      return { data: { path }, error: null };
+    }),
+    remove: jest.fn(async (paths: string[]) => {
+      paths.forEach((path) => mediaFiles.delete(path));
+      return { data: [], error: null };
+    }),
+    getPublicUrl: jest.fn((path: string) => ({
+      data: { publicUrl: `https://storage.test/public/community-media/${path}` },
+    })),
+  };
+  const storage = {
+    from: jest.fn((bucket: string) => (bucket === 'community-media' ? mediaBucket : storageBucket)),
+  };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
 
   let communities = options.communities ?? [];
+  communities.forEach((c) => addCommunityRow(c as Record<string, unknown>));
+  const invitations = new Map(Object.entries(options.invitations ?? {}));
+  const redemptions: { token: string; userId: string }[] = [];
+  let createdCount = 0;
+  let slugsTaken = options.slugsTaken ?? 0;
   let failNext = options.failFirstRpc ?? false;
-  const rpc = jest.fn(async (name: string) => {
+  const rpc = jest.fn(async (name: string, args: Record<string, unknown> = {}) => {
     if (failNext) {
       failNext = false;
       return { data: null, error: { code: 'XX000', message: 'connection reset at /var/lib/postgresql' } };
@@ -333,7 +451,123 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (revoked) return { data: null, error: { code: '42501', message: 'authentication required' } };
     if (name === 'my_communities') {
       if (offline) return { data: null, error: OFFLINE };
-      return { data: communities, error: null };
+      // Like the database function: community fields come from the communities table.
+      const rows = communities.map((c) => {
+        const row = communityRows.get((c as { community_id: string }).community_id);
+        return row ? { ...(c as object), logo_path: row.logo_path ?? null } : c;
+      });
+      return { data: rows, error: null };
+    }
+    if (name === 'create_community') {
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      if (options.creationLimitReached) {
+        return {
+          data: null,
+          error: { code: '53400', message: 'community creation limit reached (10 per 24 hours)' },
+        };
+      }
+      if (slugsTaken > 0 || [...communityRows.values()].some((row) => row.slug === args.p_slug)) {
+        slugsTaken -= 1;
+        return {
+          data: null,
+          error: {
+            code: '23505',
+            message: 'duplicate key value violates unique constraint "communities_slug_key"',
+          },
+        };
+      }
+      if (String(args.p_timezone).startsWith('Mars/')) {
+        return {
+          data: null,
+          error: { code: '22023', message: `invalid timezone: ${String(args.p_timezone)}` },
+        };
+      }
+      // The database makes the caller Owner with an active membership (create_community()).
+      createdCount += 1;
+      const membership = makeCommunity(900 + createdCount, {
+        name: args.p_name,
+        slug: args.p_slug,
+        community_type: args.p_community_type,
+        role_names: ['Owner'],
+        description: args.p_description ?? null,
+      });
+      communities = [...communities, membership];
+      addCommunityRow(membership);
+      const row = communityRows.get(membership.community_id)!;
+      row.timezone = args.p_timezone;
+      return { data: { ...row }, error: null };
+    }
+    if (name === 'preview_invitation' || name === 'redeem_invitation') {
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      // Same checks, order and errors as the database functions.
+      const invitation = invitations.get(String(args.p_token));
+      if (!invitation) return { data: null, error: { code: 'P0002', message: 'invalid invitation' } };
+      const state = invitation.state ?? 'valid';
+      const refusal = {
+        revoked: 'this invitation has been revoked',
+        expired: 'this invitation has expired',
+        stale: 'this invitation is no longer valid',
+        valid: null,
+      }[state];
+      if (refusal) return { data: null, error: { code: '22023', message: refusal } };
+      const target = invitation.community;
+      const existing = communities.find(
+        (c) => (c as { community_id: string }).community_id === target.community_id,
+      ) as { membership_status: string } | undefined;
+      if (name === 'preview_invitation') {
+        return {
+          data: [
+            {
+              community_id: target.community_id,
+              name: target.name,
+              community_type: target.community_type,
+              description: target.description ?? null,
+              logo_url: target.logo_url,
+              logo_path: (target as { logo_path?: string | null }).logo_path ?? null,
+              cover_image_url: null,
+              cover_image_path: target.cover_image_path ?? null,
+              member_count: invitation.memberCount ?? 12,
+              expires_at: '2026-12-01T00:00:00Z',
+              membership_status: existing?.membership_status ?? null,
+            },
+          ],
+          error: null,
+        };
+      }
+      if (existing?.membership_status === 'active') {
+        return {
+          data: null,
+          error: { code: '23505', message: 'you are already a member of this community' },
+        };
+      }
+      if (existing?.membership_status === 'suspended') {
+        return {
+          data: null,
+          error: { code: '42501', message: 'your membership in this community is suspended' },
+        };
+      }
+      // Joins (or re-admits) as an active Member with the default role.
+      const joined = { ...target, membership_status: 'active', role_names: ['Member'] };
+      communities = [
+        ...communities.filter((c) => (c as { community_id: string }).community_id !== target.community_id),
+        joined,
+      ];
+      addCommunityRow(joined);
+      redemptions.push({ token: String(args.p_token), userId: user });
+      return {
+        data: [
+          {
+            community_id: target.community_id,
+            membership_id: joined.membership_id,
+            membership_status: 'active',
+          },
+        ],
+        error: null,
+      };
     }
     if (name === 'delete_my_account') {
       if (offline) return { data: null, error: OFFLINE };
@@ -367,6 +601,16 @@ export function fakeSupabase(options: FakeOptions = {}) {
     profiles,
     phones,
     files,
+    /** The public community-media bucket. */
+    mediaStorage: mediaBucket,
+    mediaFiles,
+    communityRows,
+    /** Successful invitation redemptions, in order. */
+    redemptions,
+    /** Server-side invitations by token (change one to simulate a revocation). */
+    invitations,
+    /** The user's memberships as my_communities() currently returns them. */
+    memberships: () => communities,
     /** Every Data API query, in order (table, operation, filters, values). */
     queries,
     /** Change the user's memberships on the server (e.g. removed from a community). */
@@ -398,7 +642,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
 export function fakeMedia() {
   const queue: (PickedImage | null | Error)[] = [];
   const picker: MediaPicker = {
-    pickAvatar: jest.fn(async () => {
+    pickImage: jest.fn(async (_kind: string) => {
       const next = queue.length ? queue.shift() : null;
       if (next instanceof Error) throw next;
       return next ?? null;
@@ -432,21 +676,24 @@ export function fakeLinks(initialURL: string | null = null) {
 }
 
 /** A my_communities() row: an active membership in an active community unless overridden. */
-export function makeCommunity(n: number, overrides: Record<string, unknown> = {}) {
+export function makeCommunity<O extends Record<string, unknown> = Record<string, never>>(
+  n: number,
+  overrides: O = {} as O,
+) {
   const id = String(n).padStart(12, '0');
-  return {
+  const base = {
     community_id: `cccccccc-0000-4000-8000-${id}`,
     name: `Community ${n}`,
     slug: `community-${n}`,
     community_type: 'other',
-    logo_url: null,
+    logo_url: null as string | null,
     community_status: 'active',
     membership_id: `dddddddd-0000-4000-8000-${id}`,
     membership_status: 'active',
     joined_at: '2026-01-01T00:00:00Z',
     role_names: ['Member'],
-    ...overrides,
   };
+  return { ...base, ...overrides } as Omit<typeof base, keyof O> & O;
 }
 
 export const sampleCommunities = [

@@ -24,6 +24,22 @@ export interface InvitationSummary {
   createdAt: string;
 }
 
+/** What an invitation would join (preview_invitation): shown before accepting. */
+export interface InvitationPreview {
+  communityId: string;
+  name: string;
+  type: string;
+  description: string | null;
+  logo_path: string | null;
+  logo_url: string | null;
+  cover_image_path: string | null;
+  cover_image_url: string | null;
+  memberCount: number;
+  expiresAt: string;
+  /** The caller's existing membership, if any: 'active' (already a member), 'suspended' (cannot join), 'pending' / 'left' / 'rejected' (joining re-admits). */
+  membershipStatus: string | null;
+}
+
 const TOKEN = /^ci_[0-9a-f]{64}$/;
 
 /** Accepts a raw token or a link containing ?token=... */
@@ -77,6 +93,31 @@ export function invitationsService(ctx: ServiceContext) {
       return ctx.run('invitations.revoke', async () => {
         await ctx.requireUserId();
         return unwrap(await db.rpc('revoke_invitation', { p_invitation_id: v.uuid(invitationId, 'invitationId') })) as boolean;
+      });
+    },
+
+    /**
+     * Validates an invitation and shows its community WITHOUT joining or
+     * consuming a use. Same refusals as redeem: NOT_FOUND (invalid),
+     * VALIDATION (revoked, expired, used up, no longer valid).
+     */
+    preview(tokenOrLink: string): Promise<InvitationPreview> {
+      return ctx.run('invitations.preview', async () => {
+        await ctx.requireUserId();
+        const row = firstRow(unwrap(await db.rpc('preview_invitation', { p_token: parseInvitationToken(tokenOrLink) })), 'invalid invitation');
+        return {
+          communityId: row.community_id,
+          name: row.name,
+          type: row.community_type,
+          description: row.description,
+          logo_path: row.logo_path,
+          logo_url: row.logo_url,
+          cover_image_path: row.cover_image_path,
+          cover_image_url: row.cover_image_url,
+          memberCount: row.member_count,
+          expiresAt: row.expires_at,
+          membershipStatus: row.membership_status,
+        };
       });
     },
 

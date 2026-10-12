@@ -65,7 +65,7 @@ function EditProfileForm({ navigation, initial }: Props & { initial: MyProfile }
     setAvatarError(null);
     setAvatarBusy('choose');
     try {
-      const picked = await media.pickAvatar();
+      const picked = await media.pickImage('avatar');
       if (!picked) return;
       const profile = await auth.uploadMyAvatar({ file: picked.bytes, mimeType: picked.mimeType });
       // Show the local image now; the profile screen loads a signed URL.

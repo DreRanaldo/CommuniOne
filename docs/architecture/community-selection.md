@@ -68,9 +68,9 @@ The app's selection decides **what to show**, never **what is allowed**:
 
 ## Known limitations
 
-- Joining with an invitation is still a placeholder (invitations UI stage).
-  After it, the provider's `refresh()` should be called so the new community
-  appears at once.
+- Creating and joining (RN-05) end with `select(newCommunityId)`, which
+  re-fetches the memberships from the server, so the new community appears and
+  opens at once.
 - Community-scoped data screens (feed, events, …) are placeholders. When they
   arrive, they read `useCommunity().community_id`, and their own requests are
   authorized by RLS. If one of them gets `NOT_FOUND` / `FORBIDDEN` for the

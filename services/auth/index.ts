@@ -4,6 +4,7 @@
 import type { AuthError, Session } from '@supabase/supabase-js';
 import { ErrorCode, ServiceError, networkError } from '../core/errors.ts';
 import { unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
+import { checkImage, randomId, uploadBody, type ImageMimeType, type UploadBody } from '../core/files.ts';
 import * as v from '../core/validate.ts';
 import type { Tables } from '../database.types.ts';
 
@@ -11,8 +12,7 @@ export type Profile = Tables<'profiles'>;
 
 export const AVATAR_BUCKET = 'avatars';
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-const AVATAR_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const;
-export type AvatarMimeType = keyof typeof AVATAR_TYPES;
+export type AvatarMimeType = ImageMimeType;
 
 /** Account details from Supabase Auth (verified with the server, not read from the device). */
 export interface AccountInfo {
@@ -24,25 +24,6 @@ export interface AccountInfo {
   /** The profile's account status: anything but "active" means access is restricted. */
   status: string;
 }
-
-/**
- * A random v4-shaped id for avatar file names. The bucket is private and
- * access is decided by policies, so the name only needs to be unique; it is
- * not a secret. Uses crypto when the runtime has it.
- */
-function randomId(): string {
-  const bytes = new Uint8Array(16);
-  const cryptoApi = (globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
-  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
-  else for (let i = 0; i < 16; i += 1) bytes[i] = Math.floor(Math.random() * 256);
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-const byteLength = (file: Blob | ArrayBuffer | Uint8Array): number =>
-  typeof Blob !== 'undefined' && file instanceof Blob ? file.size : file instanceof ArrayBuffer ? file.byteLength : (file as Uint8Array).byteLength;
 
 export interface SignUpInput {
   email: string;
@@ -324,18 +305,14 @@ export function authService(ctx: ServiceContext) {
      * caller's own folder in the private avatars bucket, makes it the profile
      * avatar, and removes the previous file. Returns the updated profile.
      */
-    uploadMyAvatar(input: { file: Blob | ArrayBuffer | Uint8Array; mimeType: AvatarMimeType }): Promise<Profile> {
+    uploadMyAvatar(input: { file: UploadBody; mimeType: AvatarMimeType }): Promise<Profile> {
       return ctx.run('auth.uploadMyAvatar', async () => {
         const userId = await ctx.requireUserId();
         v.only<typeof input>(input, 'input', ['file', 'mimeType']);
-        const mimeType = v.oneOf(input.mimeType, 'mimeType', Object.keys(AVATAR_TYPES) as AvatarMimeType[]);
-        const size = byteLength(input.file);
-        if (size < 1) v.fail('file', 'The image is empty.');
-        if (size > AVATAR_MAX_BYTES) v.fail('file', 'The image is too large (at most 2 MB).');
+        const { mimeType, ext } = checkImage(input, AVATAR_MAX_BYTES);
         const previous = unwrapOne(await db.from('profiles').select('avatar_path').eq('id', userId).maybeSingle()).avatar_path;
-        const path = `${userId}/${randomId()}.${AVATAR_TYPES[mimeType]}`;
-        const body = typeof Blob !== 'undefined' && input.file instanceof Blob && input.file.type !== mimeType ? new Blob([input.file], { type: mimeType }) : input.file;
-        const stored = await db.storage.from(AVATAR_BUCKET).upload(path, body, { contentType: mimeType, upsert: false });
+        const path = `${userId}/${randomId()}.${ext}`;
+        const stored = await db.storage.from(AVATAR_BUCKET).upload(path, uploadBody(input.file, mimeType), { contentType: mimeType, upsert: false });
         if (stored.error) throw new ServiceError(ErrorCode.ServerError, 'The image could not be uploaded. Try again.', {}, stored.error);
         const rows = unwrap(await db.from('profiles').update({ avatar_path: path }).eq('id', userId).select('*'));
         const updated = rows?.[0];

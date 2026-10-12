@@ -1,15 +1,23 @@
+import type { CommunityImages } from '@communione/services';
 import { Avatar } from '@/components';
+import { useServices } from '@/lib/dependencies';
 
-/** A community's logo (https URLs only), or its initials. */
+/** A community's logo (uploaded file, else an external https URL), or its initials. */
 export function CommunityLogo({
-  name,
-  logoUrl,
+  community,
   size = 48,
 }: {
-  name: string;
-  logoUrl: string | null;
+  community: CommunityImages & { name: string };
   size?: number;
 }) {
-  const uri = logoUrl && logoUrl.startsWith('https://') ? logoUrl : null;
-  return <Avatar uri={uri} name={name} size={size} label={`${name} logo`} testID="community-logo" />;
+  const { communities } = useServices();
+  return (
+    <Avatar
+      uri={communities.imageUrl(community, 'logo')}
+      name={community.name}
+      size={size}
+      label={`${community.name} logo`}
+      testID="community-logo"
+    />
+  );
 }

@@ -35,7 +35,7 @@ export function CommunityCard({ community, current, onPress, busy }: CommunityCa
       testID={`community-card-${community.community_id}`}
     >
       <View style={styles.row}>
-        <CommunityLogo name={community.name} logoUrl={community.logo_url} />
+        <CommunityLogo community={community} />
         <View style={styles.text}>
           <Text variant="heading" numberOfLines={2}>
             {community.name}

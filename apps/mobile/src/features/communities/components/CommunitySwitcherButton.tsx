@@ -18,7 +18,7 @@ export function CommunitySwitcherButton({ community }: { community: MyCommunity 
       hitSlop={8}
       testID="community-switcher"
     >
-      <CommunityLogo name={community.name} logoUrl={community.logo_url} size={28} />
+      <CommunityLogo community={community} size={28} />
       <Text variant="bodyStrong" numberOfLines={1} style={styles.name}>
         {community.name}
       </Text>

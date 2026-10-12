@@ -39,8 +39,14 @@ export type RootStackParamList = {
   App: NavigatorScreenParams<AppTabParamList>;
   /** Modal: the community switcher. `communityId` (from a link) asks to switch; it is validated first. */
   Communities: { communityId?: string } | undefined;
-  /** Modal: join a community from an invitation link or code. */
+  /**
+   * Modal: join a community with an invitation. `token` comes from a link
+   * (communione://join?token=…) or, later, a scanned QR code carrying that
+   * link; it is removed from the route as soon as it is read.
+   */
   JoinCommunity: { token?: string } | undefined;
+  /** Modal: create a community (the caller becomes its Owner). */
+  CreateCommunity: undefined;
   /** Recovery mode only: choose a new password after a reset link. */
   ResetPassword: undefined;
 };

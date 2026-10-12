@@ -95,8 +95,7 @@ export function CommunityList({ onSelected, header, error: outsideError }: Commu
           <EmptyState
             icon="people-outline"
             title="No communities yet"
-            message="Join a community with an invitation link, or create one."
-            action={{ title: 'Join with an invitation', onPress: join }}
+            message="Join a community with an invitation, or create your own."
           />
         ) : (
           <EmptyState
@@ -115,9 +114,15 @@ export function CommunityList({ onSelected, header, error: outsideError }: Commu
         />
       )}
       ListFooterComponent={
-        communities.length > 0 ? (
-          <Button title="Join another community" variant="ghost" onPress={join} />
-        ) : null
+        <View style={styles.actions}>
+          <Button title="Join with an invitation" variant="secondary" icon="enter-outline" onPress={join} />
+          <Button
+            title="Create a community"
+            variant="ghost"
+            icon="add-circle-outline"
+            onPress={() => navigation.navigate('CreateCommunity')}
+          />
+        </View>
       }
     />
   );
@@ -126,4 +131,5 @@ export function CommunityList({ onSelected, header, error: outsideError }: Commu
 const useStyles = makeStyles((t) => ({
   list: { flexGrow: 1, gap: t.spacing.md, padding: t.spacing.lg },
   header: { gap: t.spacing.md },
+  actions: { gap: t.spacing.sm, paddingTop: t.spacing.sm },
 }));

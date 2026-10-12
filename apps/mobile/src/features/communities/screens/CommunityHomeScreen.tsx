@@ -30,7 +30,7 @@ export function CommunityHomeScreen({
       <AuthNoticeBanner only={['emailConfirmed', 'passwordUpdated', 'linkError']} />
       <CommunityNoticeBanner />
       <View style={styles.header}>
-        <CommunityLogo name={community.name} logoUrl={community.logo_url} size={64} />
+        <CommunityLogo community={community} size={64} />
         <View style={styles.headerText}>
           <Text variant="title">{community.name}</Text>
           <Text tone="muted">{[typeLabel(community.community_type), role].filter(Boolean).join(' · ')}</Text>

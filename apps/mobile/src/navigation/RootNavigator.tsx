@@ -5,7 +5,8 @@ import { LoadingState } from '@/components';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ResetPasswordScreen } from '@/features/auth/screens/ResetPasswordScreen';
 import { CommunitiesScreen } from '@/features/communities/screens/CommunitiesScreen';
-import { JoinCommunityScreen } from '@/features/communities/screens/JoinCommunityScreen';
+import { CreateCommunityScreen } from '@/features/communities/create/CreateCommunityScreen';
+import { JoinCommunityScreen } from '@/features/communities/join/JoinCommunityScreen';
 import type { RootStackParamList } from '@/types/navigation';
 import { AppTabs } from './AppTabs';
 import { AuthNavigator } from './AuthNavigator';
@@ -50,6 +51,11 @@ export function RootNavigator() {
             name="Communities"
             component={CommunitiesScreen}
             options={{ presentation: 'modal', headerShown: true, title: 'Switch community' }}
+          />
+          <Stack.Screen
+            name="CreateCommunity"
+            component={CreateCommunityScreen}
+            options={{ presentation: 'modal', headerShown: true, title: 'Create a community' }}
           />
           <Stack.Screen
             name="JoinCommunity"

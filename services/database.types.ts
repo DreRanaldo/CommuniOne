@@ -205,14 +205,14 @@ isOneToOne: false
                   ]
                 },"communities": {
                   Row: {
-                    "community_type": string,"cover_image_url": string | null,"created_at": string,"created_by": string | null,"description": string | null,"id": string,"logo_url": string | null,"name": string,"settings": NonNullable<Json>,"slug": string,"status": string,"timezone": string,"updated_at": string
+                    "community_type": string,"cover_image_path": string | null,"cover_image_url": string | null,"created_at": string,"created_by": string | null,"description": string | null,"id": string,"logo_path": string | null,"logo_url": string | null,"name": string,"settings": NonNullable<Json>,"slug": string,"status": string,"timezone": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "community_type"?: string,"cover_image_url"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"logo_url"?: string | null,"name": string,"settings"?: NonNullable<Json>,"slug": string,"status"?: string,"timezone"?: string,"updated_at"?: string
+                    "community_type"?: string,"cover_image_path"?: string | null,"cover_image_url"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"logo_path"?: string | null,"logo_url"?: string | null,"name": string,"settings"?: NonNullable<Json>,"slug": string,"status"?: string,"timezone"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "community_type"?: string,"cover_image_url"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"logo_url"?: string | null,"name"?: string,"settings"?: NonNullable<Json>,"slug"?: string,"status"?: string,"timezone"?: string,"updated_at"?: string
+                    "community_type"?: string,"cover_image_path"?: string | null,"cover_image_url"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"logo_path"?: string | null,"logo_url"?: string | null,"name"?: string,"settings"?: NonNullable<Json>,"slug"?: string,"status"?: string,"timezone"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -826,11 +826,13 @@ isOneToOne: false
 "create_community":
 { Args: { "p_community_type"?: string,"p_description"?: string,"p_name": string,"p_slug": string,"p_timezone"?: string }; Returns: {
               "community_type": string,
+"cover_image_path": string | null,
 "cover_image_url": string | null,
 "created_at": string,
 "created_by": string | null,
 "description": string | null,
 "id": string,
+"logo_path": string | null,
 "logo_url": string | null,
 "name": string,
 "settings": NonNullable<Json>,
@@ -913,6 +915,11 @@ isOneToOne: false
         isSetofReturn: true
       } },
 "list_avatar_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
+            }[]
+                           },
+"list_community_media_to_purge":
 { Args: { "p_grace"?: string }; Returns: {
               "name": string
             }[]
@@ -1065,11 +1072,16 @@ isOneToOne: false
                            },
 "my_communities":
 { Args: Record<PropertyKey, never>; Returns: {
-              "community_id": string,"community_status": string,"community_type": string,"joined_at": string,"logo_url": string,"membership_id": string,"membership_status": string,"name": string,"role_names": (string)[],"slug": string
+              "community_id": string,"community_status": string,"community_type": string,"joined_at": string,"logo_path": string,"logo_url": string,"membership_id": string,"membership_status": string,"name": string,"role_names": (string)[],"slug": string
             }[]
                            },
 "my_community_permissions":
 { Args: { "p_community_id": string }; Returns: string[]
+                           },
+"preview_invitation":
+{ Args: { "p_token": string }; Returns: {
+              "community_id": string,"community_type": string,"cover_image_path": string,"cover_image_url": string,"description": string,"expires_at": string,"logo_path": string,"logo_url": string,"member_count": number,"membership_status": string,"name": string
+            }[]
                            },
 "purge_audit_logs":
 { Args: { "p_older_than": string }; Returns: number

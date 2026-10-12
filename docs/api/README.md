@@ -124,6 +124,9 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `create(input)` | New community; caller becomes Owner | – | `{ name (≤120), slug ([a-z0-9-], 3–63), type?, description? (≤2000), timezone? }` → `Community` | `CONFLICT` (slug taken), `RATE_LIMITED` (10 per 24 h) | **Atomic:** community + Owner membership + default roles; audited |
 | `get(id)` / `getBySlug(slug)` | One community | `community.view` (active member) | → `Community` | `NOT_FOUND` | – |
 | `update(id, patch)` | Edit details and settings | `community.update` | `{ name?, description?, type?, timezone?, logoUrl?, coverImageUrl?, settings? (JSON ≤16 KB) }` → `Community` | `FORBIDDEN`, `NOT_FOUND` | Audited (`changed_fields`) |
+| `uploadImage(communityId, kind, input)` | Logo (≤ 2 MiB) or cover (≤ 5 MiB) image (RN-05) | `community.update` | `'logo' \| 'cover'`, `{ file, mimeType: 'image/jpeg' \| 'image/png' \| 'image/webp' }` → `Community` | `VALIDATION` (`file`, `mimeType`, `kind`), `FORBIDDEN` (member without the permission), `NOT_FOUND` (not a member) | Stores `community-media/{communityId}/{uuid}.{ext}`, sets `logo_path` / `cover_image_path`, removes the previous file |
+| `removeImage(communityId, kind)` | Remove the logo or cover (RN-05) | `community.update` | → `Community` | `FORBIDDEN`, `NOT_FOUND` | Clears the path and the external URL, deletes the file |
+| `imageUrl(community, kind)` | Displayable logo / cover URL (RN-05) | – | any row with `logo_path` / `logo_url` (communities, `listMine()`, an invitation preview) → `string \| null` | – | Public URL of the uploaded file, else the external https URL; no network request |
 | `listMine()` | Community switcher: my pending / active / suspended memberships | – | → `MyCommunity[]` (`community_id`, `name`, `slug`, `community_type`, `logo_url`, `community_status`, `membership_id`, `membership_status`, `joined_at`, `role_names`; bounded by membership count) | – | `role_names` are display labels only |
 | `myPermissions(id)` | My permission keys, **for UI gating only** | – | → `string[]` | – | – |
 
@@ -155,6 +158,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `create(input)` | Shareable invitation | `members.invite` | `{ communityId, expiresIn? ('7 days'; 1 hour–30 days), maxUses? (1–10 000) }` → `{ invitationId, token (shown once), expiresAt, maxUses }` | `FORBIDDEN`, `RATE_LIMITED` | Only the token hash is stored; audited (never the token) |
 | `list(input)` | Invitations (≤200), never tokens | `members.invite` | `{ communityId, includeInactive? }` → `InvitationSummary[]` | – | – |
 | `revoke(invitationId)` | Stop an invitation | `members.invite` in its community | → `boolean` (false if already revoked) | `NOT_FOUND` | Audited |
+| `preview(tokenOrLink)` | Validate an invitation and show its community without joining (RN-05) | signed in | token or link → `{ communityId, name, type, description, logo_path, logo_url, cover_image_path, cover_image_url, memberCount, expiresAt, membershipStatus }` | `VALIDATION` (`token` malformed; revoked, expired, used up, no longer valid), `NOT_FOUND` (invalid) | None: consumes no use |
 | `redeem(tokenOrLink)` | Join a community | active account | token or link with `?token=` → `{ communityId, membershipId, status }` | `NOT_FOUND` (unknown), `VALIDATION` (expired, revoked, used up, no longer valid), `CONFLICT` (already a member), `FORBIDDEN` (suspended), `RATE_LIMITED` | **Atomic, row-locked:** membership + default role + usage count; audited |
 
 ### posts (and reactions)

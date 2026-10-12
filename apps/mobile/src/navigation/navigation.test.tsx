@@ -64,7 +64,7 @@ describe('navigation', () => {
   test('signed in: a restored session opens the app and the Join modal', async () => {
     const user = userEvent.setup();
     await renderApp({ session: makeSession(), communities: sampleCommunities });
-    await user.press(await screen.findByRole('button', { name: 'Join another community' }));
+    await user.press(await screen.findByRole('button', { name: 'Join with an invitation' }));
     expect(await screen.findByTestId('join-community-screen')).toBeOnTheScreen();
   });
 

@@ -212,7 +212,7 @@ describe('avatar', () => {
     const { user, media, storage } = await openEdit();
     media.next(null);
     await user.press(screen.getByRole('button', { name: 'Add photo' }));
-    await waitFor(() => expect(media.picker.pickAvatar).toHaveBeenCalled());
+    await waitFor(() => expect(media.picker.pickImage).toHaveBeenCalledWith('avatar'));
     expect(storage.upload).not.toHaveBeenCalled();
     expect(screen.getByTestId('avatar-initials')).toBeOnTheScreen();
   });
