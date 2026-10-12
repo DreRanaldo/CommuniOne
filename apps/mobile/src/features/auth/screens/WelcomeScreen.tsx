@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { View } from 'react-native';
-import { Button, Icon, Screen, Text } from '@/components';
-import { APP_NAME, TAGLINE } from '@/constants/app';
+import { BrandLogo, Button, Screen, Text } from '@/components';
+import { TAGLINE } from '@/constants/app';
 import { makeStyles } from '@/theme';
 import type { AuthStackParamList } from '@/types/navigation';
 import { AuthNoticeBanner } from '../components/AuthNoticeBanner';
@@ -12,12 +12,7 @@ export function WelcomeScreen({ navigation }: NativeStackScreenProps<AuthStackPa
     <Screen edges={['top', 'bottom', 'left', 'right']} testID="welcome-screen">
       <AuthNoticeBanner />
       <View style={styles.hero}>
-        <View style={styles.badge}>
-          <Icon name="people" size={40} color="onPrimary" />
-        </View>
-        <Text variant="display" align="center">
-          {APP_NAME}
-        </Text>
+        <BrandLogo size={120} testID="brand-logo" />
         <Text variant="body" tone="muted" align="center">
           {TAGLINE}
         </Text>
@@ -32,14 +27,5 @@ export function WelcomeScreen({ navigation }: NativeStackScreenProps<AuthStackPa
 
 const useStyles = makeStyles((t) => ({
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: t.spacing.md },
-  badge: {
-    width: 80,
-    height: 80,
-    borderRadius: t.radius.lg,
-    backgroundColor: t.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: t.spacing.sm,
-  },
   actions: { gap: t.spacing.md },
 }));

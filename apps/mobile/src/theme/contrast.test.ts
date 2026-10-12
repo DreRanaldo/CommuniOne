@@ -1,4 +1,4 @@
-// Alert severities must stay readable: WCAG AA (4.5:1) for normal text, in
+// Brand and alert colours must stay readable: WCAG AA (4.5:1) for normal text, in
 // both themes, for each severity colour used as text on the app's surfaces,
 // and for the emergency banner (inverse text on the emergency colour).
 import { darkColors, lightColors, type ColorTokens } from './tokens';
@@ -25,6 +25,16 @@ describe.each([
       }
     },
   );
+
+  test('brand colours in use: buttons, links, body text and success text are readable', () => {
+    expect(contrast(colors.onPrimary, colors.primary)).toBeGreaterThanOrEqual(4.5);
+    for (const surface of [colors.surface, colors.background, colors.surfaceMuted]) {
+      expect(contrast(colors.primary, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.text, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.textMuted, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.success, surface)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 
   test('the emergency banner text is readable', () => {
     expect(contrast(colors.textInverse, colors.severity.emergency)).toBeGreaterThanOrEqual(4.5);

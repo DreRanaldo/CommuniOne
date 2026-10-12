@@ -6,7 +6,7 @@ import { AppState } from 'react-native';
 import { makeSession, sampleCommunities, TEST_EMAIL, TEST_PASSWORD } from '@/testing/fakeSupabase';
 import { renderApp } from '@/testing/render';
 
-const WELCOME = 'One Platform. Every Community.';
+const WELCOME = 'One platform. Every community.';
 
 afterEach(() => jest.restoreAllMocks());
 

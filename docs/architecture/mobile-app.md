@@ -100,6 +100,23 @@ Placeholders: Notifications, and the Documents and Members sections.
 
 ## Design system
 
+- **Brand** (from the CommuniOne logo, `apps/mobile/assets/brand/`):
+  - **Colours.** The logo's blue `#0069CE` is the primary colour (5.4:1 with
+    white text), its navy `#162B46` is the body text colour, and success text
+    uses a darker green `#06753F`. The logo's bright green, teal and orange are
+    decorative only (`brand` in `tokens.ts`): the green is 2.7:1 on white, too
+    low for text. `src/theme/contrast.test.ts` checks primary, text, muted,
+    success and severity colours against WCAG AA in both themes.
+  - **`BrandLogo`** (`src/components`): the mark above the wordmark, or the
+    mark alone. It is one image named "CommuniOne" for screen readers. In dark
+    mode the mark sits on a white tile (its inner disc is white in the logo)
+    and the wordmark's navy letters become white. Used on Welcome (with the
+    tagline "One platform. Every community.") and on Sign in and Sign up.
+  - **App icon, splash and Android adaptive icons** are generated from the
+    logo by `apps/mobile/scripts/brand-assets.py` (Pillow; a development-time
+    tool, not run in CI). The splash background is white in light mode; the
+    adaptive icon background is white.
+
 - **Tokens** (`src/theme/tokens.ts`): a light and a dark palette (calm neutrals,
   one confident blue for actions, a severity scale for alerts whose colours all
   meet WCAG AA as text, checked by `src/theme/contrast.test.ts`), a 4-point
@@ -143,7 +160,7 @@ Placeholders: Notifications, and the Documents and Members sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 312 tests: events and RSVPs (22 + 6 rules), alerts (22 + 5 rules + 10 colour contrast), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 315 tests: brand logo (1) and colour contrast (12, brand and severity), events and RSVPs (22 + 6 rules), alerts (22 + 5 rules), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |
@@ -155,7 +172,8 @@ All of these run in CI (job "Mobile app", see [`../development/ci.md`](../develo
 - No device or simulator in CI: "launch" is verified by rendering the full app
   tree in Jest and by building production bundles, not by booting a binary.
   Native builds run on EAS.
-- Placeholder app icons and splash image (from the Expo template) and placeholder
-  bundle ids (`com.communione.app`): replace before the first store build.
+- The app icon and splash come from a 1254 px logo image; ask for a vector
+  (SVG) or larger master before store submission. The bundle ids
+  (`com.communione.app`) are placeholders: confirm them before the first store build.
 - Notifications and community sections are placeholders. Creating invitations (sharing a code or QR) is not in the app yet.
 - No offline cache or query library yet.

@@ -1,7 +1,8 @@
 import { screen, userEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { renderThemed } from '@/testing/render';
-import { darkTheme, lightTheme } from '@/theme';
-import { Button, Card, EmptyState, ErrorState, LoadingState, Text, TextField } from './index';
+import { brand, darkTheme, lightTheme } from '@/theme';
+import { BrandLogo, Button, Card, EmptyState, ErrorState, LoadingState, Text, TextField } from './index';
 
 describe('design system', () => {
   test('Button presses, and is inert while disabled or loading', async () => {
@@ -60,5 +61,25 @@ describe('design system', () => {
 
   test('every interactive element meets the minimum touch target', () => {
     expect(lightTheme.touchTarget).toBeGreaterThanOrEqual(44);
+  });
+
+  test('BrandLogo: one image named CommuniOne, readable in both themes', async () => {
+    const light = await renderThemed(<BrandLogo testID="logo" />);
+    expect(screen.getByRole('image', { name: 'CommuniOne' })).toBeOnTheScreen();
+    expect(screen.getByTestId('brand-mark')).toBeOnTheScreen();
+    const lightSource = screen.getByTestId('brand-wordmark').props.source;
+    await light.unmount();
+
+    // Dark: the mark on a white tile, and the white-lettered wordmark.
+    const dark = await renderThemed(<BrandLogo testID="logo" />, 'dark');
+    expect(StyleSheet.flatten(screen.getByTestId('brand-mark-tile').props.style)).toMatchObject({
+      backgroundColor: brand.paper,
+    });
+    expect(screen.getByTestId('brand-wordmark').props.source).not.toBe(lightSource);
+    await dark.unmount();
+
+    await renderThemed(<BrandLogo variant="mark" />);
+    expect(screen.getByTestId('brand-mark')).toBeOnTheScreen();
+    expect(screen.queryByTestId('brand-wordmark')).not.toBeOnTheScreen();
   });
 });

@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { Banner, Button, Screen, TextField } from '@/components';
+import { Banner, BrandLogo, Button, Screen, TextField } from '@/components';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles } from '@/theme';
 import type { AuthStackParamList } from '@/types/navigation';
@@ -49,6 +49,7 @@ export function SignInScreen({ navigation }: NativeStackScreenProps<AuthStackPar
 
   return (
     <Screen testID="sign-in-screen">
+      <BrandLogo variant="mark" size={56} />
       <AuthNoticeBanner />
       {formError ? <Banner tone="danger" message={formError} testID="sign-in-error" /> : null}
       <TextField
