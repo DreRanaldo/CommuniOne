@@ -109,6 +109,27 @@ const { data: [joined], error } = await supabase.rpc('redeem_invitation', { p_to
 // joined: { community_id, membership_id, membership_status: 'active' }
 ```
 
+## Preview (RN-05)
+
+`preview_invitation(p_token)` shows what an invitation would join, **without
+joining**. It applies the same checks as `redeem_invitation()`, in the same
+order and with the same errors. It locks nothing, writes nothing and consumes no
+use. It returns the community's name, type, description, logo and cover, the
+number of active members, the invitation's expiry, and the caller's existing
+membership status (`active` = already a member, `suspended` = cannot join,
+`pending` / `left` / `rejected` = joining re-admits, `NULL` = not a member).
+
+- Signed-in, active accounts only (`42501` otherwise); not granted to `anon`.
+- An unknown token gets `P0002` invalid invitation, so a preview reveals nothing
+  without a valid token.
+- Accepting is still `redeem_invitation()`, which re-checks everything under a
+  row lock. An invitation revoked between preview and accept is refused.
+
+```ts
+const preview = await services.invitations.preview(tokenOrLink); // validates, joins nothing
+await services.invitations.redeem(tokenOrLink);                  // joins
+```
+
 ## Expiry and housekeeping
 
 Redemption checks `expires_at` itself, so expiry is exact without any job.

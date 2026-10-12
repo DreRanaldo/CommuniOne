@@ -2,11 +2,29 @@
 // permissions. Creation is one atomic RPC (community + Owner membership +
 // default roles); reads and updates are authorized by RLS and column grants.
 
+import { ErrorCode, ServiceError } from '../core/errors.ts';
 import { mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
+import { checkImage, randomId, uploadBody, type ImageMimeType, type UploadBody } from '../core/files.ts';
 import * as v from '../core/validate.ts';
-import type { Json, Tables } from '../database.types.ts';
+import type { Database, Json, Tables } from '../database.types.ts';
 
 export type Community = Tables<'communities'>;
+/** One of the caller's memberships, as listed by my_communities() (community switcher). */
+export type MyCommunity = Database['public']['Functions']['my_communities']['Returns'][number];
+
+export const COMMUNITY_MEDIA_BUCKET = 'community-media';
+export const COMMUNITY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+export const COMMUNITY_COVER_MAX_BYTES = 5 * 1024 * 1024;
+export type CommunityImageKind = 'logo' | 'cover';
+const IMAGE_COLUMNS = { logo: 'logo_path', cover: 'cover_image_path' } as const;
+
+/** Anything carrying a community's image fields (a community row, my_communities(), an invitation preview). */
+export interface CommunityImages {
+  logo_path?: string | null;
+  logo_url?: string | null;
+  cover_image_path?: string | null;
+  cover_image_url?: string | null;
+}
 
 export const COMMUNITY_TYPES = ['residential', 'church', 'school', 'club', 'association', 'organization', 'other'] as const;
 export type CommunityType = (typeof COMMUNITY_TYPES)[number];
@@ -94,8 +112,75 @@ export function communitiesService(ctx: ServiceContext) {
       });
     },
 
+    /**
+     * Uploads a logo (≤ 2 MiB) or cover image (≤ 5 MiB), JPEG / PNG / WebP,
+     * into the community's folder of the public community-media bucket, makes
+     * it current, and removes the previous file. Requires community.update
+     * (storage policy and RLS); otherwise FORBIDDEN.
+     */
+    uploadImage(communityId: string, kind: CommunityImageKind, input: { file: UploadBody; mimeType: ImageMimeType }): Promise<Community> {
+      return ctx.run('communities.uploadImage', async () => {
+        await ctx.requireUserId();
+        const id = v.uuid(communityId, 'communityId');
+        const column = IMAGE_COLUMNS[v.oneOf(kind, 'kind', ['logo', 'cover'] as const)];
+        v.only<typeof input>(input, 'input', ['file', 'mimeType']);
+        const { mimeType, ext } = checkImage(input, kind === 'logo' ? COMMUNITY_LOGO_MAX_BYTES : COMMUNITY_COVER_MAX_BYTES);
+        const current = unwrapOne(await db.from('communities').select('logo_path, cover_image_path').eq('id', id).maybeSingle(), 'Community not found.');
+        const path = `${id}/${randomId()}.${ext}`;
+        const stored = await db.storage.from(COMMUNITY_MEDIA_BUCKET).upload(path, uploadBody(input.file, mimeType), { contentType: mimeType, upsert: false });
+        if (stored.error) {
+          // The storage policy refuses callers without community.update.
+          const refused = /row-level security|unauthorized|403/i.test(`${stored.error.message} ${(stored.error as { statusCode?: string }).statusCode ?? ''}`);
+          throw refused
+            ? new ServiceError(ErrorCode.Forbidden, 'You cannot change this community\'s images.', {}, stored.error)
+            : new ServiceError(ErrorCode.ServerError, 'The image could not be uploaded. Try again.', {}, stored.error);
+        }
+        const patch = kind === 'logo' ? { logo_path: path } : { cover_image_path: path };
+        const rows = unwrap(await db.from('communities').update(patch).eq('id', id).select('*'));
+        const updated = rows?.[0];
+        if (!updated) {
+          await db.storage.from(COMMUNITY_MEDIA_BUCKET).remove([path]);
+          throw new ServiceError(ErrorCode.Forbidden, 'You cannot change this community\'s images.');
+        }
+        // Best effort: an unused file is otherwise removed by the purge job.
+        const previous = current[column];
+        if (previous) await db.storage.from(COMMUNITY_MEDIA_BUCKET).remove([previous]);
+        return updated;
+      });
+    },
+
+    /** Removes the logo or cover image (row first, then the file). Requires community.update. */
+    removeImage(communityId: string, kind: CommunityImageKind): Promise<Community> {
+      return ctx.run('communities.removeImage', async () => {
+        await ctx.requireUserId();
+        const id = v.uuid(communityId, 'communityId');
+        const column = IMAGE_COLUMNS[v.oneOf(kind, 'kind', ['logo', 'cover'] as const)];
+        const current = unwrapOne(await db.from('communities').select('logo_path, cover_image_path').eq('id', id).maybeSingle(), 'Community not found.');
+        const patch = kind === 'logo' ? { logo_path: null, logo_url: null } : { cover_image_path: null, cover_image_url: null };
+        const updated = await mutateOne(
+          () => db.from('communities').update(patch).eq('id', id).select('*'),
+          () => db.from('communities').select('id').eq('id', id),
+          'Community not found.',
+        );
+        const previous = current[column];
+        if (previous) await db.storage.from(COMMUNITY_MEDIA_BUCKET).remove([previous]);
+        return updated;
+      });
+    },
+
+    /**
+     * Displayable URL of a community's logo or cover: the public URL of the
+     * uploaded file, else the external https URL, else null. No network request.
+     */
+    imageUrl(community: CommunityImages, kind: CommunityImageKind): string | null {
+      const path = kind === 'logo' ? community.logo_path : community.cover_image_path;
+      if (path) return db.storage.from(COMMUNITY_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+      const url = kind === 'logo' ? community.logo_url : community.cover_image_url;
+      return url && /^https:\/\//i.test(url) ? url : null;
+    },
+
     /** The caller's pending, active and suspended memberships (community switcher). */
-    listMine() {
+    listMine(): Promise<MyCommunity[]> {
       return ctx.run('communities.listMine', async () => {
         await ctx.requireUserId();
         return unwrap(await db.rpc('my_communities')) ?? [];

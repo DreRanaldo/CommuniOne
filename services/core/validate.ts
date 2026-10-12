@@ -117,7 +117,8 @@ export function optionalHttpsUrl(value: unknown, field: string): string | null |
 export function only<T extends object>(input: unknown, field: string, allowed: readonly (keyof T & string)[]): Partial<T> {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) fail(field, `${field} must be an object.`);
   const unknownKeys = Object.keys(input as object).filter((key) => !allowed.includes(key as keyof T & string));
-  if (unknownKeys.length > 0) fail(unknownKeys[0], `${unknownKeys[0]} cannot be set here.`);
+  const unknownKey = unknownKeys[0];
+  if (unknownKey !== undefined) fail(unknownKey, `${unknownKey} cannot be set here.`);
   return input as Partial<T>;
 }
 

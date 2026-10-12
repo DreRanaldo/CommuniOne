@@ -1,0 +1,17 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@communione/services": ["../../services/index.ts"],
+      "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
+    },
+    "types": ["jest"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../services/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

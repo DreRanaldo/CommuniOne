@@ -89,7 +89,7 @@ export function decodeCursor(cursor: unknown, kinds: readonly CursorKind[]): Cur
     return badCursor();
   }
   if (!Array.isArray(parsed) || parsed.length !== kinds.length) return badCursor();
-  return parsed.map((value, i) => checkValue(value, kinds[i]));
+  return parsed.map((value, i) => checkValue(value, kinds[i] as CursorKind));
 }
 
 /** Builds a page: a next cursor is returned only when the page is full. */

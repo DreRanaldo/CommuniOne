@@ -80,9 +80,20 @@ other `user_id`.
 |---|---|
 | Email address | Only the user (Supabase Auth). Never copied into public tables. |
 | Names, avatar, bio | The user, platform admins, and members of a community where the user has a visible membership |
+| Uploaded avatar image (RN-03) | Exactly the people who can see the profile: the `avatars` bucket is private, its read policy calls `can_view_profile()`, and the app shows the image through signed URLs that expire after an hour. A copied link stops working; nobody outside the user's communities gets one. |
 | Memberships | See `authorization.md` (status-based visibility) |
 | Notifications | The recipient only |
 | Audit logs | Pseudonymous ids only; `audit.view` holders in that community |
+
+### In the mobile app (RN-03)
+
+- The phone number appears only on the user's own Profile and Edit profile
+  screens, labelled "Private: only you can see your phone number".
+- The app reads it with `services.auth.getMyPhone()`, which has no user id
+  parameter; RLS returns the caller's row or nothing. Writes send no user id
+  either (`user_id` defaults to the session user).
+- No screen displays another member's phone number, and the mobile tests check
+  that no request asks for one (`apps/mobile/src/features/profile/profile.test.tsx`).
 
 ## Known limitations
 

@@ -15,6 +15,7 @@ the community keeps, and how the process is kept safe and atomic.
 |---|---|---|
 | Auth account (`auth.users`, sessions, identities, refresh tokens, MFA) | **Deleted** | The person can no longer sign in; old tokens stop working at once |
 | Profile (names, avatar, bio) | **Deleted** (`profiles` CASCADE) | Personal information |
+| Uploaded avatar files (`avatars` bucket, RN-03) | **Deleted by the purge job** | Personal data. Storage files cannot be deleted from SQL, so once the profile is gone no row references the file, and `list_avatar_files_to_purge()` (service role, scheduled) lists it for deletion through the Storage API. Until then it is unreadable: the read policy requires a visible profile. |
 | Phone number (`profile_private`) | **Deleted** (CASCADE) | Personal information |
 | Memberships and role assignments | **Deleted** (CASCADE) | Personal records |
 | Reactions, RSVPs, notifications, invitation redemptions, platform-admin grant | **Deleted** (CASCADE) | Personal records. Freed event places go to the waitlist as usual. |
@@ -50,6 +51,11 @@ session is required, not an active account.
 Operators can also delete an account server-side with the Auth admin API
 (`auth.admin.deleteUser(id)`). The same database rules apply, because everything
 is driven by the deletion of the `auth.users` row.
+
+In the mobile app (RN-03), Profile → Account & security → Delete account explains
+what is deleted and kept, asks the user to type `DELETE`, and calls
+`services.auth.deleteMyAccount()`. The app deletes nothing itself. A `CONFLICT`
+is shown as "Transfer your communities first".
 
 ## Safety
 

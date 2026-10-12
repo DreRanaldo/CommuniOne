@@ -92,3 +92,33 @@ jobs:
       - name: Stop Supabase
         if: always()
         run: npm run db:stop -- --no-backup
+
+  mobile:
+    name: Mobile app (lint, format, typecheck, tests, config, doctor, production export)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Lint (ESLint, zero warnings)
+        run: npm run lint
+      - name: Formatting (Prettier)
+        run: npm run format:check
+      - name: Typecheck (app + shared services)
+        run: npm run typecheck
+      - name: Tests (Jest + React Native Testing Library)
+        run: npm run test:ci
+      - name: Expo config for every variant (ids, scheme, no secrets)
+        run: npm run config:check
+      - name: Expo doctor (dependency and config health)
+        run: npm run doctor
+      - name: Production export (Android + iOS bundles, secret checks)
+        run: npm run export:check

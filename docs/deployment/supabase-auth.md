@@ -50,7 +50,7 @@ Supabase dashboard (project → left sidebar).
 | Setting | Required value |
 |---|---|
 | Site URL | The production web URL (e.g. `https://app.communione.example`); **never** `localhost` in production |
-| Redirect URLs | Exactly: `communione://auth/callback` (mobile deep link) and `https://<admin web domain>/auth/callback`. For staging add the staging domain. No wildcards in production. |
+| Redirect URLs | Exactly: `communione://auth/callback` (mobile: email confirmation), `communione://auth/reset-password` (mobile: password recovery) and `https://<admin web domain>/auth/callback`. For staging add the staging domain. No wildcards in production. |
 
 The app passes `emailRedirectTo` / `redirectTo` with one of these URLs; Supabase
 rejects any URL not on the list.
@@ -77,7 +77,11 @@ regardless of JWT expiry, because the database checks for a live
 
 ### Authentication → Rate Limits
 
-Start from the local values and adjust to traffic: emails sent ≈ provider limit,
+The local stack allows 100 emails per hour (`config.toml`) because the test
+suites send many confirmation and reset emails to the local Mailpit. Do not
+copy that value: in production start from the provider's limit and adjust to
+traffic. Also consider enabling CAPTCHA (Authentication → Attack Protection)
+for sign-up and password reset. Emails sent ≈ provider limit,
 sign-ups/sign-ins 30 per 5 minutes per IP, token refresh 150 per 5 minutes per
 IP, token verifications 30 per 5 minutes per IP.
 
@@ -99,8 +103,11 @@ IP, token verifications 30 per 5 minutes per IP.
 
 ### Storage
 
-The private `documents` bucket and its policies are created by migration 16.
-Confirm after the first deploy that it exists and is **not public**, and that the
+The private `documents` bucket and its policies are created by migration 16, and
+the private `avatars` bucket (2 MiB, JPEG / PNG / WebP) by migration 23, and the
+**public** `community-media` bucket (5 MiB, JPEG / PNG / WebP; community logos and
+covers) by migration 24. Confirm after the first deploy that `documents` and
+`avatars` exist and are **not public**, that `community-media` is public, and that the
 global upload limit (Storage → Settings) is at least 50 MiB.
 
 ### Scheduled jobs (service role, server side)
@@ -110,6 +117,8 @@ global upload limit (Storage → Settings) is at least 50 MiB.
 | Alert expiry | `select public.expire_due_alerts();` | every minute |
 | Invitation housekeeping | `select public.expire_invitations();` | hourly |
 | Document purge | `list_document_files_to_purge()` then delete files | daily |
+| Community media purge | `list_community_media_to_purge()` then delete those files from the `community-media` bucket (replaced logos and covers) | daily |
+| Avatar purge | `list_avatar_files_to_purge()` then delete those files from the `avatars` bucket (replaced avatars, deleted accounts) | daily |
 | Audit retention | `select public.purge_audit_logs(interval '730 days');` | monthly |
 | Rate-limit counters | `select public.purge_rate_limit_counters();` | hourly |
 

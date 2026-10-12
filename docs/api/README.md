@@ -71,6 +71,17 @@ constraint or policy names) are never included.
 | `RATE_LIMITED` | Too many requests | per-user limits (see service-layer.md); `details.retryAfterSeconds` |
 | `SERVER_ERROR` | Unexpected failure | logged (redacted); generic message to the client |
 
+### Network failures and the `onError` hook
+
+A request that never reached the server (offline, DNS, timeout) is a
+`SERVER_ERROR` with `details.network: true` and the message "We couldn't reach
+CommuniOne. Check your connection and try again." It is safe to retry.
+
+`createServices(client, { onError })` calls `onError(error, operation)` after
+every failure. The mobile app uses it to detect a session the server no longer
+accepts (`UNAUTHENTICATED` from any operation other than sign-in / sign-up /
+reset / link handling) and sign out locally.
+
 ### Pagination
 
 List operations return `Page<T> = { items: T[], nextCursor: string | null }`.
@@ -90,13 +101,20 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
-| `signUp(input)` | Create an account (no auth needed) | – | `{ email, password, displayName?, firstName?, lastName?, emailRedirectTo? }` → `{ userId, needsEmailConfirmation }` | `RATE_LIMITED` | Sends a confirmation email; profile created by the database |
+| `signUp(input)` | Create an account (no auth needed) | – | `{ email, password, displayName?, firstName?, lastName?, emailRedirectTo? }` → `{ userId, needsEmailConfirmation }` (identical for an address that already has an account) | `RATE_LIMITED`, network | Sends a confirmation email; profile created by the database |
 | `signIn(input)` | Password sign-in (no auth needed) | – | `{ email, password }` → `Session` | `UNAUTHENTICATED` (one message for wrong password, unknown or unconfirmed email), `RATE_LIMITED` | Creates a session |
 | `signOut(scope?)` | Sign out this device, others, or everywhere | – | `'local' \| 'others' \| 'global'` → `void` | – | Ends sessions immediately (server-side check) |
-| `requestPasswordReset(input)` | Email a reset link (no auth needed) | – | `{ email, redirectTo? }` → `void` | `RATE_LIMITED` | Email, if the account exists (never revealed) |
+| `requestPasswordReset(input)` | Email a reset link (no auth needed) | – | `{ email, redirectTo? }` → `void` | `RATE_LIMITED`, `SERVER_ERROR` with `details.network` (never sent) | Email, if the account exists (never revealed) |
+| `handleAuthRedirect(url)` | Complete an email link opened in the app (PKCE code exchange) | – | `communione://auth/callback?code=…` or `…/auth/reset-password?code=…` → `{ kind: 'signedIn' \| 'recovery' }` | `VALIDATION` (invalid / expired link, or opened on another device), network | Creates a session; `recovery` must be followed by `updatePassword` |
+| `updatePassword(newPassword)` | Set a new password (also completes recovery) | signed in | password (8–72, letters and digits) → `void` | `VALIDATION` (rules, same as current password), `FORBIDDEN` (re-authentication needed) | Other sessions are kept unless signed out |
 | `getMyProfile()` | Own profile | – | → `Profile` | `NOT_FOUND` | – |
 | `updateMyProfile(patch)` | Edit own profile (active account) | – | `{ displayName?, firstName?, lastName?, bio?, avatarUrl? (https) }` → `Profile` | `FORBIDDEN` | – |
 | `getMyPhone()` / `setMyPhone(phone \| null)` | Private phone number (visible to nobody else) | – | → `string \| null` / `void` | – | – |
+| `getMyAccount()` | Account information (RN-03) | signed in | → `{ userId, email, emailConfirmedAt, createdAt, lastSignInAt, status }` | `UNAUTHENTICATED` | Asks Auth (`getUser`), not the cached session |
+| `changePassword(input)` | Change password, re-checking the current one (RN-03) | signed in | `{ currentPassword, newPassword }` → `void` | `VALIDATION` (`currentPassword` incorrect; `newPassword` rules or unchanged) | Re-authenticates (new session), then updates the password |
+| `uploadMyAvatar(input)` | Upload a new avatar (RN-03) | active account | `{ file: Blob \| ArrayBuffer \| Uint8Array, mimeType: 'image/jpeg' \| 'image/png' \| 'image/webp' }` (≤ 2 MiB) → `Profile` | `VALIDATION` (`file`, `mimeType`), `FORBIDDEN`, `SERVER_ERROR` | Stores `avatars/{userId}/{uuid}.{ext}`, sets `avatar_path`, removes the previous file |
+| `removeMyAvatar()` | Remove the avatar (RN-03) | active account | → `Profile` | `FORBIDDEN` | Clears `avatar_path` and `avatar_url`, then deletes the file |
+| `avatarUrl(profile, expiresInSeconds = 3600)` | Displayable avatar URL (RN-03) | signed in | `Pick<Profile, 'avatar_path' \| 'avatar_url'>` → `string \| null` | `VALIDATION` (expiry 60 s–24 h) | Signed URL for uploaded avatars; `null` when the caller may not see that profile |
 | `deleteMyAccount()` | Permanently delete own account | – | → `void` | `CONFLICT` (only role manager of a community with other members: transfer ownership first) | Erases personal data, keeps community history as "Deleted User", audits `account.deleted`, signs out |
 
 ### communities
@@ -106,7 +124,10 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `create(input)` | New community; caller becomes Owner | – | `{ name (≤120), slug ([a-z0-9-], 3–63), type?, description? (≤2000), timezone? }` → `Community` | `CONFLICT` (slug taken), `RATE_LIMITED` (10 per 24 h) | **Atomic:** community + Owner membership + default roles; audited |
 | `get(id)` / `getBySlug(slug)` | One community | `community.view` (active member) | → `Community` | `NOT_FOUND` | – |
 | `update(id, patch)` | Edit details and settings | `community.update` | `{ name?, description?, type?, timezone?, logoUrl?, coverImageUrl?, settings? (JSON ≤16 KB) }` → `Community` | `FORBIDDEN`, `NOT_FOUND` | Audited (`changed_fields`) |
-| `listMine()` | Community switcher: my pending / active / suspended memberships | – | → rows (bounded by membership count) | – | – |
+| `uploadImage(communityId, kind, input)` | Logo (≤ 2 MiB) or cover (≤ 5 MiB) image (RN-05) | `community.update` | `'logo' \| 'cover'`, `{ file, mimeType: 'image/jpeg' \| 'image/png' \| 'image/webp' }` → `Community` | `VALIDATION` (`file`, `mimeType`, `kind`), `FORBIDDEN` (member without the permission), `NOT_FOUND` (not a member) | Stores `community-media/{communityId}/{uuid}.{ext}`, sets `logo_path` / `cover_image_path`, removes the previous file |
+| `removeImage(communityId, kind)` | Remove the logo or cover (RN-05) | `community.update` | → `Community` | `FORBIDDEN`, `NOT_FOUND` | Clears the path and the external URL, deletes the file |
+| `imageUrl(community, kind)` | Displayable logo / cover URL (RN-05) | – | any row with `logo_path` / `logo_url` (communities, `listMine()`, an invitation preview) → `string \| null` | – | Public URL of the uploaded file, else the external https URL; no network request |
+| `listMine()` | Community switcher: my pending / active / suspended memberships | – | → `MyCommunity[]` (`community_id`, `name`, `slug`, `community_type`, `logo_url`, `community_status`, `membership_id`, `membership_status`, `joined_at`, `role_names`; bounded by membership count) | – | `role_names` are display labels only |
 | `myPermissions(id)` | My permission keys, **for UI gating only** | – | → `string[]` | – | – |
 
 ### memberships
@@ -137,6 +158,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `create(input)` | Shareable invitation | `members.invite` | `{ communityId, expiresIn? ('7 days'; 1 hour–30 days), maxUses? (1–10 000) }` → `{ invitationId, token (shown once), expiresAt, maxUses }` | `FORBIDDEN`, `RATE_LIMITED` | Only the token hash is stored; audited (never the token) |
 | `list(input)` | Invitations (≤200), never tokens | `members.invite` | `{ communityId, includeInactive? }` → `InvitationSummary[]` | – | – |
 | `revoke(invitationId)` | Stop an invitation | `members.invite` in its community | → `boolean` (false if already revoked) | `NOT_FOUND` | Audited |
+| `preview(tokenOrLink)` | Validate an invitation and show its community without joining (RN-05) | signed in | token or link → `{ communityId, name, type, description, logo_path, logo_url, cover_image_path, cover_image_url, memberCount, expiresAt, membershipStatus }` | `VALIDATION` (`token` malformed; revoked, expired, used up, no longer valid), `NOT_FOUND` (invalid) | None: consumes no use |
 | `redeem(tokenOrLink)` | Join a community | active account | token or link with `?token=` → `{ communityId, membershipId, status }` | `NOT_FOUND` (unknown), `VALIDATION` (expired, revoked, used up, no longer valid), `CONFLICT` (already a member), `FORBIDDEN` (suspended), `RATE_LIMITED` | **Atomic, row-locked:** membership + default role + usage count; audited |
 
 ### posts (and reactions)

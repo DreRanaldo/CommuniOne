@@ -1,0 +1,65 @@
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { MyCommunity } from '@communione/services';
+import { ErrorState, LoadingState } from '@/components';
+import { CommunitySwitcherButton } from '@/features/communities/components/CommunitySwitcherButton';
+import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
+import { ChooseCommunityScreen } from '@/features/communities/screens/ChooseCommunityScreen';
+import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHomeScreen';
+import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
+import type { CommunityStackParamList } from '@/types/navigation';
+import { errorMessage } from '@/utils/errors';
+import { useStackOptions } from './options';
+
+const Stack = createNativeStackNavigator<CommunityStackParamList>();
+
+const SECTION_TITLES = {
+  feed: 'Feed',
+  announcements: 'Announcements',
+  alerts: 'Alerts',
+  events: 'Events',
+  documents: 'Documents',
+  members: 'Members',
+} as const;
+
+/**
+ * The Home tab: the current community (from CurrentCommunityProvider, never
+ * from a route parameter). With no community selected it shows the list to
+ * choose one. Switching community remounts the stack, so no screen of the
+ * previous community stays open.
+ */
+export function CommunityNavigator() {
+  const { status, error, current, retry } = useCurrentCommunity();
+  if (status === 'loading' || status === 'idle') return <LoadingState label="Loading your communities…" />;
+  if (status === 'error') {
+    return (
+      <ErrorState
+        title="Your communities could not be loaded"
+        message={errorMessage(error)}
+        onRetry={retry}
+      />
+    );
+  }
+  if (!current) return <ChooseCommunityScreen />;
+  return <CommunityStack key={current.community_id} community={current} />;
+}
+
+function CommunityStack({ community }: { community: MyCommunity }) {
+  const screenOptions = useStackOptions();
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen
+        name="CommunityHome"
+        component={CommunityHomeScreen}
+        options={{
+          title: community.name,
+          headerTitle: () => <CommunitySwitcherButton community={community} />,
+        }}
+      />
+      <Stack.Screen
+        name="CommunitySection"
+        component={PlaceholderScreen}
+        options={({ route }) => ({ title: SECTION_TITLES[route.params.section] })}
+      />
+    </Stack.Navigator>
+  );
+}

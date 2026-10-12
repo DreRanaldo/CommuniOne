@@ -25,6 +25,10 @@ and invitations, which complete Stage 4 (see
 service layer on top of the schema, plus database rate limits and an RSVP
 hardening fix (see
 [`docs/architecture/service-layer.md`](../architecture/service-layer.md)).
+RN-03 added uploaded profile avatars in a private bucket (see
+[`docs/features/profile.md`](../features/profile.md)). RN-05 added community
+logo and cover uploads and a read-only invitation preview (see
+[`docs/features/create-and-join.md`](../features/create-and-join.md)).
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -87,6 +91,8 @@ runs `pg_prove`.
 | 20 | `20261011002000_invitations.sql` | Pre-Stage 12 / Stage 4: invitations, invitation_redemptions, hashed tokens, create / revoke / redeem / list RPCs, audit actions |
 | 21 | `20261011002100_rate_limits.sql` | Stage 12: `private.rate_limit_rules` / `rate_limit_counters`, `private.enforce_rate_limit()`, BEFORE INSERT limit triggers on posts, comments, alerts, invitations, invitation_redemptions, documents; `purge_rate_limit_counters()` |
 | 22 | `20261011002200_service_layer_hardening.sql` | Stage 12: member-list keyset index (replaces `memberships_community_status_idx`); RSVP capacity trigger refuses missing, foreign and closed events identically before locking any event |
+| 23 | `20261011002300_avatars.sql` | RN-03: private `avatars` bucket (2 MiB, JPEG / PNG / WebP), `profiles.avatar_path` with the `profiles_check_avatar` trigger, storage.objects policies (read = profile visibility, upload / delete = own folder), `list_avatar_files_to_purge()` |
+| 24 | `20261011002400_community_media_and_invitation_preview.sql` | RN-05: public `community-media` bucket (5 MiB, JPEG / PNG / WebP), `communities.logo_path` / `cover_image_path` with the `communities_check_media` trigger, storage.objects policies (upload / delete = `community.update`, API reads = `community.view`), `list_community_media_to_purge()`; `my_communities()` returns `logo_path`; `preview_invitation()` |
 
 ## Entity relationships
 
@@ -113,7 +119,8 @@ profiles ──1:N── posts / comments / reactions (author / user)
 |---|---|---|
 | id | uuid PK | FK → `auth.users.id` **ON DELETE CASCADE** |
 | first_name, last_name, display_name | text | ≤ 100 chars |
-| avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes) |
+| avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes). External avatars (sign-up metadata). |
+| avatar_path | text | RN-03. Uploaded avatar in the private `avatars` bucket: `{user_id}/{uuid}.{jpg\|png\|webp}` (format CHECK). The `profiles_check_avatar` trigger requires the file to exist in the owner's own folder (`42501` otherwise; `22023` if not uploaded). Takes precedence over `avatar_url`. |
 | bio | text | ≤ 1000 chars |
 | status | text NOT NULL | `active` \| `suspended` \| `deactivated`, default `active`. Only changed through `admin_set_account_status()`. Anything other than `active` removes all access immediately. |
 | created_at, updated_at | timestamptz NOT NULL | `updated_at` is maintained by a trigger |
@@ -146,7 +153,8 @@ can only be managed server-side (service role or SQL).
 | slug | text NOT NULL **UNIQUE** | 3–63 chars, `^[a-z0-9]+(-[a-z0-9]+)*$` (lowercase, so uniqueness is case-insensitive) |
 | description | text | ≤ 2000 chars |
 | community_type | text NOT NULL | `residential` \| `church` \| `school` \| `club` \| `association` \| `organization` \| `other` |
-| logo_url, cover_image_url | text | ≤ 2048 chars |
+| logo_url, cover_image_url | text | ≤ 2048 chars. External images. |
+| logo_path, cover_image_path | text | RN-05. Uploaded images in the public `community-media` bucket: `{community_id}/{uuid}.{jpg\|png\|webp}` (format CHECK). The `communities_check_media` trigger requires the file to exist in that community's folder (`42501` otherwise; `22023` if not uploaded). Writable by `community.update` holders (column grant + RLS). Take precedence over the `*_url` columns. |
 | status | text NOT NULL | `active` \| `suspended` \| `archived`. Platform-controlled; clients cannot write it. |
 | timezone | text NOT NULL | default `UTC`; a trigger checks it against `pg_timezone_names` |
 | settings | jsonb NOT NULL | default `{}`; must be a JSON object |

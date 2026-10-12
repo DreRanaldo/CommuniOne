@@ -146,7 +146,7 @@ Apps use `services.auth` (Stage 12) for sign-up, sign-in, sign-out, password
 reset, profile, phone number and account deletion; see
 [`../api/README.md`](../api/README.md).
 
-## Client contract (for the mobile and admin apps in later stages)
+## Client contract (for the mobile and admin apps)
 
 1. **Use `supabase-js` with the anon or publishable key only.** Never ship the
    service-role or secret key in a client.
@@ -162,8 +162,12 @@ reset, profile, phone number and account deletion; see
    - `42501` responses for requests that worked a moment earlier (session revoked).
 5. **Suspended accounts:** if data suddenly comes back empty, read the user's own
    profile. A `status` of `suspended` or `deactivated` explains why.
-6. **Mobile storage:** persist the session in secure storage (e.g. Expo
-   SecureStore), not plain AsyncStorage. To be decided in the mobile stage.
+6. **Mobile storage:** the mobile app keeps the session in the keychain /
+   keystore (Expo SecureStore), never plain AsyncStorage (RN-01).
+7. **Email links use PKCE** in the mobile app: `communione://auth/callback`
+   and `communione://auth/reset-password`, completed with
+   `services.auth.handleAuthRedirect`. The mobile implementation of rules 2–4
+   is described in [`mobile-authentication.md`](mobile-authentication.md).
 
 ## Tests
 

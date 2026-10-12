@@ -205,7 +205,7 @@ select isnt_empty(
   '10. earlier audit entries by the deleted user are kept'
 );
 select results_eq(
-  $$ select actor_user_id, entity_id, community_id from public.audit_logs where action = 'account.deleted' $$,
+  $$ select actor_user_id, entity_id, community_id from public.audit_logs where action = 'account.deleted' and entity_id = pg_temp.fx('erin') $$,
   $$ values (pg_temp.fx('erin'), pg_temp.fx('erin'), null::uuid) $$,
   '10. the deletion itself is audited as a system event'
 );

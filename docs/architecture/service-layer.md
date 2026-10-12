@@ -47,6 +47,12 @@ privileges of its own.
 | Direct PostgREST table access under RLS | **Used** for simple single-row operations whose rules RLS, column grants and triggers fully express (e.g. editing your own post, publishing an announcement). |
 | Service layer in TypeScript, shared by both apps | **Built** (`services/`). Wraps both of the above as business operations. |
 
+The mobile app (`apps/mobile`) imports the service layer as
+`@communione/services` and reaches it through `useServices()`; see
+[`mobile-app.md`](mobile-app.md). Strict TypeScript with
+`noUncheckedIndexedAccess` applies to `services/` in both the root build and
+the app's typecheck.
+
 ## Code layout
 
 ```

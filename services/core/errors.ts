@@ -22,6 +22,8 @@ export interface ErrorDetails {
   field?: string;
   /** Seconds until a rate-limited operation may be retried. */
   retryAfterSeconds?: number;
+  /** The server could not be reached (offline, DNS, timeout): safe to retry. */
+  network?: boolean;
 }
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
@@ -104,9 +106,23 @@ const POSTGREST: Record<string, ErrorCode> = {
   PGRST100: ErrorCode.Validation, // bad filter / query parameters
 };
 
+const NETWORK_MESSAGE = /network request failed|failed to fetch|fetch failed|load failed|networkerror|network error|timed? ?out|ECONNREFUSED|ENOTFOUND/i;
+
+/** A request that never reached the server: offline, DNS failure, timeout. */
+export function networkError(cause?: unknown): ServiceError {
+  return new ServiceError(
+    ErrorCode.ServerError,
+    "We couldn't reach CommuniOne. Check your connection and try again.",
+    { network: true },
+    cause,
+  );
+}
+
 /** Translates a supabase-js error into a ServiceError. */
 export function fromDbError(error: DbError): ServiceError {
   const sqlstate = error.code ?? '';
+  // supabase-js reports transport failures with no SQLSTATE and status 0 (or none).
+  if (!sqlstate && (error.status === 0 || NETWORK_MESSAGE.test(error.message ?? ''))) return networkError(error);
   let code: ErrorCode | undefined = SQLSTATE[sqlstate] ?? POSTGREST[sqlstate];
   if (!code && error.status === 401) code = ErrorCode.Unauthenticated;
   if (!code && error.status === 404) code = ErrorCode.NotFound;
@@ -136,5 +152,7 @@ export function toServiceError(error: unknown): ServiceError {
   if (error && typeof error === 'object' && ('code' in error || 'status' in error) && 'message' in error) {
     return fromDbError(error as DbError);
   }
+  // fetch() rejects with a TypeError when the network is unavailable.
+  if (error instanceof TypeError && NETWORK_MESSAGE.test(error.message)) return networkError(error);
   return new ServiceError(ErrorCode.ServerError, undefined, {}, error);
 }
