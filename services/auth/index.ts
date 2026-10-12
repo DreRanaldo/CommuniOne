@@ -130,8 +130,9 @@ export function authService(ctx: ServiceContext) {
           avatar_url: v.optionalHttpsUrl(patch.avatarUrl, 'avatarUrl'),
         }, 'patch');
         const rows = unwrap(await db.from('profiles').update(row).eq('id', userId).select('*'));
-        if (!rows?.length) throw new ServiceError(ErrorCode.Forbidden, 'Your account cannot be changed right now.');
-        return rows[0];
+        const updated = rows?.[0];
+        if (!updated) throw new ServiceError(ErrorCode.Forbidden, 'Your account cannot be changed right now.');
+        return updated;
       });
     },
 

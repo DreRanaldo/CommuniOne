@@ -30,9 +30,9 @@ const TOKEN = /^ci_[0-9a-f]{64}$/;
 export function parseInvitationToken(input: unknown): string {
   const raw = v.text(input, 'token', { max: 2048 });
   let candidate = raw;
-  const match = /[?&]token=([^&#\s]+)/.exec(raw);
-  if (match) {
-    try { candidate = decodeURIComponent(match[1]); } catch { candidate = match[1]; }
+  const encoded = /[?&]token=([^&#\s]+)/.exec(raw)?.[1];
+  if (encoded !== undefined) {
+    try { candidate = decodeURIComponent(encoded); } catch { candidate = encoded; }
   }
   return v.text(candidate, 'token', { max: 67, pattern: TOKEN, patternMessage: 'This is not a valid invitation code.' });
 }

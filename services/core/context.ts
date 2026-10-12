@@ -85,7 +85,8 @@ type Rows<T> = PromiseLike<{ data: T[] | null; error: DbError | null }>;
  */
 export async function mutateOne<T>(attempt: () => Rows<T>, isVisible: () => Rows<unknown>, what = 'Not found.'): Promise<T> {
   const rows = unwrap(await attempt()) ?? [];
-  if (rows.length > 0) return rows[0];
+  const first = rows[0];
+  if (first !== undefined) return first;
   const visible = unwrap(await isVisible()) ?? [];
   if (visible.length === 0) throw new ServiceError(ErrorCode.NotFound, what);
   throw new ServiceError(ErrorCode.Forbidden);

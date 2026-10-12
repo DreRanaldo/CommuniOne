@@ -1,0 +1,139 @@
+# Mobile App Foundation (RN-01)
+
+The CommuniOne mobile app lives in [`apps/mobile`](../../apps/mobile): Expo SDK 57,
+React Native 0.86, React 19.2, TypeScript (strict). This stage builds the
+foundation only: project setup, navigation skeleton, design system, safe
+Supabase integration, tooling, tests and CI. Feature screens come in later stages.
+
+## Decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Location | `apps/mobile`, its own `package.json` and lockfile | Keeps the large React Native dependency tree out of the backend/database CI jobs. The admin web app can sit beside it later (`apps/admin`). |
+| Backend access | The shared service layer at the repo root (`services/`), imported as `@communione/services` | One implementation of validation, error mapping and pagination for both apps. No second service layer in the app. Metro (`watchFolders`), Jest (`roots`) and TypeScript (`paths`) resolve it; it has no runtime dependencies of its own. |
+| Navigation | React Navigation 7 (native stack + bottom tabs), configured in `src/navigation/` | Explicit, typed navigators make the auth gate structural (signed-out users only *have* the auth branch) and match the requested `navigation/` + `screens/` structure. Expo Router (file-based, also built on React Navigation) was considered; it would replace `navigation/` with an `app/` routes folder. It can be adopted later without changing screens. |
+| Session storage | Keychain / Keystore via `expo-secure-store`, chunked (`src/lib/secureStorage.ts`) | Access and refresh tokens are encrypted at rest, never synced to other devices (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`). Chunking handles SecureStore's ~2 KB value limit. Unlike AsyncStorage, nothing is stored in plain text. |
+| Configuration | `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` only, validated at start (`src/lib/env.ts`) | These are the only values a public client may hold. A service-role or `sb_secret_` key, a missing value, or a non-local `http://` URL shows a configuration-error screen; no client is created. |
+| Variants | `app.config.ts` with `APP_VARIANT` = development / preview / production; EAS profiles in `eas.json` | Separate names and bundle ids per variant, so test builds never overwrite the store app. |
+| State / data loading | React context + a small `useAsync` hook | No state or query library yet; add one (e.g. TanStack Query) when feature screens need caching, with a documented decision. |
+| Fonts and icons | System fonts; Ionicons from `@expo/vector-icons` | No font downloads; one consistent icon family. |
+| Tests | Jest (`jest-expo`) + React Native Testing Library 14 | The Expo-supported setup; RNTL 14 matches React 19 (async render). |
+| Lint / format | ESLint 9 with `eslint-config-expo` (flat config) + Prettier | Expo's recommended rules, including the React Compiler-era hooks rules; Prettier owns formatting. |
+
+## Structure
+
+```
+apps/mobile/
+  index.ts                 registerRootComponent(App)
+  app.config.ts            public Expo config per variant (no secrets)
+  eas.json                 preview / production build profiles
+  metro.config.js          Expo defaults + the shared ../../services
+  src/
+    App.tsx                validates config → creates the client → providers → navigation
+    AppProviders.tsx       safe area, theme, dependencies, auth, navigation container
+    components/            design-system primitives: Text, Button, TextField, Card,
+                           Icon, Screen, LoadingState, ErrorState, EmptyState
+    theme/                 tokens (colours light/dark, type, spacing, radius), ThemeProvider,
+                           useTheme, makeStyles
+    navigation/            RootNavigator, AuthNavigator, AppTabs, CommunityNavigator,
+                           CommunityContext, linking (deep links), shared options
+    features/<domain>/     domain screens (and later components/hooks):
+                           auth, communities, notifications, profile
+    screens/               app-shell screens not owned by a domain:
+                           PlaceholderScreen, ConfigErrorScreen
+    hooks/                 useAsync (+ re-exports of useServices, useAuth)
+    lib/                   env (validation), supabase (client), secureStorage,
+                           dependencies (context), logger
+    types/                 navigation param lists
+    utils/                 error presentation (ServiceError → message / field)
+    constants/             app name, URL scheme
+    testing/               test helpers (fake Supabase, renderers, fake keys); not bundled
+  scripts/                 check-config.mjs, export-check.mjs
+```
+
+There is no `src/services/`: the service layer is the repository's `services/`.
+
+## Navigation
+
+```
+RootStack
+├── (signed out)  Auth ── Welcome · SignIn · SignUp
+└── (signed in)   App (tabs) ── Communities · Notifications · Profile
+                  Community (stack, scoped by communityId) ── CommunityHome · CommunitySection
+                  JoinCommunity (modal)  ← communione://join?token=…
+```
+
+- **Auth gate:** `RootNavigator` renders only the branch for the current auth
+  state (`restoring` shows a loading state). Signing in or out swaps the whole
+  tree, so no authenticated screen stays mounted without a session. This is UX
+  only; the database authorizes every request.
+- **Community scope:** the community navigator takes `communityId` from its
+  route and provides it through `CommunityContext`; screens inside never take a
+  community id from user input. Access is still decided by RLS.
+- **Deep links:** scheme `communione`; `join?token=…` opens the Join modal. The
+  token is treated like a password: never displayed or logged.
+- **Typed routes:** every navigator has a param list in `src/types/navigation.ts`.
+
+Built now: Welcome, Sign in (working, through `services.auth`), the community
+list (working, `services.communities.listMine`), the community hub, Profile with
+sign-out. Placeholders: Sign up, Join, Notifications, community sections.
+
+## Design system
+
+- **Tokens** (`src/theme/tokens.ts`): a light and a dark palette (calm neutrals,
+  one confident blue for actions, a severity scale for alerts), a 4-point
+  spacing scale, radii, a 7-step type scale on system fonts, and a 48 pt minimum
+  touch target.
+- **Usage:** components read tokens through `useTheme()`; screens style with
+  `makeStyles((theme) => …)`. Screens contain no literal colours, font sizes or
+  spacing values.
+- **Components:** `Text` (variants and tones), `Button` (primary, secondary,
+  ghost, danger; loading and disabled states), `TextField` (label, hint, error),
+  `Card` (optionally pressable), `Icon`, `Screen` (safe areas, keyboard, scroll),
+  `LoadingState`, `ErrorState` (retry), `EmptyState` (action).
+- **Accessibility:** roles, labels, busy/disabled states, live regions for
+  errors, labelled inputs; tests query by role and label.
+- **Light/dark:** follows the system setting (`userInterfaceStyle: automatic`).
+
+## Supabase integration and security
+
+- One client per app run, created from validated config with the anon /
+  publishable key: `persistSession`, `autoRefreshToken`, keychain storage,
+  `detectSessionInUrl: false`. Creating it makes no network request.
+- Token refresh runs only in the foreground (`AppState`), as Supabase recommends
+  for React Native.
+- Screens use `useServices()` (the shared service layer); the raw client is used
+  only for auth state. The service-role key never exists in the app:
+  - the app refuses to start with one;
+  - `npm run config:check` fails if app code reads any environment variable
+    other than the two public ones, or if the public Expo config contains
+    anything secret-looking;
+  - `npm run export:check` builds production bundles with a server-only
+    variable set and fails if it appears in the bundle;
+  - the repository secret scan covers the app.
+- Logs go through the service layer's redacting logger (`console.*` is a lint
+  error); release builds log nothing yet.
+
+## Verification
+
+| Check | Command | What it proves |
+|---|---|---|
+| Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
+| Format | `npm run format:check` | Prettier |
+| Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
+| Tests | `npm test` | 40 tests: app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
+| Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
+| Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |
+
+All of these run in CI (job "Mobile app", see [`../development/ci.md`](../development/ci.md)).
+
+## Known limitations
+
+- No device or simulator in CI: "launch" is verified by rendering the full app
+  tree in Jest and by building production bundles, not by booting a binary.
+  Native builds run on EAS.
+- Placeholder app icons and splash image (from the Expo template) and placeholder
+  bundle ids (`com.communione.app`): replace before the first store build.
+- Sign-up, invitations, notifications and community sections are placeholders.
+- No offline cache or query library yet.
