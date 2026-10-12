@@ -1,5 +1,6 @@
 // Route names and parameters for every navigator (typed navigation).
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { FeedPost } from '@communione/services';
 
 /** Signed-out flow. */
 export type AuthStackParamList = {
@@ -33,6 +34,11 @@ export type CommunityStackParamList = {
   CommunitySection: { section: CommunitySection };
   /** The current community's feed. */
   Feed: undefined;
+  /**
+   * A post with its comments. `post` is the feed's copy, shown at once; the
+   * post is re-read from the server (visibility, current text) on opening.
+   */
+  PostDetail: { postId: string; post?: FeedPost };
   /** Write a post, or edit one (`postId`, loaded from the server). */
   PostEditor: { postId?: string } | undefined;
 };

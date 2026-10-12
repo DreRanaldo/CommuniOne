@@ -72,6 +72,7 @@ export interface FakeContent {
   announcements?: Record<string, unknown>[];
   events?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
+  comments?: Record<string, unknown>[];
 }
 
 /**
@@ -114,14 +115,25 @@ export interface ProfileRow {
 type DbError = { code: string; message: string; status?: number };
 
 /** Default role permissions for posts (seed role templates). */
+const MEMBER_PERMISSIONS = [
+  'posts.view',
+  'posts.create',
+  'posts.edit_own',
+  'posts.delete_own',
+  'comments.create',
+  'comments.edit_own',
+  'comments.delete_own',
+];
+const MODERATION = ['posts.moderate', 'comments.moderate'];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Owner: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
-  Admin: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
-  Moderator: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
-  Member: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own'],
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Member: MEMBER_PERMISSIONS,
 };
 
 type PostRow = ReturnType<typeof makePost>;
+type CommentRow = ReturnType<typeof makeComment>;
 type Filter = [column: string, value: unknown];
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
@@ -364,18 +376,86 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: [pick(visible, columns)], error: null };
       }
     }
+    if (table === 'comments') {
+      if (op === 'insert') {
+        // can_comment_on(): published, visible post + comments.create; a parent must be a
+        // published comment on the same post (comments trigger, 23503).
+        const post = allPosts().find((row) => row.id === values?.post_id);
+        const perms = post ? permissionsIn(post.community_id) : [];
+        if (
+          !post ||
+          post.status !== 'published' ||
+          !canViewPost(post) ||
+          !perms.includes('comments.create')
+        ) {
+          return {
+            data: null,
+            error: {
+              code: '42501',
+              message: 'new row violates row-level security policy for table "comments"',
+            },
+          };
+        }
+        const parentId = (values?.parent_comment_id as string | null | undefined) ?? null;
+        const parent = parentId ? allComments().find((row) => row.id === parentId) : undefined;
+        if (parentId && (!parent || parent.post_id !== post.id || parent.status !== 'published')) {
+          return { data: null, error: { code: '23503', message: 'parent comment not found on this post' } };
+        }
+        const latest = Math.max(Date.now(), ...allComments().map((row) => Date.parse(row.created_at) + 1000));
+        const row: CommentRow = {
+          ...makeComment(post.community_id, post.id, 0),
+          id: `f6f6f6f6-0000-4000-8000-${String(++commentCount).padStart(12, '0')}`,
+          parent_comment_id: parentId,
+          depth: parent ? parent.depth + 1 : 0,
+          author_user_id: user,
+          author_display_name: profiles.get(user)?.display_name ?? null,
+          body: String(values?.body),
+          reaction_count: 0,
+          created_at: new Date(latest).toISOString(),
+        };
+        const bucket = content[post.community_id] ?? {};
+        content[post.community_id] = { ...bucket, comments: [...(bucket.comments ?? []), row] };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = allComments().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewComment(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible) return { data: [], error: null };
+        const perms = permissionsIn(visible.community_id);
+        const own = visible.author_user_id === user;
+        const allowed =
+          values?.status === 'deleted'
+            ? (own && perms.includes('comments.delete_own')) || perms.includes('comments.moderate')
+            : 'body' in (values ?? {})
+              ? own && perms.includes('comments.edit_own') && visible.status === 'published'
+              : perms.includes('comments.moderate');
+        if (!allowed) return { data: [], error: null };
+        Object.assign(
+          visible,
+          values,
+          'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
+        );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
     if (table === 'reactions') {
-      const postId = filters.find(([c]) => c === 'post_id')?.[1] ?? values?.post_id;
-      const post = (Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[]).find(
-        (row) => row.id === postId,
-      );
-      const mine = reactions.find((r) => r.postId === postId && r.userId === user);
-      if (op === 'select')
+      const column =
+        filters.some(([c]) => c === 'comment_id') || values?.comment_id ? 'comment_id' : 'post_id';
+      const targetId = String(filters.find(([c]) => c === column)?.[1] ?? values?.[column]);
+      const mine = reactions.find((r) => r.targetId === targetId && r.userId === user);
+      if (op === 'select') {
         return {
           data: single ? (mine ? { id: mine.id } : null) : mine ? [{ id: mine.id }] : [],
           error: null,
         };
-      if (!post || !canViewPost(post)) {
+      }
+      const target = reactionTarget(targetId);
+      // can_react_to(): a published, visible target.
+      if (!target || target.row.status !== 'published' || !target.visible) {
         return {
           data: null,
           error: {
@@ -384,24 +464,42 @@ export function fakeSupabase(options: FakeOptions = {}) {
           },
         };
       }
+      const counts = typeCounts(target.row);
       if (op === 'insert') {
+        // One reaction per user and target (unique index).
+        if (mine)
+          return {
+            data: null,
+            error: {
+              code: '23505',
+              message: 'duplicate key value violates unique constraint "reactions_one_per_user_post"',
+            },
+          };
+        const type = String(values?.reaction_type);
         reactions.push({
           id: `e5e5e5e5-0000-4000-8000-${String(reactions.length + 1).padStart(12, '0')}`,
-          postId: post.id,
+          targetId,
           userId: user,
+          type,
         });
-        post.reaction_count = Number(post.reaction_count) + 1;
-        post.my_reaction_type = String(values?.reaction_type);
+        counts[type] = (counts[type] ?? 0) + 1;
+        target.row.reaction_count = Number(target.row.reaction_count) + 1;
+        target.row.my_reaction_type = type;
         return { data: null, error: null };
       }
-      if (op === 'update') {
-        post.my_reaction_type = String(values?.reaction_type);
+      if (op === 'update' && mine) {
+        const type = String(values?.reaction_type);
+        counts[mine.type] = (counts[mine.type] ?? 1) - 1;
+        counts[type] = (counts[type] ?? 0) + 1;
+        mine.type = type;
+        target.row.my_reaction_type = type;
         return { data: null, error: null };
       }
       if (op === 'delete' && mine) {
         reactions.splice(reactions.indexOf(mine), 1);
-        post.reaction_count = Number(post.reaction_count) - 1;
-        post.my_reaction_type = null;
+        counts[mine.type] = (counts[mine.type] ?? 1) - 1;
+        target.row.reaction_count = Number(target.row.reaction_count) - 1;
+        target.row.my_reaction_type = null;
         return { data: null, error: null };
       }
       return { data: null, error: null };
@@ -567,7 +665,22 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const redemptions: { token: string; userId: string }[] = [];
   const content: Record<string, FakeContent> = { ...options.content };
   const rpcFailures = new Map<string, DbError>();
-  const reactions: { id: string; postId: string; userId: string }[] = [];
+  const reactions: { id: string; targetId: string; userId: string; type: string }[] = [];
+  let commentCount = 100;
+  const allPosts = () => Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
+  const allComments = () => Object.values(content).flatMap((c) => c.comments ?? []) as CommentRow[];
+  /** Other people's reactions per type (seeded as likes from reaction_count) plus the user's own. */
+  const reactionCounts = new Map<string, Record<string, number>>();
+  const typeCounts = (row: { id: string; reaction_count: number; my_reaction_type: string | null }) => {
+    let counts = reactionCounts.get(row.id);
+    if (!counts) {
+      const others = Number(row.reaction_count) - (row.my_reaction_type ? 1 : 0);
+      counts = others > 0 ? { like: others } : {};
+      if (row.my_reaction_type) counts[row.my_reaction_type] = (counts[row.my_reaction_type] ?? 0) + 1;
+      reactionCounts.set(row.id, counts);
+    }
+    return counts;
+  };
   let postCount = 100;
   /** The user's permission keys in a community (active membership only), like my_community_permissions(). */
   const permissionsIn = (communityId: string): string[] => {
@@ -579,6 +692,26 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (!membership || !me()) return [];
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
+  };
+  /** private.can_view_comment_row(): its post is visible, and published, or comments.moderate, or the author. */
+  const canViewComment = (row: CommentRow) => {
+    const post = allPosts().find((p) => p.id === row.post_id);
+    if (!post || !canViewPost(post)) return false;
+    return (
+      row.status === 'published' ||
+      permissionsIn(row.community_id).includes('comments.moderate') ||
+      row.author_user_id === me()
+    );
+  };
+  const reactionTarget = (targetId: string) => {
+    const post = allPosts().find((row) => row.id === targetId);
+    if (post) return { row: post as PostRow & { reaction_count: number }, visible: canViewPost(post) };
+    const comment = allComments().find((row) => row.id === targetId);
+    if (comment) {
+      const parentPost = allPosts().find((row) => row.id === comment.post_id);
+      return { row: comment, visible: canViewComment(comment) && parentPost?.status === 'published' };
+    }
+    return null;
   };
   /** private.can_view_post_row(): published → posts.view; hidden/deleted → moderators, or the author. */
   const canViewPost = (row: PostRow) => {
@@ -617,6 +750,57 @@ export function fakeSupabase(options: FakeOptions = {}) {
     };
     if (name === 'my_community_permissions') {
       return { data: permissionsIn(String(args.p_community_id)), error: null };
+    }
+    if (name === 'list_post_comments') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const parent = (args.p_parent_comment_id as string | undefined) ?? null;
+      const cursor = args.p_cursor_created_at
+        ? [String(args.p_cursor_created_at), String(args.p_cursor_id)]
+        : null;
+      const rows = allComments()
+        .filter(
+          (row) => row.post_id === args.p_post_id && row.parent_comment_id === parent && canViewComment(row),
+        )
+        .sort((a, b) =>
+          a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
+        )
+        .filter(
+          (row) =>
+            !cursor || row.created_at > cursor[0]! || (row.created_at === cursor[0] && row.id > cursor[1]!),
+        )
+        .slice(0, Number(args.p_limit ?? 50))
+        .map((row) => ({
+          ...row,
+          reply_count: allComments().filter((r) => r.parent_comment_id === row.id && r.status === 'published')
+            .length,
+        }));
+      return { data: rows, error: null };
+    }
+    if (name === 'get_reaction_summary') {
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const rows: Record<string, unknown>[] = [];
+      for (const [column, ids] of [
+        ['post_id', args.p_post_ids],
+        ['comment_id', args.p_comment_ids],
+      ] as const) {
+        for (const targetId of (ids as string[] | undefined) ?? []) {
+          const target = reactionTarget(targetId);
+          if (!target?.visible) continue;
+          const counts = typeCounts(target.row);
+          for (const [type, count] of Object.entries(counts).sort()) {
+            if (count <= 0) continue;
+            rows.push({
+              post_id: column === 'post_id' ? targetId : null,
+              comment_id: column === 'comment_id' ? targetId : null,
+              reaction_type: type,
+              reaction_count: count,
+              reacted_by_me: target.row.my_reaction_type === type,
+            });
+          }
+        }
+      }
+      return { data: rows, error: null };
     }
     if (name === 'list_community_posts') {
       if (offline) return { data: null, error: OFFLINE };
@@ -991,5 +1175,30 @@ export const makePost = (communityId: string, n: number, overrides: Record<strin
   created_at: at(-30 * n),
   updated_at: at(-30 * n),
   edited_at: null as string | null,
+  ...overrides,
+});
+
+export const makeComment = (
+  communityId: string,
+  postId: string,
+  n: number,
+  overrides: Record<string, unknown> = {},
+) => ({
+  id: `f6f6f6f6-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  post_id: postId,
+  parent_comment_id: null as string | null,
+  depth: 0,
+  author_user_id: OTHER_USER_ID as string | null,
+  author_display_name: 'Grace H.' as string | null,
+  author_avatar_url: null as string | null,
+  body: `Comment ${n}`,
+  status: 'published',
+  moderation_reason: null as string | null,
+  edited_at: null as string | null,
+  created_at: at(n),
+  reply_count: 0,
+  reaction_count: 0,
+  my_reaction_type: null as string | null,
   ...overrides,
 });

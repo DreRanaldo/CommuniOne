@@ -109,8 +109,8 @@ describe('feed loading', () => {
     const card = cardOf('Their post 1');
     expect(within(card).getByText('Grace H.')).toBeOnTheScreen();
     expect(within(card).getByText(/· Edited/)).toBeOnTheScreen();
-    expect(within(card).getByLabelText('Like. 3 reactions')).toBeOnTheScreen();
-    expect(within(card).getByLabelText('2 comments')).toBeOnTheScreen();
+    expect(await within(card).findByLabelText('3 Like')).toBeOnTheScreen();
+    expect(within(card).getByLabelText('2 comments. Open comments')).toBeOnTheScreen();
     expect(within(cardOf('From a deleted account')).getByText('Deleted User')).toBeOnTheScreen();
     // (The community home asked for its 3-post summary first.)
     const feedCall = listCalls(rpc).find((c) => c.p_limit === 20);
@@ -398,11 +398,13 @@ describe('refresh', () => {
 });
 
 describe('reactions', () => {
-  test('like and unlike, confirmed by the server', async () => {
+  test('like and remove, confirmed by the server', async () => {
     const { user } = await openFeed({ content: { [C]: { posts: [theirs(1, { reaction_count: 1 })] } } });
-    await user.press(within(cardOf('Their post 1')).getByLabelText('Like. 1 reaction'));
-    expect(await within(cardOf('Their post 1')).findByLabelText('Unlike. 2 reactions')).toBeOnTheScreen();
-    await user.press(within(cardOf('Their post 1')).getByLabelText('Unlike. 2 reactions'));
-    expect(await within(cardOf('Their post 1')).findByLabelText('Like. 1 reaction')).toBeOnTheScreen();
+    const card = () => cardOf('Their post 1');
+    expect(await within(card()).findByLabelText('1 Like')).toBeOnTheScreen();
+    await user.press(within(card()).getByRole('button', { name: 'React with Like' }));
+    expect(await within(card()).findByLabelText('2 Like')).toBeOnTheScreen();
+    await user.press(within(card()).getByRole('button', { name: 'Remove your Like reaction' }));
+    expect(await within(card()).findByLabelText('1 Like')).toBeOnTheScreen();
   });
 });

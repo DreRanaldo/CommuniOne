@@ -72,7 +72,8 @@ the home screen.
 
 ## Known limitations
 
-- Comments, other reaction types, author avatars (the feed function returns
-  `author_avatar_url` only), images in posts, and moderator tools (hide or
-  restore) are not part of this stage.
+- Comments, all reaction types and moderation (hide or restore) were added in
+  RN-08: see [`comments-and-reactions.md`](comments-and-reactions.md). Author
+  avatars (the feed function returns `author_avatar_url` only) and images in
+  posts are not built yet.
 - No real-time updates: pull to refresh.

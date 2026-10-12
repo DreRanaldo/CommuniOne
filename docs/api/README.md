@@ -171,7 +171,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `edit(postId, body)` | Edit own published post | `posts.edit_own` | → `Post` | `FORBIDDEN`, `NOT_FOUND` | Stamps `edited_at` |
 | `delete(postId)` | Soft-delete own (or moderated) post | `posts.delete_own` / `posts.moderate` | → `Post` | as above | – |
 | `hide(postId, reason?)` / `restore(postId)` | Moderate | `posts.moderate` | → `Post` | as above | Audited (`post.moderated`) |
-| `react(input)` / `unreact(input)` | Add/change/remove my reaction | `posts.view` | `{ postId \| commentId, type }` | `FORBIDDEN` | – |
+| `react(input)` / `unreact(input)` | Add/change/remove my reaction (one per user and target) | `posts.view` | `{ postId \| commentId, type: 'like' \| 'love' \| 'celebrate' \| 'support' \| 'laugh' \| 'sad' }` | `FORBIDDEN` (hidden or invisible target), `VALIDATION` (type) | Concurrent duplicate requests are safe: a lost insert race (`23505`) becomes a type change (RN-08) |
 | `reactionSummary(input)` | Counts for ≤100 posts + ≤100 comments in **one** call | `posts.view` | `{ postIds?, commentIds? }` → rows | – | – |
 
 ### comments

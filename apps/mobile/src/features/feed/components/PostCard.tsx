@@ -2,8 +2,11 @@ import type { FeedPost } from '@communione/services';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Avatar, Button, Card, Icon, Text } from '@/components';
+import { ReactionBar } from '@/features/reactions/ReactionBar';
+import { isReactionType, type ReactionType } from '@/features/reactions/reactions';
 import { makeStyles } from '@/theme';
 import { formatDateTime } from '@/utils/format';
+import { ModerationControls } from './ModerationControls';
 
 /** A deleted account's posts stay without a name (account-deletion policy). */
 export const postAuthorName = (post: Pick<FeedPost, 'author_user_id' | 'author_display_name'>): string =>
@@ -14,12 +17,19 @@ export interface PostCardActions {
   onEdit?: () => void;
   /** Shown only for the viewer's own post with posts.delete_own (the server re-checks). */
   onDelete?: () => Promise<void>;
-  /** Like / unlike (react with "like" or remove the reaction). */
-  onToggleLike?: () => Promise<void>;
+  /** Shown only with posts.moderate (the server re-checks). */
+  onHide?: (reason: string) => Promise<void>;
+  onRestore?: () => Promise<void>;
+  /** Opens the post with its comments. */
+  onOpenComments?: () => void;
+  /** A reaction change was refused: refresh the post. */
+  onReactionRejected?: (error: unknown) => void;
 }
 
 export interface PostCardProps extends PostCardActions {
   post: FeedPost;
+  /** Per-type reaction counts (reaction summary), when loaded. */
+  reactionCounts?: Partial<Record<ReactionType, number>> | null;
   /** A short summary (community home): fewer lines, no actions. */
   compact?: boolean;
   /** An action failed: shown on the card. */
@@ -31,23 +41,36 @@ export interface PostCardProps extends PostCardActions {
  * state when the server returned a hidden or deleted post (only moderators
  * and the author receive those, with the moderator's reason).
  */
-export function PostCard({ post, compact, error, onEdit, onDelete, onToggleLike }: PostCardProps) {
+export function PostCard({
+  post,
+  reactionCounts,
+  compact,
+  error,
+  onEdit,
+  onDelete,
+  onHide,
+  onRestore,
+  onOpenComments,
+  onReactionRejected,
+}: PostCardProps) {
   const styles = useStyles();
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState<'delete' | 'like' | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const author = postAuthorName(post);
-  const liked = post.my_reaction_type !== null && post.my_reaction_type !== undefined;
+  const mine = isReactionType(post.my_reaction_type) ? post.my_reaction_type : null;
 
-  const run = async (kind: 'delete' | 'like', action?: () => Promise<void>) => {
-    if (!action) return;
-    setBusy(kind);
+  const remove = async () => {
+    if (!onDelete) return;
+    setDeleting(true);
     try {
-      await action();
+      await onDelete();
     } finally {
-      setBusy(null);
+      setDeleting(false);
       setConfirming(false);
     }
   };
+
+  const comments = `${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`;
 
   return (
     <Card testID={`post-${post.id}`}>
@@ -82,51 +105,62 @@ export function PostCard({ post, compact, error, onEdit, onDelete, onToggleLike 
 
       <Text numberOfLines={compact ? 3 : undefined}>{post.body}</Text>
 
-      <View style={styles.row}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${liked ? 'Unlike' : 'Like'}. ${post.reaction_count} ${post.reaction_count === 1 ? 'reaction' : 'reactions'}`}
-          accessibilityState={{ selected: liked, disabled: !onToggleLike || busy !== null }}
-          disabled={!onToggleLike || busy !== null || compact}
-          onPress={() => void run('like', onToggleLike)}
-          style={styles.counter}
-          hitSlop={8}
-        >
-          <Icon name={liked ? 'heart' : 'heart-outline'} color={liked ? 'danger' : 'textMuted'} size={18} />
-          <Text variant="caption" tone="muted">
+      {compact ? (
+        <View style={styles.row}>
+          <Icon name="heart-outline" color="textMuted" size={16} />
+          <Text variant="caption" tone="muted" accessibilityLabel={`${post.reaction_count} reactions`}>
             {post.reaction_count}
           </Text>
-        </Pressable>
-        <View
-          style={styles.counter}
-          accessible
-          accessibilityLabel={`${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`}
-        >
-          <Icon name="chatbubble-outline" color="textMuted" size={18} />
-          <Text variant="caption" tone="muted">
+          <Icon name="chatbubble-outline" color="textMuted" size={16} />
+          <Text variant="caption" tone="muted" accessibilityLabel={comments}>
             {post.comment_count}
           </Text>
         </View>
-        <View style={styles.flex} />
-        {!compact && onEdit && !confirming ? (
-          <Button
-            title="Edit"
-            variant="ghost"
-            fullWidth={false}
-            onPress={onEdit}
-            accessibilityLabel="Edit post"
+      ) : (
+        <>
+          <ReactionBar
+            target={{ postId: post.id }}
+            initial={{ mine, total: post.reaction_count, counts: reactionCounts ?? null }}
+            enabled={post.status === 'published'}
+            onRejected={onReactionRejected}
           />
-        ) : null}
-        {!compact && onDelete && !confirming ? (
-          <Button
-            title="Delete"
-            variant="ghost"
-            fullWidth={false}
-            onPress={() => setConfirming(true)}
-            accessibilityLabel="Delete post"
-          />
-        ) : null}
-      </View>
+          <View style={styles.row}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={onOpenComments ? `${comments}. Open comments` : comments}
+              disabled={!onOpenComments}
+              onPress={onOpenComments}
+              style={styles.counter}
+              hitSlop={8}
+            >
+              <Icon name="chatbubble-outline" color="textMuted" size={18} />
+              <Text variant="caption" tone="muted">
+                {post.comment_count}
+              </Text>
+            </Pressable>
+            <View style={styles.flex} />
+            {onEdit && !confirming ? (
+              <Button
+                title="Edit"
+                variant="ghost"
+                fullWidth={false}
+                onPress={onEdit}
+                accessibilityLabel="Edit post"
+              />
+            ) : null}
+            {onDelete && !confirming ? (
+              <Button
+                title="Delete"
+                variant="ghost"
+                fullWidth={false}
+                onPress={() => setConfirming(true)}
+                accessibilityLabel="Delete post"
+              />
+            ) : null}
+            <ModerationControls kind="post" status={post.status} onHide={onHide} onRestore={onRestore} />
+          </View>
+        </>
+      )}
 
       {confirming ? (
         <View style={styles.confirm} testID="confirm-delete">
@@ -136,8 +170,8 @@ export function PostCard({ post, compact, error, onEdit, onDelete, onToggleLike 
               title="Delete post"
               variant="danger"
               fullWidth={false}
-              loading={busy === 'delete'}
-              onPress={() => void run('delete', onDelete)}
+              loading={deleting}
+              onPress={() => void remove()}
             />
             <Button title="Keep it" variant="ghost" fullWidth={false} onPress={() => setConfirming(false)} />
           </View>
@@ -153,7 +187,7 @@ export function PostCard({ post, compact, error, onEdit, onDelete, onToggleLike 
 }
 
 const useStyles = makeStyles((t) => ({
-  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, flexWrap: 'wrap' },
   flex: { flex: 1 },
   counter: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xxs, minHeight: 32 },
   moderation: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },

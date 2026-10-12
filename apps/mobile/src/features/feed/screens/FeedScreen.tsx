@@ -79,6 +79,7 @@ export function FeedScreen({ navigation }: Props) {
         canCreate={canCreate}
         onCompose={() => navigation.navigate('PostEditor')}
         onEdit={(postId) => navigation.navigate('PostEditor', { postId })}
+        onOpen={(post) => navigation.navigate('PostDetail', { postId: post.id, post })}
       />
     </View>
   );
@@ -89,11 +90,13 @@ function FeedList({
   canCreate,
   onCompose,
   onEdit,
+  onOpen,
 }: {
   status: FeedStatus;
   canCreate: boolean;
   onCompose(): void;
   onEdit(postId: string): void;
+  onOpen(post: FeedPost): void;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -104,6 +107,7 @@ function FeedList({
   const feed = useFeed(community.community_id, status);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const viewerId = session?.user.id ?? null;
+  const canModerate = permissions.can('posts.moderate');
 
   // Back from writing or editing a post: show the server's current feed.
   const { refresh } = feed;
@@ -139,24 +143,33 @@ function FeedList({
               }
             }
           : undefined,
-      onToggleLike:
-        post.status === 'published'
-          ? async () => {
-              cleared(post.id);
-              const liked = post.my_reaction_type !== null;
-              try {
-                if (liked) await posts.unreact({ postId: post.id });
-                else await posts.react({ postId: post.id, type: 'like' });
-                feed.update(post.id, {
-                  // Generated types mark function columns non-null; this one is NULL without a reaction.
-                  my_reaction_type: (liked ? null : 'like') as FeedPost['my_reaction_type'],
-                  reaction_count: post.reaction_count + (liked ? -1 : 1),
-                });
-              } catch (error) {
-                failed(post.id, error);
-              }
+      onHide: canModerate
+        ? async (reason: string) => {
+            cleared(post.id);
+            try {
+              await posts.hide(post.id, reason.trim() || undefined);
+              // No longer in this view (published); it moves to "Hidden".
+              feed.remove(post.id);
+            } catch (error) {
+              failed(post.id, error);
+              void feed.refresh();
             }
-          : undefined,
+          }
+        : undefined,
+      onRestore: canModerate
+        ? async () => {
+            cleared(post.id);
+            try {
+              await posts.restore(post.id);
+              feed.remove(post.id);
+            } catch (error) {
+              failed(post.id, error);
+              void feed.refresh();
+            }
+          }
+        : undefined,
+      onOpenComments: post.status === 'published' ? () => onOpen(post) : undefined,
+      onReactionRejected: () => void feed.refresh(),
     };
   };
 
@@ -173,7 +186,14 @@ function FeedList({
       data={feed.items}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.list}
-      renderItem={({ item }) => <PostCard post={item} error={errors[item.id]} {...actionsFor(item)} />}
+      renderItem={({ item }) => (
+        <PostCard
+          post={item}
+          reactionCounts={feed.reactionCounts[item.id] ?? null}
+          error={errors[item.id]}
+          {...actionsFor(item)}
+        />
+      )}
       onEndReached={feed.loadMore}
       onEndReachedThreshold={0.5}
       refreshControl={

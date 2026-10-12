@@ -73,3 +73,4 @@ export type { ActiveAlert } from './alerts/index.ts';
 export type { CurrentAnnouncement } from './announcements/index.ts';
 export type { CommunityEvent } from './events/index.ts';
 export type { FeedPost, Post } from './posts/index.ts';
+export type { Comment, ThreadComment } from './comments/index.ts';

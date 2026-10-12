@@ -8,6 +8,7 @@
 // own author. Rows of another community are dropped (defence in depth).
 import type { FeedPost } from '@communione/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { countsFromSummary, type ReactionType } from '@/features/reactions/reactions';
 import { useServices } from '@/lib/dependencies';
 import { logger } from '@/lib/logger';
 
@@ -33,6 +34,8 @@ export interface FeedState {
   update(postId: string, change: Partial<FeedPost>): void;
   /** Removes a post the server confirmed deleted. */
   remove(postId: string): void;
+  /** Per-type reaction counts by post id (one summary call per page; absent if it failed). */
+  reactionCounts: Record<string, Partial<Record<ReactionType, number>>>;
 }
 
 export function useFeed(communityId: string, status: FeedStatus = 'published'): FeedState {
@@ -45,6 +48,9 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
   const [moreError, setMoreError] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [reactionCounts, setReactionCounts] = useState<Record<string, Partial<Record<ReactionType, number>>>>(
+    {},
+  );
   // Only the latest first-page request (or the page after it) may change the list.
   const generation = useRef(0);
 
@@ -58,6 +64,29 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     [communityId],
   );
 
+  /** Reaction counts for a page of posts in one call; a failure only means totals without types. */
+  const loadCounts = useCallback(
+    (rows: FeedPost[], replace: boolean) => {
+      const ids = rows.map((row) => row.id);
+      if (ids.length === 0) {
+        if (replace) setReactionCounts({});
+        return;
+      }
+      posts.reactionSummary({ postIds: ids }).then(
+        (summary) => {
+          // Posts without reactions have no rows: record them as empty.
+          const counts = {
+            ...Object.fromEntries(ids.map((id) => [id, {}])),
+            ...countsFromSummary(summary, 'post_id'),
+          };
+          setReactionCounts((current) => (replace ? counts : { ...current, ...counts }));
+        },
+        () => undefined,
+      );
+    },
+    [posts],
+  );
+
   const firstPage = useCallback(
     () => posts.list({ communityId, status, limit: FEED_PAGE_SIZE }),
     [posts, communityId, status],
@@ -68,10 +97,12 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     firstPage().then(
       (page) => {
         if (id !== generation.current) return;
-        setItems(ownRows(page.items));
+        const rows = ownRows(page.items);
+        setItems(rows);
         setCursor(page.nextCursor);
         setError(null);
         setState('ready');
+        loadCounts(rows, true);
       },
       (thrown: unknown) => {
         if (id !== generation.current) return;
@@ -79,7 +110,7 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
         setState('error');
       },
     );
-  }, [firstPage, ownRows, attempt]);
+  }, [firstPage, ownRows, attempt, loadCounts]);
 
   const refresh = useCallback(async () => {
     const id = ++generation.current;
@@ -88,10 +119,12 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     try {
       const page = await firstPage();
       if (id !== generation.current) return;
-      setItems(ownRows(page.items));
+      const rows = ownRows(page.items);
+      setItems(rows);
       setCursor(page.nextCursor);
       setError(null);
       setState('ready');
+      loadCounts(rows, true);
     } catch (thrown) {
       if (id !== generation.current) return;
       // Keep what is shown; the error is reported where "load more" errors are.
@@ -99,7 +132,7 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     } finally {
       if (id === generation.current) setRefreshing(false);
     }
-  }, [firstPage, ownRows]);
+  }, [firstPage, ownRows, loadCounts]);
 
   const loadMore = useCallback(() => {
     if (!cursor || loadingMore || state !== 'ready') return;
@@ -109,10 +142,12 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     posts.list({ communityId, status, limit: FEED_PAGE_SIZE, cursor }).then(
       (page) => {
         if (id !== generation.current) return;
+        const rows = ownRows(page.items);
         setItems((current) => {
           const seen = new Set(current.map((item) => item.id));
-          return [...current, ...ownRows(page.items).filter((item) => !seen.has(item.id))];
+          return [...current, ...rows.filter((item) => !seen.has(item.id))];
         });
+        loadCounts(rows, false);
         setCursor(page.nextCursor);
         setLoadingMore(false);
       },
@@ -122,7 +157,7 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
         setLoadingMore(false);
       },
     );
-  }, [cursor, loadingMore, state, posts, communityId, status, ownRows]);
+  }, [cursor, loadingMore, state, posts, communityId, status, ownRows, loadCounts]);
 
   const retry = useCallback(() => {
     generation.current += 1;
@@ -154,5 +189,6 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     retry,
     update,
     remove,
+    reactionCounts,
   };
 }
