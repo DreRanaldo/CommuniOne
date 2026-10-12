@@ -71,7 +71,7 @@ describe('invalid and expired tokens are rejected server-side', () => {
     const { session } = await signIn(attacker.email);
     const [header, payload, signature] = session.access_token.split('.');
     const forgedPayload = Buffer.from(
-      JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url')), sub: victim.id }),
+      JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url').toString()), sub: victim.id }),
     ).toString('base64url');
 
     const { status } = await rest('profiles?select=id', { token: `${header}.${forgedPayload}.${signature}` });

@@ -91,7 +91,12 @@ access. The cost is one primary-key lookup per authorization check.
 ## Profiles
 
 - **1:1 with `auth.users`:** `profiles.id` is the auth user id, with
-  `ON DELETE CASCADE`. Deleting the account deletes the profile.
+  `ON DELETE CASCADE`. Deleting the account deletes the profile. Users delete
+  their own account with `rpc('delete_my_account')`; see
+  [`account-deletion.md`](account-deletion.md).
+- **No private contact details:** co-members can read profiles, so the phone
+  number lives in `profile_private`, readable only by its owner (see
+  [`privacy.md`](privacy.md)).
 - **Created by the database, never by the client:** the `on_auth_user_created`
   trigger runs in the same transaction as the sign-up. A user therefore cannot
   exist without a profile, and a test checks this invariant. Clients have no
@@ -115,7 +120,8 @@ access. The cost is one primary-key lookup per authorization check.
 
 | Actor | Can edit | How |
 |---|---|---|
-| The user (live session, active account) | name fields, avatar, phone, bio | Direct `UPDATE` (column grants + RLS) |
+| The user (live session, active account) | name fields, avatar, bio | Direct `UPDATE` (column grants + RLS) |
+| The user (live session, active account) | their phone number | `profile_private` insert / update / delete (owner-only RLS) |
 | A platform admin | the same columns on **any** profile | Direct `UPDATE` (RLS) |
 | A platform admin | `status` of any **other** account | `rpc('admin_set_account_status', { p_user_id, p_status })` |
 | Community Owners and Admins | nothing | Profiles are global identities shared across communities, so community permissions never grant profile edits |
@@ -131,6 +137,14 @@ delete from public.platform_admins where user_id = '<user uuid>';
 
 Platform-admin rights are lost the moment the admin's own session ends or their
 account stops being `active`.
+
+Hosted-project Auth settings (email confirmation, redirect URLs, password
+policy, SMTP) are deployment prerequisites, documented in
+[`../deployment/supabase-auth.md`](../deployment/supabase-auth.md).
+
+Apps use `services.auth` (Stage 12) for sign-up, sign-in, sign-out, password
+reset, profile, phone number and account deletion; see
+[`../api/README.md`](../api/README.md).
 
 ## Client contract (for the mobile and admin apps in later stages)
 

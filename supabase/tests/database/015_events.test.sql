@@ -2,7 +2,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(72);
+select plan(73);
 
 -- ---------------------------------------------------------------------------
 -- Fixture (identical in every behavioural test file)
@@ -335,7 +335,7 @@ select results_eq(
 select pg_temp.login(pg_temp.fx('m3'));
 select throws_like(
   format($$ select * from public.rsvp_to_event(%L, 'going') $$, pg_temp.fx('ev_cleanup')),
-  '%row-level security%', '5. nobody can RSVP to a cancelled event'
+  '%cannot RSVP to this event%', '5. nobody can RSVP to a cancelled event'
 );
 select pg_temp.login(pg_temp.fx('erin'));
 select throws_like(
@@ -367,8 +367,27 @@ insert into fx select 'ev_open', pg_temp.new_event('Open house', 'published');
 select pg_temp.login(pg_temp.fx('frank'));
 select throws_like(
   format($$ select * from public.rsvp_to_event(%L, 'going') $$, pg_temp.fx('ev_open')),
-  '%row-level security%', '8. a member cannot RSVP to another community''s event'
+  '%cannot RSVP to this event%', '8. a member cannot RSVP to another community''s event'
 );
+create temp table rsvp_errors (kind text, state text, msg text);
+grant all on rsvp_errors to public;
+do $$
+begin
+  begin
+    perform * from public.rsvp_to_event(pg_temp.fx('ev_open'), 'going');
+  exception when others then insert into rsvp_errors values ('foreign', sqlstate, sqlerrm);
+  end;
+  begin
+    perform * from public.rsvp_to_event('00000000-0000-4000-8000-000000000000', 'going');
+  exception when others then insert into rsvp_errors values ('missing', sqlstate, sqlerrm);
+  end;
+  begin
+    insert into public.event_rsvps (event_id, status) values ('00000000-0000-4000-8000-000000000000', 'going');
+  exception when others then insert into rsvp_errors values ('missing_direct', sqlstate, sqlerrm);
+  end;
+end $$;
+select is((select count(distinct (state, msg)) from rsvp_errors), 1::bigint,
+  '8. another community''s event, a missing event and a direct insert all fail identically (no existence oracle)');
 select is_empty($$ select 1 from public.events where id = pg_temp.fx('ev_open') $$, '13. another community''s event cannot be read by id');
 select is_empty($$ select 1 from public.events where community_id = pg_temp.fx('A') $$, '13. ...or by community id');
 select is_empty(format($$ select * from public.list_upcoming_events(%L) $$, pg_temp.fx('A')), '13. ...or through list_upcoming_events');
@@ -392,7 +411,7 @@ update public.memberships set status = 'suspended' where id = pg_temp.fx('m4@A')
 select pg_temp.login(pg_temp.fx('m4'));
 select throws_like(
   format($$ select * from public.rsvp_to_event(%L, 'going') $$, pg_temp.fx('ev_open')),
-  '%row-level security%', 'a suspended member cannot RSVP'
+  '%cannot RSVP to this event%', 'a suspended member cannot RSVP'
 );
 select pg_temp.login(pg_temp.fx('carol'));
 select results_eq(

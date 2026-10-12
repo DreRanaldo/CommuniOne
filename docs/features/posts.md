@@ -18,7 +18,7 @@ communities ─1:N─ posts ─1:N─ comments ─┐ (parent_comment_id → com
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `posts` | `community_id`, `author_user_id`, `body` (1–10 000 chars), `status`, `visibility`, `edited_at`, `moderated_by_user_id`, `moderated_at`, `moderation_reason` | `author_user_id` defaults to the validated session user and cannot be supplied by clients |
+| `posts` | `community_id`, `author_user_id`, `body` (1–10 000 chars), `status`, `visibility`, `edited_at`, `moderated_by_user_id`, `moderated_at`, `moderation_reason` | `author_user_id` defaults to the validated session user and cannot be supplied by clients; NULL after the author deletes their account ("Deleted User") |
 | `comments` | `community_id` (derived), `post_id`, `author_user_id`, `parent_comment_id`, `depth` (derived, 0–9), `body` (1–5 000), `status`, moderation columns | Threaded through `parent_comment_id` |
 | `reactions` | `community_id` (derived), `user_id`, `post_id` **or** `comment_id`, `reaction_type` | One reaction per user per item |
 
@@ -49,7 +49,7 @@ published ───────────► hidden               published | 
 | Hide / restore | moderator (`posts.moderate` / `comments.moderate`) | Stamps `moderated_by_user_id` and `moderated_at`. Restoring clears `moderation_reason` unless a new one is given. |
 | Set `moderation_reason` | moderators only | Visible to the author on their hidden content |
 | Change a deleted item | nobody | `42501` |
-| Hard delete | nobody (no client DELETE privilege) | Content is physically removed only when its author's account is deleted (cascade) |
+| Hard delete | nobody (no client DELETE privilege) | Content is never physically removed by clients. On account deletion it is **kept** with `author_user_id = NULL` ("Deleted User") |
 
 **Moderators change status, never words:** a moderator cannot edit another
 user's body text. `community_id`, `author_user_id`, `post_id`,
@@ -60,8 +60,9 @@ Comments additionally:
 - can be added only to **published, visible** posts;
 - can reply only to a **published** parent comment on the same post;
 - can be nested up to 10 levels (`depth` 0–9);
-- if a parent comment is physically removed (its author deleted their account),
-  its replies become top-level instead of disappearing.
+- if a parent comment is ever physically removed (operator action), its replies
+  become top-level instead of disappearing. Account deletion does **not**
+  remove comments; it only clears their author.
 
 ## Visibility (RLS)
 
@@ -179,13 +180,13 @@ Supporting indexes:
 - `comments (post_id, created_at, id)`
 - `comments (parent_comment_id, created_at, id)`
 - `reactions (post_id, user_id)`, `reactions (comment_id, user_id)`, `reactions (user_id)`
-- author indexes on posts and comments (for account-deletion cascades)
+- author indexes on posts and comments (for the account-deletion `SET NULL`)
 
 ## Known limitations
 
-- **Deleted bodies are kept** for moderation. They are physically removed only
-  on account deletion. There is no purge job yet.
-- **No rate limiting** on posting, commenting or reacting.
+- **Deleted bodies are kept** for moderation, including after the author's
+  account is deleted. There is no purge job yet.
+- **Rate limits** (Stage 12): 60 posts and 120 comments per user per 10 minutes (`53400`). Reactions are not limited (one per user per target by constraint).
 - **No edit history,** only `edited_at`.
 - **Realtime is not enabled** for these tables.
 - **Account deletion cascades** to the user's posts, including other users'

@@ -14,3 +14,6 @@ supabase/.temp
 
 # Dependencies (future application code)
 node_modules/
+
+# Build output
+dist/

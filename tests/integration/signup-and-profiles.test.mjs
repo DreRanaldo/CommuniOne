@@ -78,7 +78,7 @@ describe('sign-up creates exactly one correct profile', () => {
     assert.equal(await profileCount(), before);
 
     const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    assert.equal(users.users.filter((u) => u.email === email).length, 1, 'still exactly one auth user');
+    assert.equal(/** @type {{ email?: string }[]} */ (users.users).filter((u) => u.email === email).length, 1, 'still exactly one auth user');
     const { data: profiles } = await admin.from('profiles').select('id').eq('id', userId);
     assert.equal(profiles.length, 1, 'still exactly one profile');
   });

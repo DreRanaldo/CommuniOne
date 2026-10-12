@@ -110,7 +110,7 @@ select throws_ok(
   '42501', null, 'user cannot change her own account status'
 );
 select throws_ok(
-  format($$ update public.profiles set phone = 'call me' where id = %L $$, pg_temp.fx('carol')),
+  $$ insert into public.profile_private (phone) values ('call me') $$,
   '23514', null, 'phone format is validated'
 );
 select throws_ok(

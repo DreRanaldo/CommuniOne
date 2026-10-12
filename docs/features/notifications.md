@@ -67,7 +67,7 @@ Only types that are actually produced exist.
 
 | Type | Waiting on |
 |---|---|
-| `community_invitation` | Stage 4 invitations |
+| `community_invitation` | Person-targeted invitations. Stage 4 invitations (Pre-Stage 12) are shareable links with no recipient account, so there is nobody to notify; joining through one produces the normal `membership` notification. |
 | `event_reminder` | A scheduler |
 | `reaction` | A product decision about whether reactions should notify at all |
 

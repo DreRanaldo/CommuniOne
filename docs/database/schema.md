@@ -1,4 +1,4 @@
-# CommuniOne Database Schema (Stages 1–9)
+# CommuniOne Database Schema (Stages 1–12)
 
 Stage 1 set up the multi-tenant foundation: identity, communities, memberships,
 roles and permissions. Stage 2 added session-validated identity, account status
@@ -13,8 +13,18 @@ alerts and the alert event outbox (see
 [`docs/features/alerts.md`](../features/alerts.md)). Stage 8 added events and
 RSVPs (see [`docs/features/events.md`](../features/events.md)). Stage 9 added
 in-app notifications and the notification service (see
-[`docs/features/notifications.md`](../features/notifications.md)). Stage 4
-(invitations and the audit log) has not been built.
+[`docs/features/notifications.md`](../features/notifications.md)). Stage 10
+added documents and file storage (see
+[`docs/features/documents.md`](../features/documents.md)). Stage 11 added the
+audit log (see [`docs/features/audit-logs.md`](../features/audit-logs.md)).
+The Pre-Stage 12 hardening milestone added account deletion (see
+[`docs/architecture/account-deletion.md`](../architecture/account-deletion.md)),
+private phone numbers (see [`docs/architecture/privacy.md`](../architecture/privacy.md))
+and invitations, which complete Stage 4 (see
+[`docs/features/invitations.md`](../features/invitations.md)). Stage 12 added the
+service layer on top of the schema, plus database rate limits and an RSVP
+hardening fix (see
+[`docs/architecture/service-layer.md`](../architecture/service-layer.md)).
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -38,8 +48,12 @@ With plain PostgreSQL 15+ and pgTAP (no Docker), for example in CI:
 ```bash
 # libpq env vars select the server: PGHOST, PGPORT, PGUSER, PGPASSWORD
 scripts/db/test.sh
-scripts/db/rsvp-stress.sh # optional: pgbench concurrency stress test for event capacity
+scripts/db/invitation-race.sh # concurrency: invitation row lock and max_uses under a burst
+scripts/db/rsvp-stress.sh     # concurrency: event capacity under pgbench load
 ```
+
+CI runs all of these on every pull request (see
+[`docs/development/ci.md`](../development/ci.md)).
 
 `scripts/db/test.sh` drops and recreates a throwaway database
 (`communione_test`) and applies `scripts/db/supabase_shim.sql`. The shim is a
@@ -66,6 +80,13 @@ runs `pg_prove`.
 | 13 | `20261011001300_alerts.sql` | Stage 7: alerts, alert_events outbox, RLS, severity and lifecycle trigger, expiry sweep, active/history list functions |
 | 14 | `20261011001400_events.sql` | Stage 8: events, event_rsvps, RLS, lifecycle trigger, lock-based capacity and FIFO waitlist, RSVP / attendance / list functions |
 | 15 | `20261011001500_notifications.sql` | Stage 9: notifications, notification_types, RLS, notification service, producers for announcements / alerts / events / waitlist / comments / membership, client RPCs |
+| 16 | `20261011001600_documents.sql` | Stage 10: documents, document_folders, upload settings and MIME allow-list, private `documents` bucket, metadata RLS, storage.objects policies, two-phase upload RPCs, listing, purge listing |
+| 17 | `20261011001700_audit_logs.sql` | Stage 11: audit_logs, audit_actions, append-only protection, redaction, audit service, producers on all audited tables, read RPC, retention purge |
+| 18 | `20261011001800_account_deletion.sql` | Pre-Stage 12: creator columns nullable + `ON DELETE SET NULL` (posts, comments, alerts, events, documents), erasure-aware write triggers, sole-role-manager deletion guard, `delete_my_account()` |
+| 19 | `20261011001900_phone_privacy.sql` | Pre-Stage 12: `profile_private` (owner-only phone number); `profiles.phone` migrated and dropped |
+| 20 | `20261011002000_invitations.sql` | Pre-Stage 12 / Stage 4: invitations, invitation_redemptions, hashed tokens, create / revoke / redeem / list RPCs, audit actions |
+| 21 | `20261011002100_rate_limits.sql` | Stage 12: `private.rate_limit_rules` / `rate_limit_counters`, `private.enforce_rate_limit()`, BEFORE INSERT limit triggers on posts, comments, alerts, invitations, invitation_redemptions, documents; `purge_rate_limit_counters()` |
+| 22 | `20261011002200_service_layer_hardening.sql` | Stage 12: member-list keyset index (replaces `memberships_community_status_idx`); RSVP capacity trigger refuses missing, foreign and closed events identically before locking any event |
 
 ## Entity relationships
 
@@ -93,12 +114,13 @@ profiles ──1:N── posts / comments / reactions (author / user)
 | id | uuid PK | FK → `auth.users.id` **ON DELETE CASCADE** |
 | first_name, last_name, display_name | text | ≤ 100 chars |
 | avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes) |
-| phone | text | `^\+?[0-9 ().-]{5,32}$` |
 | bio | text | ≤ 1000 chars |
 | status | text NOT NULL | `active` \| `suspended` \| `deactivated`, default `active`. Only changed through `admin_set_account_status()`. Anything other than `active` removes all access immediately. |
 | created_at, updated_at | timestamptz NOT NULL | `updated_at` is maintained by a trigger |
 
 - This table holds no credentials. Email, password and tokens stay in `auth.users`.
+- It holds no phone number either (Pre-Stage 12): co-members can read profiles,
+  so private contact details live in `profile_private`.
 - The trigger `on_auth_user_created` on `auth.users` creates the profile, filling it
   from sign-up metadata (`first_name`, `last_name`, `display_name`/`full_name`/`name`,
   `avatar_url`). Values are trimmed and truncated, and only `https://` avatars are kept, so bad
@@ -218,7 +240,7 @@ afterwards. Existing communities are not touched.
 |---|---|---|
 | id | uuid PK | |
 | community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT** |
-| author_user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; defaults to the validated session user; not client-writable |
+| author_user_id | uuid | FK → `profiles.id` **SET NULL** (NULL = "Deleted User"); defaults to the validated session user; not client-writable |
 | body | text NOT NULL | 1–10 000 chars (trimmed) |
 | status | text NOT NULL | `published` \| `hidden` \| `deleted`, default `published` |
 | visibility | text NOT NULL | `members` (only value today; new values need new RLS) |
@@ -236,7 +258,7 @@ afterwards. Existing communities are not touched.
 | id | uuid PK | |
 | community_id | uuid NOT NULL | Derived from the post by trigger |
 | post_id | uuid NOT NULL | FK `(post_id, community_id)` → `posts(id, community_id)` **CASCADE** |
-| author_user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE**; session default |
+| author_user_id | uuid | FK → `profiles.id` **SET NULL** (NULL = "Deleted User"); session default |
 | parent_comment_id | uuid | FK `(parent_comment_id, post_id)` → `comments(id, post_id)` **SET NULL (parent_comment_id)**: same post only; replies become top-level if the parent is physically removed |
 | depth | smallint NOT NULL | 0–9, derived from the parent |
 | body | text NOT NULL | 1–5 000 chars |
@@ -281,7 +303,7 @@ Constraints: published and archived rows have `published_at`; `expires_at > publ
 |---|---|---|
 | id | uuid PK | |
 | community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
-| created_by | uuid NOT NULL | FK → `profiles.id` **RESTRICT** (accountability); session default; not client-writable |
+| created_by | uuid | FK → `profiles.id` **SET NULL** (NULL = "Deleted User"; the audit log keeps accountability); session default; not client-writable |
 | title / body | text NOT NULL | 1–160 / 1–5 000 chars |
 | severity | text NOT NULL | `info` \| `warning` \| `urgent` \| `emergency` |
 | severity_rank / is_emergency | generated | 1–4 / `severity = 'emergency'` |
@@ -303,7 +325,7 @@ Transactional outbox and audit trail, written only by trigger:
 |---|---|---|
 | id | uuid PK | `UNIQUE (id, community_id)` for the RSVP composite FK |
 | community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
-| created_by | uuid NOT NULL | FK → `profiles.id` **RESTRICT**; session default |
+| created_by | uuid | FK → `profiles.id` **SET NULL** (NULL = "Deleted User"); session default |
 | title / description / location_text | text | 1–200 / ≤ 10 000 / ≤ 500 |
 | starts_at, ends_at | timestamptz NOT NULL | `ends_at >= starts_at` |
 | timezone | text NOT NULL | IANA, validated |
@@ -341,6 +363,98 @@ Catalog: `key` PK, `description`, `requires_membership`, `default_priority`.
 
 Seeded with `announcement`, `alert`, `event_created`, `event_updated`,
 `event_cancelled`, `comment`, `membership` and `system`.
+
+### `documents` (Stage 10)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| uploaded_by | uuid | FK → `profiles.id` **SET NULL** (NULL = "Deleted User"; document and file are kept); session user; immutable |
+| folder_id | uuid | FK `(folder_id, community_id)` → `document_folders` **SET NULL (folder_id)** |
+| name | text NOT NULL | Sanitised display name |
+| mime_type / file_extension | text NOT NULL | Allow-listed (FK → `document_mime_types`) |
+| storage_path | text | **Generated** `communities/{community_id}/documents/{id}/file.{ext}`; unique |
+| file_size | bigint NOT NULL | As recorded by Storage |
+| visibility | text NOT NULL | `members` \| `managers` |
+| status | text NOT NULL | `pending_upload` \| `active` \| `archived` \| `deleted` |
+| uploaded_at, archived_at, deleted_at, file_purged_at, updated_by_user_id | | Server-stamped |
+
+### `document_folders` (Stage 10)
+- `community_id`, `parent_folder_id`;
+- FK `(parent_folder_id, community_id)` for same-community nesting, **SET NULL** on parent deletion;
+- `name` unique per parent; `created_by`;
+- cycles are rejected.
+
+### `document_upload_settings` / `document_mime_types` (Stage 10)
+Configuration, writable only by the service role:
+- the maximum file size (default 25 MiB, at most the 50 MiB bucket ceiling);
+- the MIME allow-list, mapping each type to its extension.
+
+Files are stored in the private Storage bucket `documents`, whose access is
+governed by RLS policies on `storage.objects` (see `documents.md`).
+
+### `audit_logs` (Stage 11)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid | NULL = system event; **no FK** (history outlives the community) |
+| actor_user_id | uuid | Session user or NULL (system); **no FK** |
+| action | text NOT NULL | FK → `audit_actions.action` **RESTRICT** |
+| entity_type / entity_id | text / uuid | What was acted on |
+| metadata | jsonb NOT NULL | ≤ 8 KiB; credential-like keys redacted on insert |
+| created_at | timestamptz NOT NULL | `clock_timestamp()` |
+
+Append-only: UPDATE, DELETE and TRUNCATE are rejected by triggers for every
+role. Rows leave only through `purge_audit_logs()` (service role, at least
+90 days).
+
+### `audit_actions` (Stage 11)
+Catalog `(action PK, entity_type, description)`.
+
+### `profile_private` (Pre-Stage 12)
+| Column | Type | Notes |
+|---|---|---|
+| user_id | uuid PK | FK → `profiles.id` **CASCADE**; defaults to the caller; immutable |
+| phone | text | `^\+?[0-9 ().-]{5,32}$`, trimmed, blank → NULL |
+| created_at, updated_at | timestamptz NOT NULL | |
+
+Readable and writable **only by its owner**. No administrator access (see
+[`privacy.md`](../architecture/privacy.md)).
+
+### `invitations` (Pre-Stage 12 / Stage 4)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT**; immutable |
+| created_by | uuid | FK → `profiles.id` **SET NULL**; a creator-less invitation cannot be redeemed |
+| token_hash | text NOT NULL UNIQUE | SHA-256 hex of the token; **not selectable by clients**; immutable |
+| expires_at | timestamptz NOT NULL | 1 hour – 30 days after creation; `> created_at` |
+| max_uses | integer | NULL = unlimited, else 1–10 000 |
+| use_count | integer NOT NULL | ≥ 0, ≤ `max_uses`, can only increase |
+| status | text NOT NULL | `active` \| `expired` \| `revoked` |
+| revoked_at, revoked_by | timestamptz, uuid | `revoked_by` FK → profiles **SET NULL** |
+| created_at, updated_at | timestamptz NOT NULL | |
+
+### `invitation_redemptions` (Pre-Stage 12 / Stage 4)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| invitation_id | uuid NOT NULL | FK → `invitations.id` **CASCADE** |
+| community_id | uuid NOT NULL | FK → `communities.id` **RESTRICT** |
+| user_id | uuid NOT NULL | FK → `profiles.id` **CASCADE** (personal record) |
+| membership_id | uuid | FK → `memberships.id` **SET NULL** |
+| redeemed_at | timestamptz NOT NULL | |
+
+`UNIQUE (invitation_id, user_id)`.
+
+### `private.rate_limit_rules` / `private.rate_limit_counters` (Stage 12)
+
+Not exposed to clients (private schema, no grants).
+
+| Table | Columns |
+|---|---|
+| `rate_limit_rules` | `action` PK, `max_count`, `window_seconds` (1–86 400), `description`. Tunable by operators. |
+| `rate_limit_counters` | PK `(user_id, action, window_start)`, `hits`. User ids and counts only; purged after a day by `purge_rate_limit_counters()`. |
 
 ## Default roles and permissions
 
@@ -395,22 +509,39 @@ Each tier is a strict superset of the tier below it (a test checks this).
 | role_permissions → permissions | RESTRICT | Retiring a permission that is in use must be a deliberate migration. |
 | role_template_permissions → role_templates / permissions | CASCADE / RESTRICT | Same reasoning as above. |
 | posts.community_id → communities | RESTRICT | Same as other community children |
-| posts / comments / reactions author or user → profiles | CASCADE | Account deletion (right to erasure) removes the person's content |
+| posts / comments author → profiles | SET NULL (Pre-Stage 12) | Community history survives account deletion, shown as "Deleted User" (see `account-deletion.md`) |
+| reactions.user_id → profiles | CASCADE | Reactions are personal records |
 | comments.post_id → posts, reactions → posts / comments | CASCADE | Children of physically removed content go with it. Normal deletion is soft (status). |
 | comments.parent_comment_id → comments | SET NULL (parent only) | Other users' replies survive as top-level comments |
 | notifications.user_id → profiles | CASCADE | A user's notifications go with their account |
 | notifications.community_id → communities | CASCADE | Notifications are derived data |
 | notifications.type → notification_types | RESTRICT | A type in use cannot be removed |
-| events.created_by → profiles | RESTRICT | Same accountability decision as alerts |
+| documents.uploaded_by → profiles | SET NULL (Pre-Stage 12) | The document and its Storage file are kept |
+| documents.community_id, document_folders.community_id → communities | RESTRICT | Same as other community children |
+| documents.folder_id / document_folders.parent_folder_id | SET NULL (column only) | Deleting a folder moves its contents to the top level |
+| documents.mime_type → document_mime_types | RESTRICT | Types in use cannot be removed (disable them instead) |
+| events.created_by → profiles | SET NULL (Pre-Stage 12) | Events outlive their creator; `events.manage` holders keep managing them |
 | events.community_id → communities | RESTRICT | Same as other community children |
 | event_rsvps → events | CASCADE | RSVPs belong to their event |
 | event_rsvps.user_id → profiles | CASCADE | Account deletion removes the person's RSVPs |
-| alerts.created_by → profiles | RESTRICT | Safety records keep an accountable creator. Account deletion of an alert creator needs an operator step (see `alerts.md`). |
+| alerts.created_by → profiles | SET NULL (Pre-Stage 12) | Safety records are kept; the audit log keeps the pseudonymous actor id (see `alerts.md`) |
 | alerts.community_id, alert_events.community_id → communities | RESTRICT | Same as other community children |
 | alert_events.alert_id → alerts | CASCADE | Events belong to their alert |
 | announcements.community_id → communities | RESTRICT | Same as other community children |
 | announcements.author_user_id / updated_by_user_id → profiles | SET NULL | Official communications outlive their author's account |
 | moderated_by_user_id → profiles | SET NULL | Moderation records outlive the moderator's account |
+| document_folders.created_by → profiles | SET NULL | Folders outlive their creator |
+| profile_private.user_id → profiles | CASCADE | Private details are erased with the account |
+| invitations.community_id, invitation_redemptions.community_id → communities | RESTRICT | Same as other community children |
+| invitations.created_by / revoked_by → profiles | SET NULL | The invitation record is kept; a creator-less invitation stops working |
+| invitation_redemptions.invitation_id → invitations | CASCADE | Usage rows belong to their invitation |
+| invitation_redemptions.user_id → profiles | CASCADE | Personal record, erased with the account |
+| invitation_redemptions.membership_id → memberships | SET NULL | Removing a member keeps the usage history |
+
+Before `profiles` (and so the account) is deleted, the `profiles_guard_deletion`
+trigger refuses deletion of the **only** active member able to manage roles in a
+community that still has other active members (`55000`: transfer ownership first),
+and archives communities in which the user is the last active member.
 
 To hard-delete a community, an operator using the service role must explicitly
 delete its `membership_roles`, `memberships` and `roles` first.
@@ -422,7 +553,7 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | communities.slug | `communities_slug_key` (unique) |
 | memberships.community_id | `memberships_community_user_key` (leading column) |
 | memberships.user_id | `memberships_user_id_idx` |
-| memberships.community_id + status | `memberships_community_status_idx` |
+| memberships.community_id + status (+ created_at, id for the member list) | `memberships_community_status_created_idx` (Stage 12) |
 | posts by community, newest first | `posts_community_feed_idx (community_id, created_at desc, id desc)` |
 | comments by post, oldest first | `comments_post_thread_idx (post_id, created_at, id)` |
 | comments by parent | `comments_parent_thread_idx (parent_comment_id, created_at, id)` (partial) |
@@ -442,7 +573,16 @@ delete its `membership_roles`, `memberships` and `roles` first.
 | a user's notifications, newest first | `notifications_user_created_idx (user_id, created_at desc, id desc)` |
 | unread notifications | `notifications_user_unread_idx (user_id, read_at) WHERE archived_at IS NULL` |
 | notifications by community | `notifications_community_created_idx (community_id, created_at desc)` (partial) |
+| documents by community, status, date | `documents_community_created_idx (community_id, status, created_at desc, id desc)` |
+| documents by folder | `documents_folder_idx` (partial) |
+| document by storage path (storage policies) | `documents_storage_path_key` (unique) |
+| audit log by community, newest first | `audit_logs_community_created_idx (community_id, created_at desc, id desc)` |
+| system audit events | `audit_logs_system_created_idx` (partial) |
+| audit by actor / by entity | `audit_logs_actor_created_idx`, `audit_logs_entity_idx` |
 | communities.created_by + created_at | `communities_created_by_created_at_idx` (Stage 3: creation limit; FK `SET NULL` on account deletion) |
+| invitations by community / creator / revoker | `invitations_community_created_idx`, `invitations_created_by_idx`, `invitations_revoked_by_idx` (partial) |
+| invitation lookup by token | `invitations_token_hash_key` (unique) |
+| redemptions by community / user / membership | `invitation_redemptions_community_idx`, `invitation_redemptions_user_idx`, `invitation_redemptions_membership_idx` |
 | roles.community_id | `roles_community_name_key` (leading column) |
 | membership_roles.membership_id | `membership_roles_membership_role_key` (leading column) |
 | membership_roles.role_id | `membership_roles_role_id_idx` |
@@ -469,10 +609,10 @@ the full model. In short:
 
 | Table | SELECT | INSERT | UPDATE | DELETE |
 |---|---|---|---|---|
-| profiles | self (live session, any account status), platform admin, or the target has a membership the caller may see (see the memberships row) | ✗ (sign-up trigger) | self (active account) or platform admin; columns: names, avatar, phone, bio | ✗ (account deletion cascades) |
+| profiles | self (live session, any account status), platform admin, or the target has a membership the caller may see (see the memberships row) | ✗ (sign-up trigger) | self (active account) or platform admin; columns: names, avatar, bio | ✗ (only through `delete_my_account()` / account deletion) |
 | platform_admins | ✗ | ✗ | ✗ | ✗ (server-side only) |
 | communities | `community.view` | ✗ (only via `create_community()`) | `community.update`; columns: name, description, type, logo, cover, timezone, settings | ✗ |
-| memberships | own row; `active` rows with `members.view`; other statuses with `members.approve`, `members.suspend` or `members.remove` (Stage 3) | ✗ (invitations in a later stage) | `status` only; transitions are checked by trigger (see below) | `members.remove`, not self, and the caller covers the target |
+| memberships | own row; `active` rows with `members.view`; other statuses with `members.approve`, `members.suspend` or `members.remove` (Stage 3) | ✗ (only `create_community()` and `redeem_invitation()`) | `status` only; transitions are checked by trigger (see below) | `members.remove`, not self, and the caller covers the target |
 | roles | `roles.view` | `roles.manage`, custom roles only | `roles.manage`, custom roles only; name and description | `roles.manage`, custom roles, and the caller covers the role |
 | membership_roles | own, or the membership is visible (as above) | `roles.manage`, not own membership, the caller covers the target membership **and** the role | ✗ | same as insert |
 | role_permissions | `roles.view` in the role's community | `roles.manage`, custom role, and the caller holds that permission | ✗ | same as insert |
@@ -486,6 +626,14 @@ the full model. In short:
 | event_rsvps (Stage 8) | own; `going` RSVPs of visible events; all with `events.manage` | own, while the event is published, not started, and you have `events.view`; status is sanitised by the capacity trigger | own, same conditions; `status` only | own, same conditions |
 | notifications (Stage 9) | own, and (for membership-requiring types) only while the caller can view the community | ✗ (server-side service only) | own; `read_at`, `archived_at` only (server time) | own |
 | notification_types (Stage 9) | any authenticated user | ✗ | ✗ | ✗ |
+| documents (Stage 10) | active `members`: `documents.view` / `manage`; active `managers` or archived: `documents.manage`; pending or deleted: manager or uploader | ✗ (`create_document_upload()` only) | manager, or uploader with `documents.upload`; name, folder_id, visibility, status; trigger enforces rules | ✗ (soft delete) |
+| document_folders (Stage 10) | `documents.view` / `manage` | `documents.manage` | `documents.manage` | `documents.manage` |
+| storage.objects, bucket `documents` (Stage 10) | file of a visible active or archived document (and the uploader's own pending upload) | exact path of your own pending document, while you hold `documents.upload` | never (no replacement) | only abandoned pending uploads |
+| audit_logs (Stage 11) | community events: `audit.view`; system events: platform admins | ✗ (database triggers / service only) | ✗ (never, any role) | ✗ (retention purge only) |
+| audit_actions (Stage 11) | any authenticated user | ✗ | ✗ | ✗ |
+| profile_private (Pre-Stage 12) | owner only (live session) | owner only (active account); column: phone | owner only; phone | owner only |
+| invitations (Pre-Stage 12) | `members.invite`; every column **except** `token_hash` | ✗ (`create_invitation()` only) | ✗ (`revoke_invitation()` / `redeem_invitation()` only) | ✗ |
+| invitation_redemptions (Pre-Stage 12) | own, or `members.invite` | ✗ (`redeem_invitation()` only) | ✗ | ✗ |
 | reactions (Stage 5) | target visible, or your own | your own, on published visible content, with `posts.view`; columns: post_id or comment_id, reaction_type | own; reaction_type only | own |
 
 **"Covers"** means every permission the target membership or role holds is
@@ -505,7 +653,7 @@ The trigger applies only to client roles (`authenticated`, `anon`). Trusted
 server code (`service_role`, migrations, SECURITY DEFINER functions) is not
 restricted by it.
 
-### Client RPCs (Stages 3 and 5–9)
+### Client RPCs (Stages 3–11 and Pre-Stage 12)
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -522,8 +670,20 @@ restricted by it.
 | `public.list_upcoming_events(...)` / `public.list_events(...)` | events | Stage 8, SECURITY INVOKER |
 | `public.list_my_notifications(...)`, `unread_notification_count(...)`, `mark_notification_read / unread(id)`, `mark_all_notifications_read(...)`, `archive_notification(id)` | | Stage 9, SECURITY INVOKER |
 | `public.create_notification(...)` | id | Stage 9, **service role only** |
+| `public.create_document_upload(...)` / `public.complete_document_upload(id)` | path / document | Stage 10, SECURITY DEFINER, fully validated |
+| `public.list_documents(...)` | documents | Stage 10, SECURITY INVOKER |
+| `public.list_document_files_to_purge(retention)` | paths | Stage 10, **service role only** (purge job) |
+| `public.list_audit_logs(...)` | audit entries | Stage 11, SECURITY INVOKER |
+| `public.record_system_audit_event(...)` / `public.purge_audit_logs(interval)` | id / count | Stage 11, **service role only** |
 | `public.get_reaction_summary(post_ids, comment_ids)` | counts per type | Stage 5, SECURITY INVOKER, at most 100 ids each |
 | `public.admin_set_account_status(user_id, status)` | profile | Stage 2, platform admins only |
+| `public.delete_my_account()` | void | Pre-Stage 12, SECURITY DEFINER; **no parameters**, deletes only the caller |
+| `public.create_invitation(community_id, expires_in, max_uses)` | id, token (shown once), expires_at, max_uses | Pre-Stage 12, SECURITY DEFINER, `members.invite` |
+| `public.revoke_invitation(id)` | boolean (false if already revoked) | Pre-Stage 12, SECURITY DEFINER, `members.invite` in that community |
+| `public.redeem_invitation(token)` | community_id, membership_id, status | Pre-Stage 12, SECURITY DEFINER, row-locked and atomic |
+| `public.list_invitations(community_id, include_inactive)` | invitations without hashes | Pre-Stage 12, SECURITY INVOKER |
+| `public.expire_invitations()` | count | Pre-Stage 12, **service role only** (housekeeping) |
+| `public.purge_rate_limit_counters()` | count | Stage 12, **service role only** (housekeeping) |
 
 ## Key security decisions
 
@@ -535,9 +695,10 @@ restricted by it.
    a parameter, and runs no dynamic SQL. A test checks the `search_path` pinning.
 3. **Helpers live in the `private` schema,** which the Supabase Data API does not
    expose, so clients cannot call them as RPCs.
-4. **Clients cannot insert memberships in Stage 1.** Otherwise a community admin
-   could "add" any user by UUID and then read that user's profile. Memberships
-   will come from consent-based flows (invitations and join requests) in Stage 2.
+4. **Clients cannot insert memberships.** Otherwise a community admin could
+   "add" any user by UUID and then read that user's profile. Memberships come
+   only from consent-based flows: creating a community, and redeeming an
+   invitation (Pre-Stage 12), which the joining user does themselves.
 5. **Tenant consistency is enforced by constraints:** the composite FKs on
    `membership_roles`.
 6. **Permission and template seed data lives in migrations,** not `seed.sql`,

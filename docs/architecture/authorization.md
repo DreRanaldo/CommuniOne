@@ -122,8 +122,8 @@ permission check, these rules apply:
 6. **No orphaned communities.** The last active member holding `roles.manage`
    cannot leave.
 7. **No direct membership creation.** Clients cannot insert memberships. The
-   only paths are `create_community()` (for the creator) and, from Stage 2,
-   consent-based invitation and join flows.
+   only paths are `create_community()` (for the creator) and
+   `redeem_invitation()` (the joining user, Pre-Stage 12).
 
 The default role tiers nest (Member ⊂ Moderator ⊂ Admin ⊂ Owner), so rule 3
 produces the expected hierarchy without any hard-coded role ranking.
@@ -289,3 +289,79 @@ Details are in [`../features/notifications.md`](../features/notifications.md).
   `private.community_members_with_permission()`. It computes permissions for
   arbitrary users, so it is internal only.
 
+## Documents and file storage (Stage 10)
+
+Details are in [`../features/documents.md`](../features/documents.md).
+
+**Two independent layers:**
+
+| Layer | Rules |
+|---|---|
+| Metadata | RLS on `documents` and `document_folders` (`private.can_view_document_row`, `private.can_manage_document_row`) plus the `enforce_document_write` trigger |
+| Files | RLS policies on `storage.objects` for bucket `documents` |
+
+- The file policies use `private.can_read_document_object`,
+  `private.can_upload_document_object` and `private.can_delete_document_object`,
+  and require an **exact** generated `storage_path` match.
+- They never rely on the metadata layer having filtered anything.
+
+| Permission | Allows |
+|---|---|
+| `documents.view` | Members-visible active documents |
+| `documents.upload` | Upload; manage your own documents |
+| `documents.manage` | Any document, restricted visibility, archive, folders |
+
+**Client inputs that are never trusted:** file name, MIME type, size, storage
+path, community and uploader. Every one is validated or derived on the server.
+
+## Audit logs (Stage 11)
+
+Details are in [`../features/audit-logs.md`](../features/audit-logs.md).
+
+| Concern | Rule |
+|---|---|
+| Read | `audit.view` in the community (Owners and Admins by default); system events are for platform admins only |
+| Write | Only database triggers, through `private.record_audit_event()`. The actor comes from `private.actor_user_id()` and is never a parameter. The service role can record only actorless system events. |
+| Change | Nobody. Append-only triggers apply to every role; retention purge only (service role, at least 90 days). |
+
+## Invitations (Pre-Stage 12 / Stage 4)
+
+Details are in [`../features/invitations.md`](../features/invitations.md).
+
+| Concern | Rule |
+|---|---|
+| Create | `create_invitation()`: `members.invite` in the community (Owners and Admins by default) |
+| Read | `members.invite`; `token_hash` is never selectable; the raw token is shown once at creation |
+| Revoke | `revoke_invitation()`: `members.invite` in the invitation's community; anything else looks like "not found" |
+| Redeem | `redeem_invitation()`: any signed-in **active** account holding the token. The invitation row is locked, every check is re-done inside the lock, and the creator must **still** hold `members.invite` in an active community |
+| Effect | Creates or re-activates the membership; the default Member role comes from the Stage 3 lifecycle trigger. Never reinstates a suspended member, never duplicates an active one |
+
+## Account deletion and privacy (Pre-Stage 12)
+
+- `delete_my_account()` has no parameters: it can only delete the caller. No
+  community permission (not even Owner) allows deleting someone else's account.
+- The only active role manager of a community with other members must transfer
+  `roles.manage` before deleting their account (anti-orphan rule 6, extended).
+- Creator columns become NULL only through the database's own FK action. The
+  write triggers reject a client or service-role change of a creator column.
+- Phone numbers are visible to their owner only. There is deliberately **no**
+  permission that lets administrators read them (see
+  [`privacy.md`](privacy.md)).
+- Details: [`account-deletion.md`](account-deletion.md).
+
+## Service layer and rate limits (Stage 12)
+
+The apps call business operations in `services/` (see
+[`service-layer.md`](service-layer.md) and [`../api/README.md`](../api/README.md)).
+The service layer adds validation, uniform errors and pagination, but it
+holds no privileges: it uses the anon key and the user's session, so every
+rule in this document still applies, and a client that skips the service
+layer gets exactly the same answers from the database.
+
+- **Unknown or foreign ids look the same.** Services return `NOT_FOUND` for
+  rows the caller cannot see. RSVPs to a missing, foreign or closed event are
+  refused with one identical error before any event row is touched
+  (migration 22).
+- **Rate limits are authorization-adjacent rules in the database**
+  (migration 21): per user and action, client requests only, `53400` when
+  exceeded.
