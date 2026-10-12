@@ -63,8 +63,9 @@ community is, what needs attention now, and the way into everything else.
 
 ## Known limitations
 
-- "See all" and the Explore shortcuts open placeholder screens until the feed,
-  announcements, alerts, events, documents and members stages are built.
+- "See all recent activity" and the Feed shortcut open the feed (RN-07). The
+  other sections are placeholders until the announcements, alerts, events,
+  documents and members stages are built.
 - Posts on the home show `author_display_name` only. Uploaded avatars are not
   in the feed functions yet (see `profile.md`).
 - No offline cache: after an app restart without a network, the home shows the

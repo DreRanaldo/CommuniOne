@@ -5,6 +5,8 @@ import { CommunitySwitcherButton } from '@/features/communities/components/Commu
 import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { ChooseCommunityScreen } from '@/features/communities/screens/ChooseCommunityScreen';
 import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHomeScreen';
+import { FeedScreen } from '@/features/feed/screens/FeedScreen';
+import { PostEditorScreen } from '@/features/feed/screens/PostEditorScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
@@ -54,6 +56,12 @@ function CommunityStack({ community }: { community: MyCommunity }) {
           title: community.name,
           headerTitle: () => <CommunitySwitcherButton community={community} />,
         }}
+      />
+      <Stack.Screen name="Feed" component={FeedScreen} options={{ title: 'Feed' }} />
+      <Stack.Screen
+        name="PostEditor"
+        component={PostEditorScreen}
+        options={{ title: 'New post', presentation: 'modal' }}
       />
       <Stack.Screen
         name="CommunitySection"

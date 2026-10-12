@@ -31,6 +31,10 @@ export type CommunitySection = 'feed' | 'announcements' | 'alerts' | 'events' | 
 export type CommunityStackParamList = {
   CommunityHome: undefined;
   CommunitySection: { section: CommunitySection };
+  /** The current community's feed. */
+  Feed: undefined;
+  /** Write a post, or edit one (`postId`, loaded from the server). */
+  PostEditor: { postId?: string } | undefined;
 };
 
 /** Top level: exactly one of the Auth / App branches exists at a time. */

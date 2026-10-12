@@ -63,6 +63,8 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** Permission keys by community id; otherwise derived from the user's roles there. */
+  permissions?: Record<string, string[]>;
 }
 
 export interface FakeContent {
@@ -110,6 +112,16 @@ export interface ProfileRow {
 }
 
 type DbError = { code: string; message: string; status?: number };
+
+/** Default role permissions for posts (seed role templates). */
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  Owner: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
+  Admin: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
+  Moderator: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own', 'posts.moderate'],
+  Member: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own'],
+};
+
+type PostRow = ReturnType<typeof makePost>;
 type Filter = [column: string, value: unknown];
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
@@ -298,6 +310,102 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: own.map((row) => pick(row, columns)), error: null };
       }
     }
+    if (table === 'posts') {
+      const all = Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
+      const byId = (id: unknown) => all.find((row) => row.id === id);
+      if (op === 'insert') {
+        const communityId = String(values?.community_id);
+        // RLS: posts.create in that community; authorship always comes from the session.
+        if (!permissionsIn(communityId).includes('posts.create')) {
+          return {
+            data: null,
+            error: { code: '42501', message: 'new row violates row-level security policy for table "posts"' },
+          };
+        }
+        const latest = Math.max(Date.now(), ...all.map((row) => Date.parse(row.created_at) + 1000));
+        const row: PostRow = {
+          ...makePost(communityId, 0),
+          id: `d4d4d4d4-0000-4000-8000-${String(++postCount).padStart(12, '0')}`,
+          author_user_id: user,
+          author_display_name: profiles.get(user)?.display_name ?? null,
+          body: String(values?.body),
+          reaction_count: 0,
+          created_at: new Date(latest).toISOString(),
+          updated_at: new Date(latest).toISOString(),
+        };
+        content[communityId] = {
+          ...content[communityId],
+          posts: [row, ...(content[communityId]?.posts ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = byId(filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewPost(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible) return { data: [], error: null };
+        const perms = permissionsIn(visible.community_id);
+        const own = visible.author_user_id === user;
+        const allowed =
+          values?.status === 'deleted'
+            ? (own && perms.includes('posts.delete_own')) || perms.includes('posts.moderate')
+            : 'body' in (values ?? {})
+              ? own && perms.includes('posts.edit_own') && visible.status === 'published'
+              : perms.includes('posts.moderate');
+        if (!allowed) return { data: [], error: null };
+        Object.assign(
+          visible,
+          values,
+          'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
+        );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'reactions') {
+      const postId = filters.find(([c]) => c === 'post_id')?.[1] ?? values?.post_id;
+      const post = (Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[]).find(
+        (row) => row.id === postId,
+      );
+      const mine = reactions.find((r) => r.postId === postId && r.userId === user);
+      if (op === 'select')
+        return {
+          data: single ? (mine ? { id: mine.id } : null) : mine ? [{ id: mine.id }] : [],
+          error: null,
+        };
+      if (!post || !canViewPost(post)) {
+        return {
+          data: null,
+          error: {
+            code: '42501',
+            message: 'new row violates row-level security policy for table "reactions"',
+          },
+        };
+      }
+      if (op === 'insert') {
+        reactions.push({
+          id: `e5e5e5e5-0000-4000-8000-${String(reactions.length + 1).padStart(12, '0')}`,
+          postId: post.id,
+          userId: user,
+        });
+        post.reaction_count = Number(post.reaction_count) + 1;
+        post.my_reaction_type = String(values?.reaction_type);
+        return { data: null, error: null };
+      }
+      if (op === 'update') {
+        post.my_reaction_type = String(values?.reaction_type);
+        return { data: null, error: null };
+      }
+      if (op === 'delete' && mine) {
+        reactions.splice(reactions.indexOf(mine), 1);
+        post.reaction_count = Number(post.reaction_count) - 1;
+        post.my_reaction_type = null;
+        return { data: null, error: null };
+      }
+      return { data: null, error: null };
+    }
     if (table === 'communities') {
       // RLS: active members read; community.update holders (Owner, Admin) write.
       const membership = (id: string) =>
@@ -368,6 +476,15 @@ export function fakeSupabase(options: FakeOptions = {}) {
       upsert(row: Record<string, unknown>) {
         op = 'upsert';
         values = row;
+        return builder;
+      },
+      insert(row: Record<string, unknown>) {
+        op = 'insert';
+        values = row;
+        return builder;
+      },
+      delete() {
+        op = 'delete';
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -450,6 +567,25 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const redemptions: { token: string; userId: string }[] = [];
   const content: Record<string, FakeContent> = { ...options.content };
   const rpcFailures = new Map<string, DbError>();
+  const reactions: { id: string; postId: string; userId: string }[] = [];
+  let postCount = 100;
+  /** The user's permission keys in a community (active membership only), like my_community_permissions(). */
+  const permissionsIn = (communityId: string): string[] => {
+    const membership = communities.find(
+      (c) =>
+        (c as { community_id: string }).community_id === communityId &&
+        (c as { membership_status: string }).membership_status === 'active',
+    ) as { role_names: string[] } | undefined;
+    if (!membership || !me()) return [];
+    if (options.permissions?.[communityId]) return options.permissions[communityId]!;
+    return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
+  };
+  /** private.can_view_post_row(): published → posts.view; hidden/deleted → moderators, or the author. */
+  const canViewPost = (row: PostRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'published') return perms.includes('posts.view');
+    return perms.includes('posts.moderate') || (row.author_user_id === me() && perms.includes('posts.view'));
+  };
   let createdCount = 0;
   let slugsTaken = options.slugsTaken ?? 0;
   let failNext = options.failFirstRpc ?? false;
@@ -469,16 +605,38 @@ export function fakeSupabase(options: FakeOptions = {}) {
       });
       return { data: rows, error: null };
     }
-    const CONTENT_RPCS: Record<string, keyof FakeContent> = {
-      list_active_alerts: 'alerts',
-      list_current_announcements: 'announcements',
-      list_upcoming_events: 'events',
-      list_community_posts: 'posts',
-    };
     const failure = rpcFailures.get(name);
     if (failure) {
       rpcFailures.delete(name);
       return { data: null, error: failure };
+    }
+    const CONTENT_RPCS: Record<string, keyof FakeContent> = {
+      list_active_alerts: 'alerts',
+      list_current_announcements: 'announcements',
+      list_upcoming_events: 'events',
+    };
+    if (name === 'my_community_permissions') {
+      return { data: permissionsIn(String(args.p_community_id)), error: null };
+    }
+    if (name === 'list_community_posts') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      // SECURITY INVOKER + RLS: each row must be visible to the caller.
+      const status = String(args.p_status ?? 'published');
+      const cursor = args.p_cursor_created_at
+        ? [String(args.p_cursor_created_at), String(args.p_cursor_id)]
+        : null;
+      const rows = ((content[String(args.p_community_id)]?.posts ?? []) as PostRow[])
+        .filter((row) => row.status === status && canViewPost(row))
+        .sort((a, b) =>
+          a.created_at === b.created_at ? b.id.localeCompare(a.id) : b.created_at.localeCompare(a.created_at),
+        )
+        .filter(
+          (row) =>
+            !cursor || row.created_at < cursor[0]! || (row.created_at === cursor[0] && row.id < cursor[1]!),
+        )
+        .slice(0, Number(args.p_limit ?? 20));
+      return { data: rows.map((row) => ({ ...row })), error: null };
     }
     if (name in CONTENT_RPCS) {
       if (offline) return { data: null, error: OFFLINE };
@@ -820,18 +978,18 @@ export const makeEvent = (communityId: string, n: number, overrides: Record<stri
 export const makePost = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
   id: `d4d4d4d4-0000-4000-8000-${String(n).padStart(12, '0')}`,
   community_id: communityId,
-  author_user_id: OTHER_USER_ID,
-  author_display_name: 'Grace H.',
-  author_avatar_url: null,
+  author_user_id: OTHER_USER_ID as string | null,
+  author_display_name: 'Grace H.' as string | null,
+  author_avatar_url: null as string | null,
   body: `Post body ${n}`,
   status: 'published',
   visibility: 'members',
   reaction_count: n,
   comment_count: 0,
-  my_reaction_type: null,
-  moderation_reason: null,
+  my_reaction_type: null as string | null,
+  moderation_reason: null as string | null,
   created_at: at(-30 * n),
   updated_at: at(-30 * n),
-  edited_at: null,
+  edited_at: null as string | null,
   ...overrides,
 });

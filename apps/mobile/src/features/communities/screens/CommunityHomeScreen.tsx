@@ -9,7 +9,7 @@ import { AnnouncementCard } from '@/features/home/components/AnnouncementCard';
 import { CommunityHeader } from '@/features/home/components/CommunityHeader';
 import { EventCard } from '@/features/home/components/EventCard';
 import { HomeSection } from '@/features/home/components/HomeSection';
-import { PostCard } from '@/features/home/components/PostCard';
+import { PostCard } from '@/features/feed/components/PostCard';
 import { QuickActions } from '@/features/home/components/QuickActions';
 import { useCommunityHome } from '@/features/home/useCommunityHome';
 import { makeStyles, useTheme } from '@/theme';
@@ -35,7 +35,8 @@ export function CommunityHomeScreen({
   const { colors } = useTheme();
   const community = useCommunity();
   const home = useCommunityHome(community.community_id);
-  const open = (section: CommunitySection) => navigation.navigate('CommunitySection', { section });
+  const open = (section: CommunitySection) =>
+    section === 'feed' ? navigation.navigate('Feed') : navigation.navigate('CommunitySection', { section });
 
   // Coming back to the home (e.g. from a section) refreshes it, keeping what is shown.
   const { refresh } = home;
@@ -147,7 +148,7 @@ export function CommunityHomeScreen({
             empty="No posts yet."
             onSeeAll={() => open('feed')}
             onRetry={() => void home.refresh()}
-            renderItem={(post) => <PostCard key={post.id} post={post} />}
+            renderItem={(post) => <PostCard key={post.id} post={post} compact />}
           />
         </>
       )}
