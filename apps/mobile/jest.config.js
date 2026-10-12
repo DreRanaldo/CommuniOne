@@ -4,6 +4,7 @@ const path = require('node:path');
 module.exports = {
   preset: 'jest-expo',
   setupFiles: ['<rootDir>/jest.setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.afterEnv.ts'],
   testMatch: ['<rootDir>/src/**/*.test.ts?(x)'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

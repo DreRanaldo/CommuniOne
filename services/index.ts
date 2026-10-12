@@ -64,3 +64,4 @@ export { consoleLogger, silentLogger, redact, type Logger, type LogLevel } from 
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type Page, type PageRequest } from './core/pagination.ts';
 export type { Database } from './database.types.ts';
 export { parseInvitationToken } from './invitations/index.ts';
+export { COMMUNITY_TYPES, type Community, type CommunityType, type MyCommunity } from './communities/index.ts';

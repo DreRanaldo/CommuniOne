@@ -1,4 +1,6 @@
-// Deep links: communione://join?token=… opens the Join modal (invitations).
+// Deep links: communione://join?token=… opens the Join modal (invitations);
+// communione://communities opens the switcher, and communione://communities/<id>
+// asks to switch (validated against the user's memberships before use).
 import type { LinkingOptions } from '@react-navigation/native';
 import * as Linking from 'expo-linking';
 import { isAuthLink, URL_SCHEME } from '@/constants/app';
@@ -21,9 +23,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       JoinCommunity: 'join',
+      Communities: 'communities/:communityId?',
       App: {
         screens: {
-          Communities: 'communities',
+          Home: 'home',
           Notifications: 'notifications',
           Profile: { path: 'profile', screens: { ProfileHome: '' } },
         },

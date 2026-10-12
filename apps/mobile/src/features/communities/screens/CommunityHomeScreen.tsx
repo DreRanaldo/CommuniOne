@@ -1,7 +1,13 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { View } from 'react-native';
 import { Card, Icon, Screen, Text, type IconName } from '@/components';
-import { useCommunity } from '@/navigation/CommunityContext';
+import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
+import { makeStyles } from '@/theme';
 import type { CommunitySection, CommunityStackParamList } from '@/types/navigation';
+import { CommunityLogo } from '../components/CommunityLogo';
+import { CommunityNoticeBanner } from '../components/CommunityNoticeBanner';
+import { useCommunity } from '../CurrentCommunityProvider';
+import { roleLabel, typeLabel } from '../selection';
 
 const SECTIONS: { section: CommunitySection; title: string; icon: IconName }[] = [
   { section: 'feed', title: 'Feed', icon: 'chatbubbles-outline' },
@@ -12,14 +18,24 @@ const SECTIONS: { section: CommunitySection; title: string; icon: IconName }[] =
   { section: 'members', title: 'Members', icon: 'people-outline' },
 ];
 
-/** Hub of one community. Sections are placeholders until their feature stages. */
+/** Hub of the current community. Sections are placeholders until their feature stages. */
 export function CommunityHomeScreen({
   navigation,
 }: NativeStackScreenProps<CommunityStackParamList, 'CommunityHome'>) {
-  const { name } = useCommunity();
+  const styles = useStyles();
+  const community = useCommunity();
+  const role = roleLabel(community);
   return (
     <Screen testID="community-home-screen">
-      <Text variant="title">{name ?? 'Community'}</Text>
+      <AuthNoticeBanner only={['emailConfirmed', 'passwordUpdated', 'linkError']} />
+      <CommunityNoticeBanner />
+      <View style={styles.header}>
+        <CommunityLogo name={community.name} logoUrl={community.logo_url} size={64} />
+        <View style={styles.headerText}>
+          <Text variant="title">{community.name}</Text>
+          <Text tone="muted">{[typeLabel(community.community_type), role].filter(Boolean).join(' · ')}</Text>
+        </View>
+      </View>
       {SECTIONS.map(({ section, title, icon }) => (
         <Card
           key={section}
@@ -33,3 +49,8 @@ export function CommunityHomeScreen({
     </Screen>
   );
 }
+
+const useStyles = makeStyles((t) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
+  headerText: { flex: 1, gap: t.spacing.xxs },
+}));

@@ -39,7 +39,7 @@ export function makeSession(email = TEST_EMAIL): Session {
 
 export interface FakeOptions {
   session?: Session | null;
-  /** Rows returned by rpc('my_communities'). */
+  /** Rows returned by rpc('my_communities') (the caller's memberships; change with setCommunities). */
   communities?: unknown[];
   /** Make getSession() hang (to observe the restoring state). */
   neverRestore?: boolean;
@@ -322,6 +322,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const storage = { from: jest.fn((_bucket: string) => storageBucket) };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
 
+  let communities = options.communities ?? [];
   let failNext = options.failFirstRpc ?? false;
   const rpc = jest.fn(async (name: string) => {
     if (failNext) {
@@ -330,7 +331,10 @@ export function fakeSupabase(options: FakeOptions = {}) {
     }
     // The database refuses a revoked session (migration 8): 42501 "authentication required".
     if (revoked) return { data: null, error: { code: '42501', message: 'authentication required' } };
-    if (name === 'my_communities') return { data: options.communities ?? [], error: null };
+    if (name === 'my_communities') {
+      if (offline) return { data: null, error: OFFLINE };
+      return { data: communities, error: null };
+    }
     if (name === 'delete_my_account') {
       if (offline) return { data: null, error: OFFLINE };
       const user = me();
@@ -365,6 +369,14 @@ export function fakeSupabase(options: FakeOptions = {}) {
     files,
     /** Every Data API query, in order (table, operation, filters, values). */
     queries,
+    /** Change the user's memberships on the server (e.g. removed from a community). */
+    setCommunities: (rows: unknown[]) => {
+      communities = rows;
+    },
+    /** The next RPC fails with an internal error. */
+    failNextRpc: () => {
+      failNext = true;
+    },
     /** The next Data API query fails with this error. */
     failNextQuery: (error: DbError = { code: 'XX000', message: 'internal error at /var/lib/postgresql' }) => {
       dbErrors.push(error);
@@ -417,6 +429,24 @@ export function fakeLinks(initialURL: string | null = null) {
     },
   };
   return { source, open: (url: string) => listeners.forEach((listener) => listener(url)) };
+}
+
+/** A my_communities() row: an active membership in an active community unless overridden. */
+export function makeCommunity(n: number, overrides: Record<string, unknown> = {}) {
+  const id = String(n).padStart(12, '0');
+  return {
+    community_id: `cccccccc-0000-4000-8000-${id}`,
+    name: `Community ${n}`,
+    slug: `community-${n}`,
+    community_type: 'other',
+    logo_url: null,
+    community_status: 'active',
+    membership_id: `dddddddd-0000-4000-8000-${id}`,
+    membership_status: 'active',
+    joined_at: '2026-01-01T00:00:00Z',
+    role_names: ['Member'],
+    ...overrides,
+  };
 }
 
 export const sampleCommunities = [

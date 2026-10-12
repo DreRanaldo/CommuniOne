@@ -124,7 +124,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `create(input)` | New community; caller becomes Owner | – | `{ name (≤120), slug ([a-z0-9-], 3–63), type?, description? (≤2000), timezone? }` → `Community` | `CONFLICT` (slug taken), `RATE_LIMITED` (10 per 24 h) | **Atomic:** community + Owner membership + default roles; audited |
 | `get(id)` / `getBySlug(slug)` | One community | `community.view` (active member) | → `Community` | `NOT_FOUND` | – |
 | `update(id, patch)` | Edit details and settings | `community.update` | `{ name?, description?, type?, timezone?, logoUrl?, coverImageUrl?, settings? (JSON ≤16 KB) }` → `Community` | `FORBIDDEN`, `NOT_FOUND` | Audited (`changed_fields`) |
-| `listMine()` | Community switcher: my pending / active / suspended memberships | – | → rows (bounded by membership count) | – | – |
+| `listMine()` | Community switcher: my pending / active / suspended memberships | – | → `MyCommunity[]` (`community_id`, `name`, `slug`, `community_type`, `logo_url`, `community_status`, `membership_id`, `membership_status`, `joined_at`, `role_names`; bounded by membership count) | – | `role_names` are display labels only |
 | `myPermissions(id)` | My permission keys, **for UI gating only** | – | → `string[]` | – | – |
 
 ### memberships

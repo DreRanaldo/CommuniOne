@@ -37,7 +37,7 @@ apps/mobile/
     theme/                 tokens (colours light/dark, type, spacing, radius), ThemeProvider,
                            useTheme, makeStyles
     navigation/            RootNavigator, AuthNavigator, AppTabs, CommunityNavigator,
-                           CommunityContext, linking (deep links), shared options
+                           CommunityNavigator (Home tab), linking (deep links), shared options
     features/<domain>/     domain screens (and later components/hooks):
                            auth, communities, notifications, profile
     screens/               app-shell screens not owned by a domain:
@@ -60,9 +60,11 @@ There is no `src/services/`: the service layer is the repository's `services/`.
 RootStack
 ├── (signed out)  Auth ── Welcome · SignIn · SignUp · ForgotPassword
 ├── (recovery)    ResetPassword            ← communione://auth/reset-password?code=…
-└── (signed in)   App (tabs) ── Communities · Notifications · Profile (stack)
+└── (signed in)   App (tabs) ── Home · Notifications · Profile
+                  │   Home = the current community: CommunityHome · CommunitySection
+                  │          (or "Your communities" when none is selected)
                   │   Profile ── ProfileHome · EditProfile · Account · ChangePassword · DeleteAccount
-                  Community (stack, scoped by communityId) ── CommunityHome · CommunitySection
+                  Communities (modal, the switcher)  ← communione://communities[/<communityId>]
                   JoinCommunity (modal)  ← communione://join?token=…
 ```
 
@@ -70,16 +72,19 @@ RootStack
   state (`restoring` shows a loading state). Signing in or out swaps the whole
   tree, so no authenticated screen stays mounted without a session. This is UX
   only; the database authorizes every request.
-- **Community scope:** the community navigator takes `communityId` from its
-  route and provides it through `CommunityContext`; screens inside never take a
-  community id from user input. Access is still decided by RLS.
+- **Community scope (RN-04):** the current community lives in
+  `CurrentCommunityProvider` (app level). Screens read it with `useCommunity()`;
+  no route carries a community id. The selection is always one of the user's own
+  memberships as returned by the server. Access is still decided by RLS. See
+  [`community-selection.md`](community-selection.md).
 - **Deep links:** scheme `communione`; `join?token=…` opens the Join modal. The
   token is treated like a password: never displayed or logged.
+  `communities/<id>` asks to switch community and is validated first.
 - **Typed routes:** every navigator has a param list in `src/types/navigation.ts`.
 
 Built now: Welcome, Sign in, Sign up, Forgot password, Reset password
 (authentication: see [`mobile-authentication.md`](mobile-authentication.md)),
-the community list (`services.communities.listMine`), the community hub, and
+the community selector and hub (RN-04: see [`community-selection.md`](community-selection.md)), and
 the profile and account screens (RN-03: see [`../features/profile.md`](../features/profile.md)).
 Placeholders: Join, Notifications, community sections.
 
@@ -127,7 +132,7 @@ Placeholders: Join, Notifications, community sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 92 tests: profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 132 tests: community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |

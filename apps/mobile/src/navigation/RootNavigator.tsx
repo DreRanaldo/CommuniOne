@@ -4,11 +4,11 @@ import { useEffect } from 'react';
 import { LoadingState } from '@/components';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ResetPasswordScreen } from '@/features/auth/screens/ResetPasswordScreen';
+import { CommunitiesScreen } from '@/features/communities/screens/CommunitiesScreen';
 import { JoinCommunityScreen } from '@/features/communities/screens/JoinCommunityScreen';
 import type { RootStackParamList } from '@/types/navigation';
 import { AppTabs } from './AppTabs';
 import { AuthNavigator } from './AuthNavigator';
-import { CommunityNavigator } from './CommunityNavigator';
 import { useStackOptions } from './options';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,7 +46,11 @@ export function RootNavigator() {
       ) : (
         <>
           <Stack.Screen name="App" component={AppTabs} />
-          <Stack.Screen name="Community" component={CommunityNavigator} />
+          <Stack.Screen
+            name="Communities"
+            component={CommunitiesScreen}
+            options={{ presentation: 'modal', headerShown: true, title: 'Switch community' }}
+          />
           <Stack.Screen
             name="JoinCommunity"
             component={JoinCommunityScreen}

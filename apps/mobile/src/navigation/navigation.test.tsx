@@ -37,7 +37,7 @@ describe('navigation', () => {
     jest.restoreAllMocks();
   });
 
-  test('sign in → app tabs → community → community section', async () => {
+  test('sign in → choose a community → community hub → section', async () => {
     const user = userEvent.setup();
     const { auth } = await renderApp({ communities: sampleCommunities });
 
@@ -50,12 +50,12 @@ describe('navigation', () => {
       password: TEST_PASSWORD,
     });
 
-    // Authenticated app: the community list from services.communities.listMine().
+    // Authenticated app, two communities and none chosen yet: the list from services.communities.listMine().
     expect(await screen.findByText('Maple Grove HOA')).toBeOnTheScreen();
     expect(screen.getByText('St. Mark Choir')).toBeOnTheScreen();
 
     // Community navigation.
-    await user.press(screen.getByRole('button', { name: 'Open Maple Grove HOA' }));
+    await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
     expect(await screen.findByTestId('community-home-screen')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Events' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();

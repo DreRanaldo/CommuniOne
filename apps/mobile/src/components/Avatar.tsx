@@ -8,6 +8,10 @@ export interface AvatarProps {
   uri: string | null;
   name: string | null;
   size?: number;
+  /** Accessibility label; defaults to "Profile picture of {name}". */
+  label?: string;
+  /** Test id prefix: `{testID}-image` / `{testID}-initials`. */
+  testID?: string;
 }
 
 const initials = (name: string | null) =>
@@ -19,12 +23,12 @@ const initials = (name: string | null) =>
     .join('') || '?';
 
 /** A round profile picture, falling back to initials (also when the image fails to load). */
-export function Avatar({ uri, name, size = 72 }: AvatarProps) {
+export function Avatar({ uri, name, size = 72, label: customLabel, testID = 'avatar' }: AvatarProps) {
   const styles = useStyles();
   const { typography } = useTheme();
   const [failed, setFailed] = useState<string | null>(null);
   const shape = { width: size, height: size, borderRadius: size / 2 };
-  const label = name ? `Profile picture of ${name}` : 'Profile picture';
+  const label = customLabel ?? (name ? `Profile picture of ${name}` : 'Profile picture');
   if (uri && failed !== uri) {
     return (
       <Image
@@ -33,7 +37,7 @@ export function Avatar({ uri, name, size = 72 }: AvatarProps) {
         accessibilityRole="image"
         accessibilityLabel={label}
         onError={() => setFailed(uri)}
-        testID="avatar-image"
+        testID={`${testID}-image`}
       />
     );
   }
@@ -42,7 +46,7 @@ export function Avatar({ uri, name, size = 72 }: AvatarProps) {
       style={[styles.fallback, shape]}
       accessibilityRole="image"
       accessibilityLabel={label}
-      testID="avatar-initials"
+      testID={`${testID}-initials`}
     >
       <Text
         style={{ fontSize: size * 0.38, lineHeight: size * 0.5, fontWeight: typography.title.fontWeight }}

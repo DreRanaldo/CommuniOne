@@ -21,7 +21,7 @@ const CONTENT: Record<
 };
 
 /** Shows the current auth notice, if any, with a dismiss button. */
-export function AuthNoticeBanner({ only }: { only?: AuthNotice['kind'][] }) {
+export function AuthNoticeBanner({ only }: { only?: readonly AuthNotice['kind'][] }) {
   const { notice, clearNotice } = useAuth();
   if (!notice || (only && !only.includes(notice.kind))) return null;
   const content = CONTENT[notice.kind];

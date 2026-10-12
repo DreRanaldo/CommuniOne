@@ -4,9 +4,11 @@
 
 import { mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import * as v from '../core/validate.ts';
-import type { Json, Tables } from '../database.types.ts';
+import type { Database, Json, Tables } from '../database.types.ts';
 
 export type Community = Tables<'communities'>;
+/** One of the caller's memberships, as listed by my_communities() (community switcher). */
+export type MyCommunity = Database['public']['Functions']['my_communities']['Returns'][number];
 
 export const COMMUNITY_TYPES = ['residential', 'church', 'school', 'club', 'association', 'organization', 'other'] as const;
 export type CommunityType = (typeof COMMUNITY_TYPES)[number];
@@ -95,7 +97,7 @@ export function communitiesService(ctx: ServiceContext) {
     },
 
     /** The caller's pending, active and suspended memberships (community switcher). */
-    listMine() {
+    listMine(): Promise<MyCommunity[]> {
       return ctx.run('communities.listMine', async () => {
         await ctx.requireUserId();
         return unwrap(await db.rpc('my_communities')) ?? [];

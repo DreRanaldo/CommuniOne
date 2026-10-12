@@ -18,14 +18,14 @@ export type ProfileStackParamList = {
   DeleteAccount: undefined;
 };
 
-/** Main tabs once signed in. */
+/** Main tabs once signed in. Home is the current community (see CurrentCommunityProvider). */
 export type AppTabParamList = {
-  Communities: undefined;
+  Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Notifications: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
-/** Sections inside one community. Every route carries the community it belongs to. */
+/** Sections inside the current community. The community comes from context, never from params. */
 export type CommunitySection = 'feed' | 'announcements' | 'alerts' | 'events' | 'documents' | 'members';
 
 export type CommunityStackParamList = {
@@ -37,7 +37,8 @@ export type CommunityStackParamList = {
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   App: NavigatorScreenParams<AppTabParamList>;
-  Community: { communityId: string; name?: string } & Partial<NavigatorScreenParams<CommunityStackParamList>>;
+  /** Modal: the community switcher. `communityId` (from a link) asks to switch; it is validated first. */
+  Communities: { communityId?: string } | undefined;
   /** Modal: join a community from an invitation link or code. */
   JoinCommunity: { token?: string } | undefined;
   /** Recovery mode only: choose a new password after a reset link. */

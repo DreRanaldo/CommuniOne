@@ -7,24 +7,44 @@ export interface CardProps extends ViewProps {
   /** Makes the whole card a button. */
   onPress?: () => void;
   accessibilityLabel?: string;
+  /** Highlights the card (e.g. the current choice in a list). */
+  selected?: boolean;
+  disabled?: boolean;
 }
 
-export function Card({ children, onPress, style, accessibilityLabel, ...rest }: CardProps) {
+export function Card({
+  children,
+  onPress,
+  style,
+  accessibilityLabel,
+  selected,
+  disabled,
+  ...rest
+}: CardProps) {
   const styles = useStyles();
   if (onPress) {
     return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ selected: !!selected, disabled: !!disabled }}
         onPress={onPress}
-        style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}
+        disabled={disabled}
+        testID={rest.testID}
+        style={({ pressed }) => [
+          styles.card,
+          selected && styles.selected,
+          pressed && !disabled && styles.pressed,
+          disabled && styles.disabled,
+          style,
+        ]}
       >
         {children}
       </Pressable>
     );
   }
   return (
-    <View {...rest} style={[styles.card, style]}>
+    <View {...rest} style={[styles.card, selected && styles.selected, style]}>
       {children}
     </View>
   );
@@ -40,4 +60,6 @@ const useStyles = makeStyles((t) => ({
     gap: t.spacing.sm,
   },
   pressed: { backgroundColor: t.colors.surfaceMuted },
+  selected: { borderColor: t.colors.primary, borderWidth: 2, backgroundColor: t.colors.primarySoft },
+  disabled: { opacity: 0.6 },
 }));

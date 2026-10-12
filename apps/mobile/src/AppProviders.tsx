@@ -2,7 +2,8 @@ import { NavigationContainer, type LinkingOptions } from '@react-navigation/nati
 import { StatusBar } from 'expo-status-bar';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider } from '@/features/auth/AuthProvider';
+import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { CurrentCommunityProvider } from '@/features/communities/CurrentCommunityProvider';
 import { DependenciesProvider, type Dependencies } from '@/lib/dependencies';
 import { navigationTheme } from '@/navigation/options';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -24,6 +25,13 @@ function ThemedNavigation({
   );
 }
 
+/** The current community belongs to the signed-in user (none while signed out or in recovery). */
+function SignedInCommunity({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const userId = auth.status === 'signedIn' && !auth.recovery ? (auth.session?.user.id ?? null) : null;
+  return <CurrentCommunityProvider userId={userId}>{children}</CurrentCommunityProvider>;
+}
+
 /** Everything the screens need, in one place (also used by tests with fake dependencies). */
 export function AppProviders({
   dependencies,
@@ -41,7 +49,9 @@ export function AppProviders({
       <ThemeProvider scheme={scheme}>
         <DependenciesProvider value={dependencies}>
           <AuthProvider>
-            <ThemedNavigation linking={linking}>{children}</ThemedNavigation>
+            <SignedInCommunity>
+              <ThemedNavigation linking={linking}>{children}</ThemedNavigation>
+            </SignedInCommunity>
           </AuthProvider>
         </DependenciesProvider>
       </ThemeProvider>
