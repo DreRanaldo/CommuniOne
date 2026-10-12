@@ -100,7 +100,9 @@ describe('correct community', () => {
     expect(within(screen.getByTestId('home-alerts')).getByText('Water main break')).toBeOnTheScreen();
     expect(screen.getByLabelText(/^Emergency alert: Water main break/)).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-announcements')).getByText('Annual meeting')).toBeOnTheScreen();
-    expect(within(screen.getByTestId('home-announcements')).getByText('Important')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-announcements')).getByText('IMPORTANT ANNOUNCEMENT'),
+    ).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-events')).getByText('Spring clean-up')).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-events')).getByText('Clubhouse')).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-posts')).getByText('Lost cat near the pond')).toBeOnTheScreen();

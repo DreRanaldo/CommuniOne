@@ -116,6 +116,7 @@ type DbError = { code: string; message: string; status?: number };
 
 /** Default role permissions for posts (seed role templates). */
 const MEMBER_PERMISSIONS = [
+  'announcements.view',
   'posts.view',
   'posts.create',
   'posts.edit_own',
@@ -125,15 +126,17 @@ const MEMBER_PERMISSIONS = [
   'comments.delete_own',
 ];
 const MODERATION = ['posts.moderate', 'comments.moderate'];
+const MANAGEMENT = ['announcements.create', 'announcements.manage'];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Owner: [...MEMBER_PERMISSIONS, ...MODERATION],
-  Admin: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
   Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
   Member: MEMBER_PERMISSIONS,
 };
 
 type PostRow = ReturnType<typeof makePost>;
 type CommentRow = ReturnType<typeof makeComment>;
+type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
 type Filter = [column: string, value: unknown];
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
@@ -373,6 +376,88 @@ export function fakeSupabase(options: FakeOptions = {}) {
           values,
           'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
         );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'announcements') {
+      const all = () => Object.values(content).flatMap((c) => c.announcements ?? []) as AnnouncementRow[];
+      const now = new Date().toISOString();
+      const futureExpiry = (expires: unknown) => !expires || Date.parse(String(expires)) > Date.now();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      if (op === 'insert') {
+        const communityId = String(values?.community_id);
+        const perms = permissionsIn(communityId);
+        if (!perms.includes('announcements.create') && !perms.includes('announcements.manage')) {
+          return {
+            data: null,
+            error: {
+              code: '42501',
+              message: 'new row violates row-level security policy for table "announcements"',
+            },
+          };
+        }
+        const status = String(values?.status ?? 'draft');
+        if (status === 'published' && !futureExpiry(values?.expires_at))
+          return invalid('expires_at must be in the future when publishing');
+        const row: AnnouncementRow = {
+          ...makeAnnouncement(communityId, ++announcementCount),
+          title: String(values?.title),
+          body: String(values?.body),
+          priority: String(values?.priority ?? 'normal'),
+          expires_at: (values?.expires_at as string | null) ?? null,
+          status,
+          author_user_id: user,
+          published_at: status === 'published' ? now : null,
+          created_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          announcements: [row, ...(content[communityId]?.announcements ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = all().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewAnnouncement(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageAnnouncement(visible)) return { data: [], error: null };
+        // enforce_announcement_write(): transitions, publication stamps, edit rules.
+        if (visible.status === 'deleted')
+          return {
+            data: null,
+            error: { code: '42501', message: 'deleted announcements cannot be modified' },
+          };
+        const next = { ...visible, ...values } as AnnouncementRow;
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'deleted'],
+            published: ['archived', 'deleted'],
+            archived: ['published', 'deleted'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid announcement transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (!futureExpiry(next.expires_at))
+              return invalid('expires_at must be in the future when publishing');
+            next.published_at = now;
+            next.archived_at = null;
+          }
+          if (next.status === 'archived') next.archived_at = now;
+        }
+        const edited = ['title', 'body', 'priority', 'expires_at'].some((k) => k in (values ?? {}));
+        if (edited) {
+          if (!['draft', 'published'].includes(next.status)) {
+            return {
+              data: null,
+              error: { code: '42501', message: 'only draft or published announcements can be edited' },
+            };
+          }
+          if (visible.status === 'published' && next.status === 'published') next.edited_at = now;
+        }
+        Object.assign(visible, next);
         return { data: [pick(visible, columns)], error: null };
       }
     }
@@ -693,6 +778,26 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   };
+  let announcementCount = 500;
+  /** private.can_view_announcement_row(): published/archived → view or manage; else manage, or own with create. */
+  const canViewAnnouncement = (row: AnnouncementRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'published' || row.status === 'archived') {
+      return perms.includes('announcements.view') || perms.includes('announcements.manage');
+    }
+    return (
+      perms.includes('announcements.manage') ||
+      (row.author_user_id === me() && perms.includes('announcements.create'))
+    );
+  };
+  /** private.can_manage_announcement_row(): manage any; your own with create. */
+  const canManageAnnouncement = (row: AnnouncementRow) => {
+    const perms = permissionsIn(row.community_id);
+    return (
+      perms.includes('announcements.manage') ||
+      (row.author_user_id === me() && perms.includes('announcements.create'))
+    );
+  };
   /** private.can_view_comment_row(): its post is visible, and published, or comments.moderate, or the author. */
   const canViewComment = (row: CommentRow) => {
     const post = allPosts().find((p) => p.id === row.post_id);
@@ -745,11 +850,49 @@ export function fakeSupabase(options: FakeOptions = {}) {
     }
     const CONTENT_RPCS: Record<string, keyof FakeContent> = {
       list_active_alerts: 'alerts',
-      list_current_announcements: 'announcements',
       list_upcoming_events: 'events',
     };
     if (name === 'my_community_permissions') {
       return { data: permissionsIn(String(args.p_community_id)), error: null };
+    }
+    if (name === 'list_current_announcements' || name === 'list_announcement_history') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const expired = (row: AnnouncementRow) => !!row.expires_at && Date.parse(row.expires_at) <= now;
+      const all = ((content[String(args.p_community_id)]?.announcements ?? []) as AnnouncementRow[]).filter(
+        canViewAnnouncement,
+      );
+      let rows: AnnouncementRow[];
+      if (name === 'list_current_announcements') {
+        // Published, not expired; important first, then newest.
+        rows = all
+          .filter((row) => row.status === 'published' && !expired(row))
+          .sort((a, b) =>
+            a.priority !== b.priority
+              ? a.priority === 'important'
+                ? -1
+                : 1
+              : b.published_at === a.published_at
+                ? b.id.localeCompare(a.id)
+                : String(b.published_at).localeCompare(String(a.published_at)),
+          );
+      } else {
+        const statuses = (args.p_statuses as string[] | undefined) ?? ['published', 'archived'];
+        rows = all
+          .filter((row) => statuses.includes(row.status))
+          .map((row) => ({ ...row, is_expired: expired(row), sort_at: row.published_at ?? row.created_at }))
+          .sort((a, b) =>
+            a.sort_at === b.sort_at
+              ? b.id.localeCompare(a.id)
+              : String(b.sort_at).localeCompare(String(a.sort_at)),
+          );
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return {
+        data: rows.slice(after, after + Number(args.p_limit ?? 20)).map((row) => ({ ...row })),
+        error: null,
+      };
     }
     if (name === 'list_post_comments') {
       if (offline) return { data: null, error: OFFLINE };
@@ -1138,10 +1281,12 @@ export const makeAnnouncement = (
   body: `Announcement body ${n}`,
   priority: 'normal',
   status: 'published',
-  author_user_id: null,
-  published_at: at(-60 * n),
-  expires_at: null,
-  edited_at: null,
+  author_user_id: null as string | null,
+  published_at: at(-60 * n) as string | null,
+  archived_at: null as string | null,
+  created_at: at(-60 * n - 30),
+  expires_at: null as string | null,
+  edited_at: null as string | null,
   ...overrides,
 });
 

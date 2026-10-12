@@ -39,6 +39,12 @@ export type CommunityStackParamList = {
    * post is re-read from the server (visibility, current text) on opening.
    */
   PostDetail: { postId: string; post?: FeedPost };
+  /** The current community's announcements (current, past, drafts). */
+  Announcements: undefined;
+  /** One announcement, read from the server. */
+  AnnouncementDetail: { announcementId: string };
+  /** New announcement, or edit one (`announcementId`, loaded from the server). */
+  AnnouncementEditor: { announcementId?: string } | undefined;
   /** Write a post, or edit one (`postId`, loaded from the server). */
   PostEditor: { postId?: string } | undefined;
 };

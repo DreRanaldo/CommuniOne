@@ -176,3 +176,8 @@ urgency. Those columns already exist.
 - The history list orders by `coalesce(published_at, created_at)`, which the
   index does not fully cover. That is fine at community scale; revisit if
   histories grow very large.
+
+## Mobile app
+
+The member and management screens are described in
+[`announcements-app.md`](announcements-app.md) (RN-09).

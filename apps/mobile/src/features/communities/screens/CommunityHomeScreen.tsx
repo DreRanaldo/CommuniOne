@@ -5,7 +5,7 @@ import { RefreshControl, View } from 'react-native';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, Screen } from '@/components';
 import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
 import { AlertCard } from '@/features/home/components/AlertCard';
-import { AnnouncementCard } from '@/features/home/components/AnnouncementCard';
+import { AnnouncementItem } from '@/features/announcements/AnnouncementItem';
 import { CommunityHeader } from '@/features/home/components/CommunityHeader';
 import { EventCard } from '@/features/home/components/EventCard';
 import { HomeSection } from '@/features/home/components/HomeSection';
@@ -35,8 +35,11 @@ export function CommunityHomeScreen({
   const { colors } = useTheme();
   const community = useCommunity();
   const home = useCommunityHome(community.community_id);
-  const open = (section: CommunitySection) =>
-    section === 'feed' ? navigation.navigate('Feed') : navigation.navigate('CommunitySection', { section });
+  const open = (section: CommunitySection) => {
+    if (section === 'feed') navigation.navigate('Feed');
+    else if (section === 'announcements') navigation.navigate('Announcements');
+    else navigation.navigate('CommunitySection', { section });
+  };
 
   // Coming back to the home (e.g. from a section) refreshes it, keeping what is shown.
   const { refresh } = home;
@@ -127,7 +130,12 @@ export function CommunityHomeScreen({
             onSeeAll={() => open('announcements')}
             onRetry={() => void home.refresh()}
             renderItem={(announcement) => (
-              <AnnouncementCard key={announcement.id} announcement={announcement} />
+              <AnnouncementItem
+                key={announcement.id}
+                announcement={announcement}
+                compact
+                onPress={() => navigation.navigate('AnnouncementDetail', { announcementId: announcement.id })}
+              />
             )}
           />
           <HomeSection
