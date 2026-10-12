@@ -4,7 +4,7 @@ import { useCallback, useRef } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, Screen } from '@/components';
 import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
-import { AlertCard } from '@/features/home/components/AlertCard';
+import { AlertCard } from '@/features/alerts/AlertCard';
 import { AnnouncementItem } from '@/features/announcements/AnnouncementItem';
 import { CommunityHeader } from '@/features/home/components/CommunityHeader';
 import { EventCard } from '@/features/home/components/EventCard';
@@ -38,6 +38,7 @@ export function CommunityHomeScreen({
   const open = (section: CommunitySection) => {
     if (section === 'feed') navigation.navigate('Feed');
     else if (section === 'announcements') navigation.navigate('Announcements');
+    else if (section === 'alerts') navigation.navigate('Alerts');
     else navigation.navigate('CommunitySection', { section });
   };
 
@@ -119,7 +120,15 @@ export function CommunityHomeScreen({
             empty="No active alerts."
             onSeeAll={() => open('alerts')}
             onRetry={() => void home.refresh()}
-            renderItem={(alert) => <AlertCard key={alert.id} alert={alert} timeZone={timeZone} />}
+            renderItem={(alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                compact
+                timeZone={timeZone}
+                onPress={() => navigation.navigate('AlertDetail', { alertId: alert.id })}
+              />
+            )}
           />
           <HomeSection
             title="Announcements"

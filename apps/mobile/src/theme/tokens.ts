@@ -25,8 +25,11 @@ const palette = {
   gray925: '#1A2030',
   gray875: '#242B3D',
   red500: '#D32F2F',
+  // Emergency severity: deeper than danger so labels pass WCAG AA on muted surfaces too.
+  red600: '#C62828',
   red300: '#F28B82',
-  amber600: '#B26A00',
+  // Darkened from #B26A00 (4.24:1 on white) to meet WCAG AA as text (RN-10).
+  amber700: '#9C5C00',
   amber300: '#F6C26B',
   orange600: '#C2410C',
   orange300: '#FDBA74',
@@ -70,9 +73,9 @@ export const lightColors: ColorTokens = {
   focus: palette.blue300,
   severity: {
     info: palette.blue500,
-    warning: palette.amber600,
+    warning: palette.amber700,
     urgent: palette.orange600,
-    emergency: palette.red500,
+    emergency: palette.red600,
   },
 };
 

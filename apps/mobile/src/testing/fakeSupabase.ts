@@ -116,6 +116,7 @@ type DbError = { code: string; message: string; status?: number };
 
 /** Default role permissions for posts (seed role templates). */
 const MEMBER_PERMISSIONS = [
+  'alerts.view',
   'announcements.view',
   'posts.view',
   'posts.create',
@@ -126,7 +127,7 @@ const MEMBER_PERMISSIONS = [
   'comments.delete_own',
 ];
 const MODERATION = ['posts.moderate', 'comments.moderate'];
-const MANAGEMENT = ['announcements.create', 'announcements.manage'];
+const MANAGEMENT = ['alerts.create', 'alerts.manage', 'announcements.create', 'announcements.manage'];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
   Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
@@ -137,6 +138,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 type PostRow = ReturnType<typeof makePost>;
 type CommentRow = ReturnType<typeof makeComment>;
 type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
+type AlertRow = ReturnType<typeof makeAlert>;
+const SEVERITY_RANK: Record<string, number> = { info: 1, warning: 2, urgent: 3, emergency: 4 };
 type Filter = [column: string, value: unknown];
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
@@ -376,6 +379,118 @@ export function fakeSupabase(options: FakeOptions = {}) {
           values,
           'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
         );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'alerts') {
+      const all = () => Object.values(content).flatMap((c) => c.alerts ?? []) as AlertRow[];
+      const now = new Date().toISOString();
+      const futureExpiry = (expires: unknown) => !expires || Date.parse(String(expires)) > Date.now();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      const denied = (message: string) => ({ data: null, error: { code: '42501', message } });
+      if (op === 'insert') {
+        // alerts_insert_authorized + enforce_alert_write().
+        const communityId = String(values?.community_id);
+        const perms = permissionsIn(communityId);
+        const severity = String(values?.severity ?? 'info');
+        const status = String(values?.status ?? 'draft');
+        if (
+          !perms.includes('alerts.create') ||
+          (severity === 'emergency' && !perms.includes('alerts.manage'))
+        ) {
+          return denied('new row violates row-level security policy for table "alerts"');
+        }
+        if (status === 'published' && !futureExpiry(values?.expires_at))
+          return invalid('expires_at must be in the future when publishing');
+        const row: AlertRow = {
+          ...makeAlert(communityId, ++alertCount),
+          title: String(values?.title),
+          body: String(values?.body),
+          severity,
+          severity_rank: SEVERITY_RANK[severity]!,
+          is_emergency: severity === 'emergency',
+          expires_at: (values?.expires_at as string | null) ?? null,
+          status,
+          created_by: user,
+          published_at: status === 'published' ? now : null,
+          published_by: status === 'published' ? user : null,
+          created_at: now,
+          updated_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          alerts: [row, ...(content[communityId]?.alerts ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = all().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewAlert(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageAlert(visible)) return { data: [], error: null };
+        // enforce_alert_write(): transitions, stamps, severity and edit rules.
+        const manager = permissionsIn(visible.community_id).includes('alerts.manage');
+        if (visible.status === 'archived') return denied('archived alerts cannot be modified');
+        const next = { ...visible, ...values } as AlertRow;
+        if (next.severity !== visible.severity) {
+          if (
+            !manager &&
+            (visible.status !== 'draft' || next.severity === 'emergency' || visible.severity === 'emergency')
+          )
+            return denied("changing this alert's severity requires alerts.manage");
+          next.severity_rank = SEVERITY_RANK[next.severity]!;
+          next.is_emergency = next.severity === 'emergency';
+        }
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'cancelled'],
+            published: ['cancelled', 'expired'],
+            cancelled: ['archived'],
+            expired: ['archived'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid alert transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (next.severity === 'emergency' && !manager)
+              return denied('publishing an emergency alert requires alerts.manage');
+            if (!futureExpiry(next.expires_at))
+              return invalid('expires_at must be in the future when publishing');
+            next.published_at = now;
+            next.published_by = user;
+          }
+          if (next.status === 'cancelled') next.cancelled_at = now;
+          if (next.status === 'expired') next.expired_at = now;
+          if (next.status === 'archived') next.archived_at = now;
+        }
+        if (
+          next.cancellation_reason !== visible.cancellation_reason &&
+          !(next.status === 'cancelled' && visible.status !== 'cancelled')
+        )
+          return invalid('a cancellation reason can only be given when cancelling');
+        const edited = ['title', 'body', 'severity', 'expires_at'].some(
+          (k) =>
+            k in (values ?? {}) &&
+            (values as Record<string, unknown>)[k] !== (visible as Record<string, unknown>)[k],
+        );
+        if (edited) {
+          if (
+            !['draft', 'published'].includes(visible.status) ||
+            !['draft', 'published'].includes(next.status)
+          )
+            return denied('only draft or published alerts can be edited');
+          if (
+            next.status === 'published' &&
+            next.expires_at !== visible.expires_at &&
+            !futureExpiry(next.expires_at)
+          )
+            return invalid('expires_at must be in the future; use status = expired to end an alert now');
+          if (visible.status === 'published') next.edited_at = now;
+        }
+        next.updated_at = now;
+        Object.assign(visible, next);
         return { data: [pick(visible, columns)], error: null };
       }
     }
@@ -778,6 +893,20 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   };
+  let alertCount = 500;
+  /** private.can_view_alert_row(): drafts → manage, or own with create; otherwise view or manage. */
+  const canViewAlert = (row: AlertRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'draft') {
+      return perms.includes('alerts.manage') || (row.created_by === me() && perms.includes('alerts.create'));
+    }
+    return perms.includes('alerts.view') || perms.includes('alerts.manage');
+  };
+  /** private.can_manage_alert_row(): manage any; your own with create. */
+  const canManageAlert = (row: AlertRow) => {
+    const perms = permissionsIn(row.community_id);
+    return perms.includes('alerts.manage') || (row.created_by === me() && perms.includes('alerts.create'));
+  };
   let announcementCount = 500;
   /** private.can_view_announcement_row(): published/archived → view or manage; else manage, or own with create. */
   const canViewAnnouncement = (row: AnnouncementRow) => {
@@ -849,11 +978,42 @@ export function fakeSupabase(options: FakeOptions = {}) {
       return { data: null, error: failure };
     }
     const CONTENT_RPCS: Record<string, keyof FakeContent> = {
-      list_active_alerts: 'alerts',
       list_upcoming_events: 'events',
     };
     if (name === 'my_community_permissions') {
       return { data: permissionsIn(String(args.p_community_id)), error: null };
+    }
+    if (name === 'list_active_alerts' || name === 'list_alert_history') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const active = (row: AlertRow) =>
+        row.status === 'published' && (!row.expires_at || Date.parse(row.expires_at) > now);
+      const rank = (row: AlertRow) => SEVERITY_RANK[row.severity] ?? row.severity_rank;
+      const all = ((content[String(args.p_community_id)]?.alerts ?? []) as AlertRow[]).filter(canViewAlert);
+      const newest = (a: string | null, b: string | null, aId: string, bId: string) =>
+        a === b ? bId.localeCompare(aId) : String(b).localeCompare(String(a));
+      let rows: Record<string, unknown>[];
+      if (name === 'list_active_alerts') {
+        // Published, not expired; emergencies first (severity rank), then newest.
+        rows = all
+          .filter(active)
+          .sort((a, b) => rank(b) - rank(a) || newest(a.published_at, b.published_at, a.id, b.id))
+          .map((row) => ({ ...row, severity_rank: rank(row) }));
+      } else {
+        const statuses = (args.p_statuses as string[] | undefined) ?? [
+          'published',
+          'expired',
+          'cancelled',
+          'archived',
+        ];
+        rows = all
+          .filter((row) => statuses.includes(row.status))
+          .map((row) => ({ ...row, is_active: active(row), sort_at: row.published_at ?? row.created_at }))
+          .sort((a, b) => newest(a.sort_at, b.sort_at, a.id, b.id));
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return { data: rows.slice(after, after + Number(args.p_limit ?? 20)), error: null };
     }
     if (name === 'list_current_announcements' || name === 'list_announcement_history') {
       if (offline) return { data: null, error: OFFLINE };
@@ -1263,10 +1423,18 @@ export const makeAlert = (communityId: string, n: number, overrides: Record<stri
   severity: 'warning',
   severity_rank: 2,
   is_emergency: false,
-  published_at: at(-n),
-  published_by: null,
-  expires_at: null,
-  edited_at: null,
+  status: 'published',
+  created_by: null as string | null,
+  created_at: at(-n - 30),
+  published_at: at(-n) as string | null,
+  published_by: null as string | null,
+  expires_at: null as string | null,
+  expired_at: null as string | null,
+  cancelled_at: null as string | null,
+  cancellation_reason: null as string | null,
+  archived_at: null as string | null,
+  edited_at: null as string | null,
+  updated_at: at(-n),
   ...overrides,
 });
 

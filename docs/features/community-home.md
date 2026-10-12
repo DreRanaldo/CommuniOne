@@ -6,7 +6,8 @@ community is, what needs attention now, and the way into everything else.
 - **Screen:** `apps/mobile/src/features/communities/screens/CommunityHomeScreen.tsx`
 - **Data:** `apps/mobile/src/features/home/useCommunityHome.ts`
 - **Components:** `apps/mobile/src/features/home/components/`
-  - `CommunityHeader`, `AlertCard`, `AnnouncementCard`, `EventCard`, `PostCard`
+  - `CommunityHeader`, `EventCard`, `PostCard`; alerts use `AlertCard` from
+    `features/alerts` (RN-10) and announcements `AnnouncementItem` (RN-09)
   - `HomeSection`, a generic section handling items, empty and error states
   - `QuickActions`
   - `SectionHeader` (shared, in `src/components/`)
@@ -28,8 +29,9 @@ community is, what needs attention now, and the way into everything else.
 
 - The page is a summary, not a feed: each section shows a few items and a
   "See all" link to its section.
-- Emergency and urgent alerts are coloured by severity and announced to screen
-  readers (`accessibilityRole="alert"`).
+- Alerts show their severity with an icon and label, not colour alone. An
+  active emergency is a solid emergency-coloured block announced to screen
+  readers; tapping an alert opens its detail (RN-10, see [`alerts-app.md`](alerts-app.md)).
 - Important announcements are highlighted.
 - A post by a deleted account shows "Deleted User".
 
@@ -64,8 +66,8 @@ community is, what needs attention now, and the way into everything else.
 ## Known limitations
 
 - "See all recent activity" and the Feed shortcut open the feed (RN-07);
-  announcements open their own screens (RN-09). Alerts, events, documents and
-  members are placeholders until their stages are built.
+  announcements (RN-09) and alerts (RN-10) open their own screens. Events,
+  documents and members are placeholders until their stages are built.
 - Posts on the home show `author_display_name` only. Uploaded avatars are not
   in the feed functions yet (see `profile.md`).
 - No offline cache: after an app restart without a network, the home shows the

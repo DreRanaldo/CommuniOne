@@ -45,6 +45,12 @@ export type CommunityStackParamList = {
   AnnouncementDetail: { announcementId: string };
   /** New announcement, or edit one (`announcementId`, loaded from the server). */
   AnnouncementEditor: { announcementId?: string } | undefined;
+  /** The current community's alerts (active, history, drafts). */
+  Alerts: undefined;
+  /** One alert, read from the server. */
+  AlertDetail: { alertId: string };
+  /** New alert, or edit one (`alertId`, loaded from the server). */
+  AlertEditor: { alertId?: string } | undefined;
   /** Write a post, or edit one (`postId`, loaded from the server). */
   PostEditor: { postId?: string } | undefined;
 };

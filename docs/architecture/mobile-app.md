@@ -92,6 +92,7 @@ the community home (RN-06: see [`../features/community-home.md`](../features/com
 the feed (RN-07: see [`../features/feed.md`](../features/feed.md)),
 comments, reactions and moderation (RN-08: see [`../features/comments-and-reactions.md`](../features/comments-and-reactions.md)),
 announcements (RN-09: see [`../features/announcements-app.md`](../features/announcements-app.md)),
+alerts (RN-10: see [`../features/alerts-app.md`](../features/alerts-app.md)),
 creating and joining communities (RN-05: see [`../features/create-and-join.md`](../features/create-and-join.md)), and
 the profile and account screens (RN-03: see [`../features/profile.md`](../features/profile.md)).
 Placeholders: Notifications, community sections.
@@ -99,7 +100,8 @@ Placeholders: Notifications, community sections.
 ## Design system
 
 - **Tokens** (`src/theme/tokens.ts`): a light and a dark palette (calm neutrals,
-  one confident blue for actions, a severity scale for alerts), a 4-point
+  one confident blue for actions, a severity scale for alerts whose colours all
+  meet WCAG AA as text, checked by `src/theme/contrast.test.ts`), a 4-point
   spacing scale, radii, a 7-step type scale on system fonts, and a 48 pt minimum
   touch target.
 - **Usage:** components read tokens through `useTheme()`; screens style with
@@ -140,7 +142,7 @@ Placeholders: Notifications, community sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 247 tests: announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 284 tests: alerts (22 + 5 rules + 10 colour contrast), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |

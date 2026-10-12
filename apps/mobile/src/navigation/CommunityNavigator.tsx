@@ -5,6 +5,9 @@ import { CommunitySwitcherButton } from '@/features/communities/components/Commu
 import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { ChooseCommunityScreen } from '@/features/communities/screens/ChooseCommunityScreen';
 import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHomeScreen';
+import { AlertDetailScreen } from '@/features/alerts/AlertDetailScreen';
+import { AlertEditorScreen } from '@/features/alerts/AlertEditorScreen';
+import { AlertsScreen } from '@/features/alerts/AlertsScreen';
 import { AnnouncementDetailScreen } from '@/features/announcements/AnnouncementDetailScreen';
 import { AnnouncementEditorScreen } from '@/features/announcements/AnnouncementEditorScreen';
 import { AnnouncementsScreen } from '@/features/announcements/AnnouncementsScreen';
@@ -63,6 +66,13 @@ function CommunityStack({ community }: { community: MyCommunity }) {
       />
       <Stack.Screen name="Feed" component={FeedScreen} options={{ title: 'Feed' }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />
+      <Stack.Screen name="Alerts" component={AlertsScreen} options={{ title: 'Alerts' }} />
+      <Stack.Screen name="AlertDetail" component={AlertDetailScreen} options={{ title: 'Alert' }} />
+      <Stack.Screen
+        name="AlertEditor"
+        component={AlertEditorScreen}
+        options={{ title: 'New alert', presentation: 'modal' }}
+      />
       <Stack.Screen
         name="Announcements"
         component={AnnouncementsScreen}
