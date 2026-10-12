@@ -6,7 +6,8 @@ community is, what needs attention now, and the way into everything else.
 - **Screen:** `apps/mobile/src/features/communities/screens/CommunityHomeScreen.tsx`
 - **Data:** `apps/mobile/src/features/home/useCommunityHome.ts`
 - **Components:** `apps/mobile/src/features/home/components/`
-  - `CommunityHeader`, `AlertCard`, `AnnouncementCard`, `EventCard`, `PostCard`
+  - `CommunityHeader`, `EventCard`, `PostCard`; alerts use `AlertCard` from
+    `features/alerts` (RN-10) and announcements `AnnouncementItem` (RN-09)
   - `HomeSection`, a generic section handling items, empty and error states
   - `QuickActions`
   - `SectionHeader` (shared, in `src/components/`)
@@ -22,14 +23,15 @@ community is, what needs attention now, and the way into everything else.
 | – | Community header: cover, logo, name, type, your role, description | `my_communities()` (current community) + `communities.get` | |
 | 1 | **Alerts** | `alerts.listActive` | Emergencies first (severity rank), then newest; up to 5 |
 | 2 | **Announcements** | `announcements.listCurrent` | Important first, then newest; up to 3 |
-| 3 | **Upcoming events** | `events.listUpcoming` | Soonest first, in the event's time zone; up to 3 |
+| 3 | **Upcoming events** | `events.listUpcoming` | Soonest first, in the event's time zone; up to 3; each opens the event detail (RN-11) |
 | 4 | **Recent activity** | `posts.list` | Newest 3 posts |
 | – | **Explore**: Feed, Announcements, Alerts, Events, Documents, Members | | |
 
 - The page is a summary, not a feed: each section shows a few items and a
   "See all" link to its section.
-- Emergency and urgent alerts are coloured by severity and announced to screen
-  readers (`accessibilityRole="alert"`).
+- Alerts show their severity with an icon and label, not colour alone. An
+  active emergency is a solid emergency-coloured block announced to screen
+  readers; tapping an alert opens its detail (RN-10, see [`alerts-app.md`](alerts-app.md)).
 - Important announcements are highlighted.
 - A post by a deleted account shows "Deleted User".
 
@@ -63,8 +65,9 @@ community is, what needs attention now, and the way into everything else.
 
 ## Known limitations
 
-- "See all" and the Explore shortcuts open placeholder screens until the feed,
-  announcements, alerts, events, documents and members stages are built.
+- "See all recent activity" and the Feed shortcut open the feed (RN-07);
+  announcements (RN-09), alerts (RN-10) and events (RN-11) open their own
+  screens. Documents and members are placeholders until their stages are built.
 - Posts on the home show `author_display_name` only. Uploaded avatars are not
   in the feed functions yet (see `profile.md`).
 - No offline cache: after an app restart without a network, the home shows the

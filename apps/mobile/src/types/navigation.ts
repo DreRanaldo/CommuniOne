@@ -1,5 +1,6 @@
 // Route names and parameters for every navigator (typed navigation).
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { FeedPost } from '@communione/services';
 
 /** Signed-out flow. */
 export type AuthStackParamList = {
@@ -31,6 +32,33 @@ export type CommunitySection = 'feed' | 'announcements' | 'alerts' | 'events' | 
 export type CommunityStackParamList = {
   CommunityHome: undefined;
   CommunitySection: { section: CommunitySection };
+  /** The current community's feed. */
+  Feed: undefined;
+  /**
+   * A post with its comments. `post` is the feed's copy, shown at once; the
+   * post is re-read from the server (visibility, current text) on opening.
+   */
+  PostDetail: { postId: string; post?: FeedPost };
+  /** The current community's announcements (current, past, drafts). */
+  Announcements: undefined;
+  /** One announcement, read from the server. */
+  AnnouncementDetail: { announcementId: string };
+  /** New announcement, or edit one (`announcementId`, loaded from the server). */
+  AnnouncementEditor: { announcementId?: string } | undefined;
+  /** The current community's events (upcoming, past, drafts). */
+  Events: undefined;
+  /** One event with its attendance, read from the server. */
+  EventDetail: { eventId: string };
+  /** New event, or edit one (`eventId`, loaded from the server). */
+  EventEditor: { eventId?: string } | undefined;
+  /** The current community's alerts (active, history, drafts). */
+  Alerts: undefined;
+  /** One alert, read from the server. */
+  AlertDetail: { alertId: string };
+  /** New alert, or edit one (`alertId`, loaded from the server). */
+  AlertEditor: { alertId?: string } | undefined;
+  /** Write a post, or edit one (`postId`, loaded from the server). */
+  PostEditor: { postId?: string } | undefined;
 };
 
 /** Top level: exactly one of the Auth / App branches exists at a time. */

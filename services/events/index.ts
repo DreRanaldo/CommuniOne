@@ -157,6 +157,37 @@ export function eventsService(ctx: ServiceContext) {
       });
     },
 
+    /** Events that are over (completed, or ended), newest first. */
+    listPast(input: { communityId: string } & PageRequest): Promise<Page<CommunityEvent>> {
+      return ctx.run('events.listPast', async () => {
+        await ctx.requireUserId();
+        v.only<typeof input>(input, 'input', ['communityId', 'limit', 'cursor']);
+        const limit = pageSize(input.limit);
+        const c = decodeCursor(input.cursor, ['timestamp', 'uuid']);
+        const rows = unwrap(await db.rpc('list_past_events', {
+          p_community_id: v.uuid(input.communityId, 'communityId'),
+          p_limit: limit,
+          p_cursor_starts_at: (c?.[0] as string | undefined) ?? undefined,
+          p_cursor_id: (c?.[1] as string | undefined) ?? undefined,
+        }));
+        return toPage(rows, limit, (last) => [last.starts_at, last.id]);
+      });
+    },
+
+    /**
+     * The organizer's display name: the event's creator, read through the
+     * profiles RLS (co-members with members.view). null when the account was
+     * deleted (created_by is NULL), has no name, or is not visible to the caller.
+     */
+    organizerName(createdBy: string | null): Promise<string | null> {
+      return ctx.run('events.organizerName', async () => {
+        await ctx.requireUserId();
+        if (createdBy === null) return null;
+        const row = unwrap(await db.from('profiles').select('display_name').eq('id', v.uuid(createdBy, 'createdBy')).maybeSingle());
+        return row?.display_name ?? null;
+      });
+    },
+
     /** Calendar / history window. */
     list(input: { communityId: string; from?: string | Date; to?: string | Date; statuses?: (typeof EVENT_STATUSES)[number][] } & PageRequest): Promise<Page<CommunityEvent>> {
       return ctx.run('events.list', async () => {

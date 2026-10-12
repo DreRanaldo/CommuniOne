@@ -100,7 +100,9 @@ describe('correct community', () => {
     expect(within(screen.getByTestId('home-alerts')).getByText('Water main break')).toBeOnTheScreen();
     expect(screen.getByLabelText(/^Emergency alert: Water main break/)).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-announcements')).getByText('Annual meeting')).toBeOnTheScreen();
-    expect(within(screen.getByTestId('home-announcements')).getByText('Important')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-announcements')).getByText('IMPORTANT ANNOUNCEMENT'),
+    ).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-events')).getByText('Spring clean-up')).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-events')).getByText('Clubhouse')).toBeOnTheScreen();
     expect(within(screen.getByTestId('home-posts')).getByText('Lost cat near the pond')).toBeOnTheScreen();
@@ -313,7 +315,7 @@ describe('content refresh', () => {
   test('coming back to the home refreshes it', async () => {
     const { user, content } = await home();
     await user.press(screen.getByRole('button', { name: 'See all upcoming events' }));
-    await screen.findByText('Coming soon');
+    await screen.findByTestId('events-screen');
     content[M]!.events = [makeEvent(M, 5, { title: 'Summer barbecue' })];
     await user.press(screen.getByRole('button', { name: /^Home/ }));
     expect(await screen.findByText('Summer barbecue')).toBeOnTheScreen();

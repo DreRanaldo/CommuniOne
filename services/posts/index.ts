@@ -92,11 +92,16 @@ export function postsService(ctx: ServiceContext) {
         const target = postId ? { column: 'post_id', id: postId } as const : { column: 'comment_id', id: commentId as string } as const;
         const existing = unwrap(await db.from('reactions').select('id')
           .eq(target.column, target.id).eq('user_id', userId).maybeSingle());
+        const change = () => db.from('reactions').update({ reaction_type: type }).eq(target.column, target.id).eq('user_id', userId);
         if (existing) {
-          unwrap(await db.from('reactions').update({ reaction_type: type }).eq('id', existing.id));
+          unwrap(await change());
         } else {
           // community_id is derived from the target by trigger.
-          unwrap(await db.from('reactions').insert({ [target.column]: target.id, reaction_type: type } as unknown as TablesInsert<'reactions'>));
+          const inserted = await db.from('reactions').insert({ [target.column]: target.id, reaction_type: type } as unknown as TablesInsert<'reactions'>);
+          // A concurrent request created the reaction first (one per user and
+          // target, unique index): this one becomes a change of type instead.
+          if (inserted.error?.code === '23505') unwrap(await change());
+          else unwrap(inserted);
         }
       });
     },

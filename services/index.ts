@@ -69,7 +69,17 @@ export {
   type Community, type CommunityImageKind, type CommunityImages, type CommunityType, type MyCommunity,
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
-export type { ActiveAlert } from './alerts/index.ts';
-export type { CurrentAnnouncement } from './announcements/index.ts';
-export type { CommunityEvent } from './events/index.ts';
-export type { FeedPost } from './posts/index.ts';
+export {
+  ALERT_SEVERITIES, ALERT_STATUSES,
+  type ActiveAlert, type Alert, type AlertHistoryItem, type AlertInput, type AlertPatch,
+} from './alerts/index.ts';
+export {
+  ANNOUNCEMENT_PRIORITIES, ANNOUNCEMENT_STATUSES,
+  type Announcement, type AnnouncementHistoryItem, type CurrentAnnouncement,
+} from './announcements/index.ts';
+export {
+  EVENT_STATUSES, RSVP_STATUSES,
+  type Attendance, type CommunityEvent, type EventInput, type EventPatch,
+} from './events/index.ts';
+export type { FeedPost, Post } from './posts/index.ts';
+export type { Comment, ThreadComment } from './comments/index.ts';

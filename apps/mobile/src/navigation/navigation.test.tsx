@@ -57,7 +57,7 @@ describe('navigation', () => {
     // Community navigation.
     await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
     expect(await screen.findByTestId('community-home-screen')).toBeOnTheScreen();
-    await user.press(screen.getByRole('button', { name: 'Events' }));
+    await user.press(screen.getByRole('button', { name: 'Documents' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
   });
 

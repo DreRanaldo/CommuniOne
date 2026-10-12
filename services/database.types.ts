@@ -1026,6 +1026,36 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"list_past_events":
+{ Args: { "p_community_id": string,"p_cursor_id"?: string,"p_cursor_starts_at"?: string,"p_limit"?: number }; Returns: {
+              "cancellation_reason": string | null,
+"cancelled_at": string | null,
+"cancelled_by": string | null,
+"capacity": number | null,
+"community_id": string,
+"completed_at": string | null,
+"created_at": string,
+"created_by": string | null,
+"description": string | null,
+"edited_at": string | null,
+"ends_at": string,
+"id": string,
+"location_text": string | null,
+"published_at": string | null,
+"rsvp_changed_at": string | null,
+"starts_at": string,
+"status": string,
+"timezone": string,
+"title": string,
+"updated_at": string,
+"updated_by_user_id": string | null
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "events"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "list_post_comments":
 { Args: { "p_cursor_created_at"?: string,"p_cursor_id"?: string,"p_limit"?: number,"p_parent_comment_id"?: string,"p_post_id": string }; Returns: {
               "author_avatar_url": string,"author_display_name": string,"author_user_id": string,"body": string,"created_at": string,"depth": number,"edited_at": string,"id": string,"my_reaction_type": string,"parent_comment_id": string,"post_id": string,"reaction_count": number,"reply_count": number,"status": string

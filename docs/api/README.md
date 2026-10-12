@@ -171,7 +171,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `edit(postId, body)` | Edit own published post | `posts.edit_own` | → `Post` | `FORBIDDEN`, `NOT_FOUND` | Stamps `edited_at` |
 | `delete(postId)` | Soft-delete own (or moderated) post | `posts.delete_own` / `posts.moderate` | → `Post` | as above | – |
 | `hide(postId, reason?)` / `restore(postId)` | Moderate | `posts.moderate` | → `Post` | as above | Audited (`post.moderated`) |
-| `react(input)` / `unreact(input)` | Add/change/remove my reaction | `posts.view` | `{ postId \| commentId, type }` | `FORBIDDEN` | – |
+| `react(input)` / `unreact(input)` | Add/change/remove my reaction (one per user and target) | `posts.view` | `{ postId \| commentId, type: 'like' \| 'love' \| 'celebrate' \| 'support' \| 'laugh' \| 'sad' }` | `FORBIDDEN` (hidden or invisible target), `VALIDATION` (type) | Concurrent duplicate requests are safe: a lost insert race (`23505`) becomes a type change (RN-08) |
 | `reactionSummary(input)` | Counts for ≤100 posts + ≤100 comments in **one** call | `posts.view` | `{ postIds?, commentIds? }` → rows | – | – |
 
 ### comments
@@ -217,6 +217,8 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `cancelRsvp(id)` | Remove my RSVP | as rsvp | → `boolean` | – | Next waitlisted person promoted and notified |
 | `attendance(id)` | Totals, places left, my status / queue position | `events.view` | → `Attendance` | `NOT_FOUND` | – |
 | `listUpcoming(input)` / `list(input)` | Upcoming, or a calendar window | `events.view` | `{ communityId, from?, to?, statuses?, limit?, cursor? }` → `Page<Event>` | – | – |
+| `listPast(input)` | Completed or ended events, newest first (RN-11) | `events.view` | `{ communityId, limit?, cursor? }` → `Page<Event>` | – | – |
+| `organizerName(createdBy)` | The organizer's display name (RN-11) | profile visibility (co-members with `members.view`) | `string \| null` → `string \| null` (null: deleted account, no name, or not visible) | – | – |
 
 ### notifications
 

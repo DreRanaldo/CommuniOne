@@ -63,13 +63,18 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** Permission keys by community id; otherwise derived from the user's roles there. */
+  permissions?: Record<string, string[]>;
 }
 
 export interface FakeContent {
   alerts?: Record<string, unknown>[];
   announcements?: Record<string, unknown>[];
   events?: Record<string, unknown>[];
+  /** Event RSVPs (see makeRsvp). */
+  rsvps?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
+  comments?: Record<string, unknown>[];
 }
 
 /**
@@ -110,6 +115,43 @@ export interface ProfileRow {
 }
 
 type DbError = { code: string; message: string; status?: number };
+
+/** Default role permissions for posts (seed role templates). */
+const MEMBER_PERMISSIONS = [
+  'alerts.view',
+  'announcements.view',
+  'events.view',
+  'posts.view',
+  'posts.create',
+  'posts.edit_own',
+  'posts.delete_own',
+  'comments.create',
+  'comments.edit_own',
+  'comments.delete_own',
+];
+const MODERATION = ['posts.moderate', 'comments.moderate'];
+const MANAGEMENT = [
+  'alerts.create',
+  'alerts.manage',
+  'announcements.create',
+  'announcements.manage',
+  'events.create',
+  'events.manage',
+];
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
+  Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Member: MEMBER_PERMISSIONS,
+};
+
+type PostRow = ReturnType<typeof makePost>;
+type CommentRow = ReturnType<typeof makeComment>;
+type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
+type AlertRow = ReturnType<typeof makeAlert>;
+type EventRow = ReturnType<typeof makeEvent>;
+type RsvpRow = ReturnType<typeof makeRsvp>;
+const SEVERITY_RANK: Record<string, number> = { info: 1, warning: 2, urgent: 3, emergency: 4 };
 type Filter = [column: string, value: unknown];
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
@@ -298,6 +340,483 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: own.map((row) => pick(row, columns)), error: null };
       }
     }
+    if (table === 'posts') {
+      const all = Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
+      const byId = (id: unknown) => all.find((row) => row.id === id);
+      if (op === 'insert') {
+        const communityId = String(values?.community_id);
+        // RLS: posts.create in that community; authorship always comes from the session.
+        if (!permissionsIn(communityId).includes('posts.create')) {
+          return {
+            data: null,
+            error: { code: '42501', message: 'new row violates row-level security policy for table "posts"' },
+          };
+        }
+        const latest = Math.max(Date.now(), ...all.map((row) => Date.parse(row.created_at) + 1000));
+        const row: PostRow = {
+          ...makePost(communityId, 0),
+          id: `d4d4d4d4-0000-4000-8000-${String(++postCount).padStart(12, '0')}`,
+          author_user_id: user,
+          author_display_name: profiles.get(user)?.display_name ?? null,
+          body: String(values?.body),
+          reaction_count: 0,
+          created_at: new Date(latest).toISOString(),
+          updated_at: new Date(latest).toISOString(),
+        };
+        content[communityId] = {
+          ...content[communityId],
+          posts: [row, ...(content[communityId]?.posts ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = byId(filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewPost(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible) return { data: [], error: null };
+        const perms = permissionsIn(visible.community_id);
+        const own = visible.author_user_id === user;
+        const allowed =
+          values?.status === 'deleted'
+            ? (own && perms.includes('posts.delete_own')) || perms.includes('posts.moderate')
+            : 'body' in (values ?? {})
+              ? own && perms.includes('posts.edit_own') && visible.status === 'published'
+              : perms.includes('posts.moderate');
+        if (!allowed) return { data: [], error: null };
+        Object.assign(
+          visible,
+          values,
+          'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
+        );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'events') {
+      const now = new Date().toISOString();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      const denied = (message: string) => ({ data: null, error: { code: '42501', message } });
+      if (op === 'insert') {
+        // events_insert_authorized + enforce_event_write().
+        const communityId = String(values?.community_id);
+        const status = String(values?.status ?? 'draft');
+        if (!permissionsIn(communityId).includes('events.create'))
+          return denied('new row violates row-level security policy for table "events"');
+        if (Date.parse(String(values?.ends_at)) < Date.parse(String(values?.starts_at)))
+          return { data: null, error: { code: '23514', message: 'events_time_order' } };
+        if (status === 'published' && Date.parse(String(values?.ends_at)) <= Date.now())
+          return invalid('an event that has already ended cannot be published');
+        const row: EventRow = {
+          ...makeEvent(communityId, ++eventCount),
+          title: String(values?.title),
+          description: (values?.description as string | null) ?? null,
+          location_text: (values?.location_text as string | null) ?? null,
+          starts_at: String(values?.starts_at),
+          ends_at: String(values?.ends_at),
+          timezone: (values?.timezone as string | undefined) ?? 'UTC',
+          capacity: (values?.capacity as number | null) ?? null,
+          status,
+          created_by: user,
+          published_at: status === 'published' ? now : null,
+          created_at: now,
+          updated_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          events: [...(content[communityId]?.events ?? []), row],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = allEvents().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewEvent(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageEvent(visible)) return { data: [], error: null };
+        const next = { ...visible, ...values } as EventRow;
+        const going = rsvpsOf(visible).filter((r) => r.status === 'going').length;
+        if (next.capacity !== visible.capacity && next.capacity !== null && next.capacity < going)
+          return invalid(
+            `capacity (${next.capacity}) cannot be lower than the number of people going (${going})`,
+          );
+        if (visible.status === 'cancelled' || visible.status === 'completed')
+          return denied(`${visible.status} events cannot be modified`);
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'cancelled'],
+            published: ['cancelled', 'completed'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid event transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (Date.parse(next.ends_at) <= Date.now())
+              return invalid('an event that has already ended cannot be published');
+            next.published_at = now;
+          }
+          if (next.status === 'cancelled') next.cancelled_at = now;
+          if (next.status === 'completed') {
+            if (Date.parse(visible.starts_at) > Date.now())
+              return invalid('an event cannot be completed before it starts');
+            next.completed_at = now;
+          }
+        }
+        if (
+          next.cancellation_reason !== visible.cancellation_reason &&
+          !(next.status === 'cancelled' && visible.status !== 'cancelled')
+        )
+          return invalid('a cancellation reason can only be given when cancelling');
+        const edited = [
+          'title',
+          'description',
+          'location_text',
+          'starts_at',
+          'ends_at',
+          'timezone',
+          'capacity',
+        ].some(
+          (k) =>
+            k in (values ?? {}) &&
+            (values as Record<string, unknown>)[k] !== (visible as Record<string, unknown>)[k],
+        );
+        if (edited) {
+          if (!['draft', 'published'].includes(next.status))
+            return denied('only draft or published events can be edited');
+          if (Date.parse(next.ends_at) < Date.parse(next.starts_at))
+            return { data: null, error: { code: '23514', message: 'events_time_order' } };
+          if (visible.status === 'published') next.edited_at = now;
+        }
+        next.updated_at = now;
+        Object.assign(visible, next);
+        promoteWaitlist(visible); // on_event_capacity_change()
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'alerts') {
+      const all = () => Object.values(content).flatMap((c) => c.alerts ?? []) as AlertRow[];
+      const now = new Date().toISOString();
+      const futureExpiry = (expires: unknown) => !expires || Date.parse(String(expires)) > Date.now();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      const denied = (message: string) => ({ data: null, error: { code: '42501', message } });
+      if (op === 'insert') {
+        // alerts_insert_authorized + enforce_alert_write().
+        const communityId = String(values?.community_id);
+        const perms = permissionsIn(communityId);
+        const severity = String(values?.severity ?? 'info');
+        const status = String(values?.status ?? 'draft');
+        if (
+          !perms.includes('alerts.create') ||
+          (severity === 'emergency' && !perms.includes('alerts.manage'))
+        ) {
+          return denied('new row violates row-level security policy for table "alerts"');
+        }
+        if (status === 'published' && !futureExpiry(values?.expires_at))
+          return invalid('expires_at must be in the future when publishing');
+        const row: AlertRow = {
+          ...makeAlert(communityId, ++alertCount),
+          title: String(values?.title),
+          body: String(values?.body),
+          severity,
+          severity_rank: SEVERITY_RANK[severity]!,
+          is_emergency: severity === 'emergency',
+          expires_at: (values?.expires_at as string | null) ?? null,
+          status,
+          created_by: user,
+          published_at: status === 'published' ? now : null,
+          published_by: status === 'published' ? user : null,
+          created_at: now,
+          updated_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          alerts: [row, ...(content[communityId]?.alerts ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = all().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewAlert(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageAlert(visible)) return { data: [], error: null };
+        // enforce_alert_write(): transitions, stamps, severity and edit rules.
+        const manager = permissionsIn(visible.community_id).includes('alerts.manage');
+        if (visible.status === 'archived') return denied('archived alerts cannot be modified');
+        const next = { ...visible, ...values } as AlertRow;
+        if (next.severity !== visible.severity) {
+          if (
+            !manager &&
+            (visible.status !== 'draft' || next.severity === 'emergency' || visible.severity === 'emergency')
+          )
+            return denied("changing this alert's severity requires alerts.manage");
+          next.severity_rank = SEVERITY_RANK[next.severity]!;
+          next.is_emergency = next.severity === 'emergency';
+        }
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'cancelled'],
+            published: ['cancelled', 'expired'],
+            cancelled: ['archived'],
+            expired: ['archived'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid alert transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (next.severity === 'emergency' && !manager)
+              return denied('publishing an emergency alert requires alerts.manage');
+            if (!futureExpiry(next.expires_at))
+              return invalid('expires_at must be in the future when publishing');
+            next.published_at = now;
+            next.published_by = user;
+          }
+          if (next.status === 'cancelled') next.cancelled_at = now;
+          if (next.status === 'expired') next.expired_at = now;
+          if (next.status === 'archived') next.archived_at = now;
+        }
+        if (
+          next.cancellation_reason !== visible.cancellation_reason &&
+          !(next.status === 'cancelled' && visible.status !== 'cancelled')
+        )
+          return invalid('a cancellation reason can only be given when cancelling');
+        const edited = ['title', 'body', 'severity', 'expires_at'].some(
+          (k) =>
+            k in (values ?? {}) &&
+            (values as Record<string, unknown>)[k] !== (visible as Record<string, unknown>)[k],
+        );
+        if (edited) {
+          if (
+            !['draft', 'published'].includes(visible.status) ||
+            !['draft', 'published'].includes(next.status)
+          )
+            return denied('only draft or published alerts can be edited');
+          if (
+            next.status === 'published' &&
+            next.expires_at !== visible.expires_at &&
+            !futureExpiry(next.expires_at)
+          )
+            return invalid('expires_at must be in the future; use status = expired to end an alert now');
+          if (visible.status === 'published') next.edited_at = now;
+        }
+        next.updated_at = now;
+        Object.assign(visible, next);
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'announcements') {
+      const all = () => Object.values(content).flatMap((c) => c.announcements ?? []) as AnnouncementRow[];
+      const now = new Date().toISOString();
+      const futureExpiry = (expires: unknown) => !expires || Date.parse(String(expires)) > Date.now();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      if (op === 'insert') {
+        const communityId = String(values?.community_id);
+        const perms = permissionsIn(communityId);
+        if (!perms.includes('announcements.create') && !perms.includes('announcements.manage')) {
+          return {
+            data: null,
+            error: {
+              code: '42501',
+              message: 'new row violates row-level security policy for table "announcements"',
+            },
+          };
+        }
+        const status = String(values?.status ?? 'draft');
+        if (status === 'published' && !futureExpiry(values?.expires_at))
+          return invalid('expires_at must be in the future when publishing');
+        const row: AnnouncementRow = {
+          ...makeAnnouncement(communityId, ++announcementCount),
+          title: String(values?.title),
+          body: String(values?.body),
+          priority: String(values?.priority ?? 'normal'),
+          expires_at: (values?.expires_at as string | null) ?? null,
+          status,
+          author_user_id: user,
+          published_at: status === 'published' ? now : null,
+          created_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          announcements: [row, ...(content[communityId]?.announcements ?? [])],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = all().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewAnnouncement(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageAnnouncement(visible)) return { data: [], error: null };
+        // enforce_announcement_write(): transitions, publication stamps, edit rules.
+        if (visible.status === 'deleted')
+          return {
+            data: null,
+            error: { code: '42501', message: 'deleted announcements cannot be modified' },
+          };
+        const next = { ...visible, ...values } as AnnouncementRow;
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'deleted'],
+            published: ['archived', 'deleted'],
+            archived: ['published', 'deleted'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid announcement transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (!futureExpiry(next.expires_at))
+              return invalid('expires_at must be in the future when publishing');
+            next.published_at = now;
+            next.archived_at = null;
+          }
+          if (next.status === 'archived') next.archived_at = now;
+        }
+        const edited = ['title', 'body', 'priority', 'expires_at'].some((k) => k in (values ?? {}));
+        if (edited) {
+          if (!['draft', 'published'].includes(next.status)) {
+            return {
+              data: null,
+              error: { code: '42501', message: 'only draft or published announcements can be edited' },
+            };
+          }
+          if (visible.status === 'published' && next.status === 'published') next.edited_at = now;
+        }
+        Object.assign(visible, next);
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'comments') {
+      if (op === 'insert') {
+        // can_comment_on(): published, visible post + comments.create; a parent must be a
+        // published comment on the same post (comments trigger, 23503).
+        const post = allPosts().find((row) => row.id === values?.post_id);
+        const perms = post ? permissionsIn(post.community_id) : [];
+        if (
+          !post ||
+          post.status !== 'published' ||
+          !canViewPost(post) ||
+          !perms.includes('comments.create')
+        ) {
+          return {
+            data: null,
+            error: {
+              code: '42501',
+              message: 'new row violates row-level security policy for table "comments"',
+            },
+          };
+        }
+        const parentId = (values?.parent_comment_id as string | null | undefined) ?? null;
+        const parent = parentId ? allComments().find((row) => row.id === parentId) : undefined;
+        if (parentId && (!parent || parent.post_id !== post.id || parent.status !== 'published')) {
+          return { data: null, error: { code: '23503', message: 'parent comment not found on this post' } };
+        }
+        const latest = Math.max(Date.now(), ...allComments().map((row) => Date.parse(row.created_at) + 1000));
+        const row: CommentRow = {
+          ...makeComment(post.community_id, post.id, 0),
+          id: `f6f6f6f6-0000-4000-8000-${String(++commentCount).padStart(12, '0')}`,
+          parent_comment_id: parentId,
+          depth: parent ? parent.depth + 1 : 0,
+          author_user_id: user,
+          author_display_name: profiles.get(user)?.display_name ?? null,
+          body: String(values?.body),
+          reaction_count: 0,
+          created_at: new Date(latest).toISOString(),
+        };
+        const bucket = content[post.community_id] ?? {};
+        content[post.community_id] = { ...bucket, comments: [...(bucket.comments ?? []), row] };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = allComments().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewComment(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible) return { data: [], error: null };
+        const perms = permissionsIn(visible.community_id);
+        const own = visible.author_user_id === user;
+        const allowed =
+          values?.status === 'deleted'
+            ? (own && perms.includes('comments.delete_own')) || perms.includes('comments.moderate')
+            : 'body' in (values ?? {})
+              ? own && perms.includes('comments.edit_own') && visible.status === 'published'
+              : perms.includes('comments.moderate');
+        if (!allowed) return { data: [], error: null };
+        Object.assign(
+          visible,
+          values,
+          'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
+        );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'reactions') {
+      const column =
+        filters.some(([c]) => c === 'comment_id') || values?.comment_id ? 'comment_id' : 'post_id';
+      const targetId = String(filters.find(([c]) => c === column)?.[1] ?? values?.[column]);
+      const mine = reactions.find((r) => r.targetId === targetId && r.userId === user);
+      if (op === 'select') {
+        return {
+          data: single ? (mine ? { id: mine.id } : null) : mine ? [{ id: mine.id }] : [],
+          error: null,
+        };
+      }
+      const target = reactionTarget(targetId);
+      // can_react_to(): a published, visible target.
+      if (!target || target.row.status !== 'published' || !target.visible) {
+        return {
+          data: null,
+          error: {
+            code: '42501',
+            message: 'new row violates row-level security policy for table "reactions"',
+          },
+        };
+      }
+      const counts = typeCounts(target.row);
+      if (op === 'insert') {
+        // One reaction per user and target (unique index).
+        if (mine)
+          return {
+            data: null,
+            error: {
+              code: '23505',
+              message: 'duplicate key value violates unique constraint "reactions_one_per_user_post"',
+            },
+          };
+        const type = String(values?.reaction_type);
+        reactions.push({
+          id: `e5e5e5e5-0000-4000-8000-${String(reactions.length + 1).padStart(12, '0')}`,
+          targetId,
+          userId: user,
+          type,
+        });
+        counts[type] = (counts[type] ?? 0) + 1;
+        target.row.reaction_count = Number(target.row.reaction_count) + 1;
+        target.row.my_reaction_type = type;
+        return { data: null, error: null };
+      }
+      if (op === 'update' && mine) {
+        const type = String(values?.reaction_type);
+        counts[mine.type] = (counts[mine.type] ?? 1) - 1;
+        counts[type] = (counts[type] ?? 0) + 1;
+        mine.type = type;
+        target.row.my_reaction_type = type;
+        return { data: null, error: null };
+      }
+      if (op === 'delete' && mine) {
+        reactions.splice(reactions.indexOf(mine), 1);
+        counts[mine.type] = (counts[mine.type] ?? 1) - 1;
+        target.row.reaction_count = Number(target.row.reaction_count) - 1;
+        target.row.my_reaction_type = null;
+        return { data: null, error: null };
+      }
+      return { data: null, error: null };
+    }
     if (table === 'communities') {
       // RLS: active members read; community.update holders (Owner, Admin) write.
       const membership = (id: string) =>
@@ -368,6 +887,15 @@ export function fakeSupabase(options: FakeOptions = {}) {
       upsert(row: Record<string, unknown>) {
         op = 'upsert';
         values = row;
+        return builder;
+      },
+      insert(row: Record<string, unknown>) {
+        op = 'insert';
+        values = row;
+        return builder;
+      },
+      delete() {
+        op = 'delete';
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -450,6 +978,133 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const redemptions: { token: string; userId: string }[] = [];
   const content: Record<string, FakeContent> = { ...options.content };
   const rpcFailures = new Map<string, DbError>();
+  const reactions: { id: string; targetId: string; userId: string; type: string }[] = [];
+  let commentCount = 100;
+  const allPosts = () => Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
+  const allComments = () => Object.values(content).flatMap((c) => c.comments ?? []) as CommentRow[];
+  /** Other people's reactions per type (seeded as likes from reaction_count) plus the user's own. */
+  const reactionCounts = new Map<string, Record<string, number>>();
+  const typeCounts = (row: { id: string; reaction_count: number; my_reaction_type: string | null }) => {
+    let counts = reactionCounts.get(row.id);
+    if (!counts) {
+      const others = Number(row.reaction_count) - (row.my_reaction_type ? 1 : 0);
+      counts = others > 0 ? { like: others } : {};
+      if (row.my_reaction_type) counts[row.my_reaction_type] = (counts[row.my_reaction_type] ?? 0) + 1;
+      reactionCounts.set(row.id, counts);
+    }
+    return counts;
+  };
+  let postCount = 100;
+  /** The user's permission keys in a community (active membership only), like my_community_permissions(). */
+  const permissionsIn = (communityId: string): string[] => {
+    const membership = communities.find(
+      (c) =>
+        (c as { community_id: string }).community_id === communityId &&
+        (c as { membership_status: string }).membership_status === 'active',
+    ) as { role_names: string[] } | undefined;
+    if (!membership || !me()) return [];
+    if (options.permissions?.[communityId]) return options.permissions[communityId]!;
+    return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
+  };
+  let eventCount = 500;
+  const allEvents = () => Object.values(content).flatMap((c) => c.events ?? []) as EventRow[];
+  /** private.can_view_event_row(): drafts → manage, or own with create; otherwise view or manage. */
+  const canViewEvent = (row: EventRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'draft') {
+      return perms.includes('events.manage') || (row.created_by === me() && perms.includes('events.create'));
+    }
+    return perms.includes('events.view') || perms.includes('events.manage');
+  };
+  /** private.can_manage_event_row(): manage any; your own with create. */
+  const canManageEvent = (row: EventRow) => {
+    const perms = permissionsIn(row.community_id);
+    return perms.includes('events.manage') || (row.created_by === me() && perms.includes('events.create'));
+  };
+  /** private.can_rsvp(): published, not started, events.view in its community. */
+  const canRsvp = (row: EventRow) =>
+    row.status === 'published' &&
+    Date.parse(row.starts_at) > Date.now() &&
+    permissionsIn(row.community_id).includes('events.view');
+  const rsvpsOf = (event: EventRow) =>
+    ((content[event.community_id]?.rsvps ?? []) as RsvpRow[]).filter((r) => r.event_id === event.id);
+  let rsvpClock = 0;
+  /** FIFO promotion while places are free (apply_rsvp_capacity / on_event_capacity_change). */
+  const promoteWaitlist = (event: EventRow) => {
+    const rows = rsvpsOf(event);
+    const waiting = rows
+      .filter((r) => r.status === 'waitlisted')
+      .sort(
+        (a, b) => String(a.waitlisted_at).localeCompare(String(b.waitlisted_at)) || a.id.localeCompare(b.id),
+      );
+    let going = rows.filter((r) => r.status === 'going').length;
+    for (const row of waiting) {
+      if (event.capacity !== null && going >= event.capacity) break;
+      row.status = 'going';
+      row.waitlisted_at = null;
+      going += 1;
+    }
+  };
+  let alertCount = 500;
+  /** private.can_view_alert_row(): drafts → manage, or own with create; otherwise view or manage. */
+  const canViewAlert = (row: AlertRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'draft') {
+      return perms.includes('alerts.manage') || (row.created_by === me() && perms.includes('alerts.create'));
+    }
+    return perms.includes('alerts.view') || perms.includes('alerts.manage');
+  };
+  /** private.can_manage_alert_row(): manage any; your own with create. */
+  const canManageAlert = (row: AlertRow) => {
+    const perms = permissionsIn(row.community_id);
+    return perms.includes('alerts.manage') || (row.created_by === me() && perms.includes('alerts.create'));
+  };
+  let announcementCount = 500;
+  /** private.can_view_announcement_row(): published/archived → view or manage; else manage, or own with create. */
+  const canViewAnnouncement = (row: AnnouncementRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'published' || row.status === 'archived') {
+      return perms.includes('announcements.view') || perms.includes('announcements.manage');
+    }
+    return (
+      perms.includes('announcements.manage') ||
+      (row.author_user_id === me() && perms.includes('announcements.create'))
+    );
+  };
+  /** private.can_manage_announcement_row(): manage any; your own with create. */
+  const canManageAnnouncement = (row: AnnouncementRow) => {
+    const perms = permissionsIn(row.community_id);
+    return (
+      perms.includes('announcements.manage') ||
+      (row.author_user_id === me() && perms.includes('announcements.create'))
+    );
+  };
+  /** private.can_view_comment_row(): its post is visible, and published, or comments.moderate, or the author. */
+  const canViewComment = (row: CommentRow) => {
+    const post = allPosts().find((p) => p.id === row.post_id);
+    if (!post || !canViewPost(post)) return false;
+    return (
+      row.status === 'published' ||
+      permissionsIn(row.community_id).includes('comments.moderate') ||
+      row.author_user_id === me()
+    );
+  };
+  const reactionTarget = (targetId: string) => {
+    const post = allPosts().find((row) => row.id === targetId);
+    if (post) return { row: post as PostRow & { reaction_count: number }, visible: canViewPost(post) };
+    const comment = allComments().find((row) => row.id === targetId);
+    if (comment) {
+      const parentPost = allPosts().find((row) => row.id === comment.post_id);
+      return { row: comment, visible: canViewComment(comment) && parentPost?.status === 'published' };
+    }
+    return null;
+  };
+  /** private.can_view_post_row(): published → posts.view; hidden/deleted → moderators, or the author. */
+  const canViewPost = (row: PostRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'published') return perms.includes('posts.view');
+    return perms.includes('posts.moderate') || (row.author_user_id === me() && perms.includes('posts.view'));
+  };
   let createdCount = 0;
   let slugsTaken = options.slugsTaken ?? 0;
   let failNext = options.failFirstRpc ?? false;
@@ -469,16 +1124,276 @@ export function fakeSupabase(options: FakeOptions = {}) {
       });
       return { data: rows, error: null };
     }
-    const CONTENT_RPCS: Record<string, keyof FakeContent> = {
-      list_active_alerts: 'alerts',
-      list_current_announcements: 'announcements',
-      list_upcoming_events: 'events',
-      list_community_posts: 'posts',
-    };
     const failure = rpcFailures.get(name);
     if (failure) {
       rpcFailures.delete(name);
       return { data: null, error: failure };
+    }
+    const CONTENT_RPCS: Record<string, keyof FakeContent> = {};
+    if (['list_upcoming_events', 'list_events', 'list_past_events'].includes(name)) {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const all = ((content[String(args.p_community_id)]?.events ?? []) as EventRow[]).filter(canViewEvent);
+      const byStart = (a: EventRow, b: EventRow) =>
+        a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id);
+      let rows: EventRow[];
+      if (name === 'list_upcoming_events') {
+        rows = all.filter((e) => e.status === 'published' && Date.parse(e.ends_at) > now).sort(byStart);
+      } else if (name === 'list_events') {
+        const statuses = (args.p_statuses as string[] | undefined) ?? ['published', 'cancelled', 'completed'];
+        const from = args.p_from ? Date.parse(String(args.p_from)) : null;
+        const to = args.p_to ? Date.parse(String(args.p_to)) : null;
+        rows = all
+          .filter(
+            (e) =>
+              statuses.includes(e.status) &&
+              (from === null || Date.parse(e.ends_at) >= from) &&
+              (to === null || Date.parse(e.starts_at) < to),
+          )
+          .sort(byStart);
+      } else {
+        rows = all
+          .filter(
+            (e) =>
+              e.status === 'completed' ||
+              (['published', 'cancelled'].includes(e.status) && Date.parse(e.ends_at) <= now),
+          )
+          .sort((a, b) => byStart(b, a));
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return {
+        data: rows.slice(after, after + Number(args.p_limit ?? 20)).map((row) => ({ ...row })),
+        error: null,
+      };
+    }
+    if (name === 'get_event_attendance') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const event = allEvents().find((e) => e.id === args.p_event_id);
+      if (!event || !canViewEvent(event)) return { data: [], error: null };
+      const rows = rsvpsOf(event);
+      const count = (status: string) => rows.filter((r) => r.status === status).length;
+      const mine = rows.find((r) => r.user_id === me());
+      const queue = rows
+        .filter((r) => r.status === 'waitlisted')
+        .sort(
+          (a, b) =>
+            String(a.waitlisted_at).localeCompare(String(b.waitlisted_at)) || a.id.localeCompare(b.id),
+        );
+      return {
+        data: [
+          {
+            event_id: event.id,
+            capacity: event.capacity,
+            going_count: count('going'),
+            maybe_count: count('maybe'),
+            not_going_count: count('not_going'),
+            waitlisted_count: count('waitlisted'),
+            spots_left: event.capacity === null ? null : Math.max(event.capacity - count('going'), 0),
+            my_status: mine?.status ?? null,
+            my_waitlist_position: mine?.status === 'waitlisted' ? queue.indexOf(mine) + 1 : null,
+          },
+        ],
+        error: null,
+      };
+    }
+    if (name === 'rsvp_to_event' || name === 'cancel_rsvp') {
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      const event = allEvents().find((e) => e.id === args.p_event_id);
+      if (name === 'cancel_rsvp') {
+        // RLS: only while can_rsvp(); otherwise nothing is removed.
+        if (!event || !canRsvp(event)) return { data: false, error: null };
+        const bucket = content[event.community_id]!;
+        const before = (bucket.rsvps ?? []) as RsvpRow[];
+        const mine = before.find((r) => r.event_id === event.id && r.user_id === user);
+        bucket.rsvps = before.filter((r) => r !== mine);
+        if (mine?.status === 'going') promoteWaitlist(event);
+        return { data: !!mine, error: null };
+      }
+      const status = String(args.p_status);
+      if (!['going', 'maybe', 'not_going'].includes(status))
+        return { data: null, error: { code: '22023', message: 'status must be going, maybe or not_going' } };
+      if (!event || !canRsvp(event))
+        return { data: null, error: { code: '42501', message: 'you cannot RSVP to this event' } };
+      const bucket = content[event.community_id]!;
+      bucket.rsvps = bucket.rsvps ?? [];
+      let mine = (bucket.rsvps as RsvpRow[]).find((r) => r.event_id === event.id && r.user_id === user);
+      if (!mine) {
+        mine = makeRsvp(event.id, user, 'not_going');
+        mine.status = '';
+        bucket.rsvps.push(mine);
+      }
+      const wasGoing = mine.status === 'going';
+      if (status === 'going') {
+        const going = rsvpsOf(event).filter((r) => r.status === 'going' && r !== mine).length;
+        if (wasGoing) {
+          // unchanged
+        } else if (event.capacity !== null && going >= event.capacity) {
+          // Full: waitlisted; an existing place in the queue is kept.
+          if (mine.status !== 'waitlisted')
+            mine.waitlisted_at = new Date(Date.now() + ++rsvpClock).toISOString();
+          mine.status = 'waitlisted';
+        } else {
+          mine.status = 'going';
+          mine.waitlisted_at = null;
+        }
+      } else {
+        mine.status = status;
+        mine.waitlisted_at = null;
+        if (wasGoing) promoteWaitlist(event);
+      }
+      return {
+        data: [{ event_id: event.id, status: mine.status, waitlisted_at: mine.waitlisted_at }],
+        error: null,
+      };
+    }
+    if (name === 'my_community_permissions') {
+      return { data: permissionsIn(String(args.p_community_id)), error: null };
+    }
+    if (name === 'list_active_alerts' || name === 'list_alert_history') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const active = (row: AlertRow) =>
+        row.status === 'published' && (!row.expires_at || Date.parse(row.expires_at) > now);
+      const rank = (row: AlertRow) => SEVERITY_RANK[row.severity] ?? row.severity_rank;
+      const all = ((content[String(args.p_community_id)]?.alerts ?? []) as AlertRow[]).filter(canViewAlert);
+      const newest = (a: string | null, b: string | null, aId: string, bId: string) =>
+        a === b ? bId.localeCompare(aId) : String(b).localeCompare(String(a));
+      let rows: Record<string, unknown>[];
+      if (name === 'list_active_alerts') {
+        // Published, not expired; emergencies first (severity rank), then newest.
+        rows = all
+          .filter(active)
+          .sort((a, b) => rank(b) - rank(a) || newest(a.published_at, b.published_at, a.id, b.id))
+          .map((row) => ({ ...row, severity_rank: rank(row) }));
+      } else {
+        const statuses = (args.p_statuses as string[] | undefined) ?? [
+          'published',
+          'expired',
+          'cancelled',
+          'archived',
+        ];
+        rows = all
+          .filter((row) => statuses.includes(row.status))
+          .map((row) => ({ ...row, is_active: active(row), sort_at: row.published_at ?? row.created_at }))
+          .sort((a, b) => newest(a.sort_at, b.sort_at, a.id, b.id));
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return { data: rows.slice(after, after + Number(args.p_limit ?? 20)), error: null };
+    }
+    if (name === 'list_current_announcements' || name === 'list_announcement_history') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const expired = (row: AnnouncementRow) => !!row.expires_at && Date.parse(row.expires_at) <= now;
+      const all = ((content[String(args.p_community_id)]?.announcements ?? []) as AnnouncementRow[]).filter(
+        canViewAnnouncement,
+      );
+      let rows: AnnouncementRow[];
+      if (name === 'list_current_announcements') {
+        // Published, not expired; important first, then newest.
+        rows = all
+          .filter((row) => row.status === 'published' && !expired(row))
+          .sort((a, b) =>
+            a.priority !== b.priority
+              ? a.priority === 'important'
+                ? -1
+                : 1
+              : b.published_at === a.published_at
+                ? b.id.localeCompare(a.id)
+                : String(b.published_at).localeCompare(String(a.published_at)),
+          );
+      } else {
+        const statuses = (args.p_statuses as string[] | undefined) ?? ['published', 'archived'];
+        rows = all
+          .filter((row) => statuses.includes(row.status))
+          .map((row) => ({ ...row, is_expired: expired(row), sort_at: row.published_at ?? row.created_at }))
+          .sort((a, b) =>
+            a.sort_at === b.sort_at
+              ? b.id.localeCompare(a.id)
+              : String(b.sort_at).localeCompare(String(a.sort_at)),
+          );
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return {
+        data: rows.slice(after, after + Number(args.p_limit ?? 20)).map((row) => ({ ...row })),
+        error: null,
+      };
+    }
+    if (name === 'list_post_comments') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const parent = (args.p_parent_comment_id as string | undefined) ?? null;
+      const cursor = args.p_cursor_created_at
+        ? [String(args.p_cursor_created_at), String(args.p_cursor_id)]
+        : null;
+      const rows = allComments()
+        .filter(
+          (row) => row.post_id === args.p_post_id && row.parent_comment_id === parent && canViewComment(row),
+        )
+        .sort((a, b) =>
+          a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
+        )
+        .filter(
+          (row) =>
+            !cursor || row.created_at > cursor[0]! || (row.created_at === cursor[0] && row.id > cursor[1]!),
+        )
+        .slice(0, Number(args.p_limit ?? 50))
+        .map((row) => ({
+          ...row,
+          reply_count: allComments().filter((r) => r.parent_comment_id === row.id && r.status === 'published')
+            .length,
+        }));
+      return { data: rows, error: null };
+    }
+    if (name === 'get_reaction_summary') {
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const rows: Record<string, unknown>[] = [];
+      for (const [column, ids] of [
+        ['post_id', args.p_post_ids],
+        ['comment_id', args.p_comment_ids],
+      ] as const) {
+        for (const targetId of (ids as string[] | undefined) ?? []) {
+          const target = reactionTarget(targetId);
+          if (!target?.visible) continue;
+          const counts = typeCounts(target.row);
+          for (const [type, count] of Object.entries(counts).sort()) {
+            if (count <= 0) continue;
+            rows.push({
+              post_id: column === 'post_id' ? targetId : null,
+              comment_id: column === 'comment_id' ? targetId : null,
+              reaction_type: type,
+              reaction_count: count,
+              reacted_by_me: target.row.my_reaction_type === type,
+            });
+          }
+        }
+      }
+      return { data: rows, error: null };
+    }
+    if (name === 'list_community_posts') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      // SECURITY INVOKER + RLS: each row must be visible to the caller.
+      const status = String(args.p_status ?? 'published');
+      const cursor = args.p_cursor_created_at
+        ? [String(args.p_cursor_created_at), String(args.p_cursor_id)]
+        : null;
+      const rows = ((content[String(args.p_community_id)]?.posts ?? []) as PostRow[])
+        .filter((row) => row.status === status && canViewPost(row))
+        .sort((a, b) =>
+          a.created_at === b.created_at ? b.id.localeCompare(a.id) : b.created_at.localeCompare(a.created_at),
+        )
+        .filter(
+          (row) =>
+            !cursor || row.created_at < cursor[0]! || (row.created_at === cursor[0] && row.id < cursor[1]!),
+        )
+        .slice(0, Number(args.p_limit ?? 20));
+      return { data: rows.map((row) => ({ ...row })), error: null };
     }
     if (name in CONTENT_RPCS) {
       if (offline) return { data: null, error: OFFLINE };
@@ -778,10 +1693,18 @@ export const makeAlert = (communityId: string, n: number, overrides: Record<stri
   severity: 'warning',
   severity_rank: 2,
   is_emergency: false,
-  published_at: at(-n),
-  published_by: null,
-  expires_at: null,
-  edited_at: null,
+  status: 'published',
+  created_by: null as string | null,
+  created_at: at(-n - 30),
+  published_at: at(-n) as string | null,
+  published_by: null as string | null,
+  expires_at: null as string | null,
+  expired_at: null as string | null,
+  cancelled_at: null as string | null,
+  cancellation_reason: null as string | null,
+  archived_at: null as string | null,
+  edited_at: null as string | null,
+  updated_at: at(-n),
   ...overrides,
 });
 
@@ -796,42 +1719,96 @@ export const makeAnnouncement = (
   body: `Announcement body ${n}`,
   priority: 'normal',
   status: 'published',
-  author_user_id: null,
-  published_at: at(-60 * n),
-  expires_at: null,
-  edited_at: null,
+  author_user_id: null as string | null,
+  published_at: at(-60 * n) as string | null,
+  archived_at: null as string | null,
+  created_at: at(-60 * n - 30),
+  expires_at: null as string | null,
+  edited_at: null as string | null,
   ...overrides,
 });
 
+const fromNow = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+
+/** An event starting n days from now (relative to the real clock: upcoming/past depend on it). */
 export const makeEvent = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
   id: `c3c3c3c3-0000-4000-8000-${String(n).padStart(12, '0')}`,
   community_id: communityId,
   title: `Event ${n}`,
-  description: null,
-  location_text: `Hall ${n}`,
-  starts_at: at(60 * 24 * n),
-  ends_at: at(60 * 24 * n + 120),
+  description: null as string | null,
+  location_text: `Hall ${n}` as string | null,
+  starts_at: fromNow(60 * 24 * n),
+  ends_at: fromNow(60 * 24 * n + 120),
   timezone: 'UTC',
   status: 'published',
-  capacity: null,
+  capacity: null as number | null,
+  created_by: null as string | null,
+  published_at: fromNow(-60) as string | null,
+  cancelled_at: null as string | null,
+  cancellation_reason: null as string | null,
+  completed_at: null as string | null,
+  edited_at: null as string | null,
+  created_at: fromNow(-120),
+  updated_at: fromNow(-120),
   ...overrides,
+});
+
+let rsvpIds = 0;
+/** One person's RSVP to an event (waitlisted ones carry their queue time). */
+export const makeRsvp = (
+  eventId: string,
+  userId: string,
+  status: string,
+  waitlistedAt: string | null = null,
+) => ({
+  id: `d4d4d4d4-0000-4000-8000-${String(++rsvpIds).padStart(12, '0')}`,
+  event_id: eventId,
+  user_id: userId,
+  status,
+  waitlisted_at:
+    status === 'waitlisted' ? (waitlistedAt ?? new Date(Date.now() - 60_000 + rsvpIds).toISOString()) : null,
 });
 
 export const makePost = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
   id: `d4d4d4d4-0000-4000-8000-${String(n).padStart(12, '0')}`,
   community_id: communityId,
-  author_user_id: OTHER_USER_ID,
-  author_display_name: 'Grace H.',
-  author_avatar_url: null,
+  author_user_id: OTHER_USER_ID as string | null,
+  author_display_name: 'Grace H.' as string | null,
+  author_avatar_url: null as string | null,
   body: `Post body ${n}`,
   status: 'published',
   visibility: 'members',
   reaction_count: n,
   comment_count: 0,
-  my_reaction_type: null,
-  moderation_reason: null,
+  my_reaction_type: null as string | null,
+  moderation_reason: null as string | null,
   created_at: at(-30 * n),
   updated_at: at(-30 * n),
-  edited_at: null,
+  edited_at: null as string | null,
+  ...overrides,
+});
+
+export const makeComment = (
+  communityId: string,
+  postId: string,
+  n: number,
+  overrides: Record<string, unknown> = {},
+) => ({
+  id: `f6f6f6f6-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  post_id: postId,
+  parent_comment_id: null as string | null,
+  depth: 0,
+  author_user_id: OTHER_USER_ID as string | null,
+  author_display_name: 'Grace H.' as string | null,
+  author_avatar_url: null as string | null,
+  body: `Comment ${n}`,
+  status: 'published',
+  moderation_reason: null as string | null,
+  edited_at: null as string | null,
+  created_at: at(n),
+  reply_count: 0,
+  reaction_count: 0,
+  my_reaction_type: null as string | null,
   ...overrides,
 });

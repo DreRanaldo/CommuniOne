@@ -4,6 +4,8 @@ Community events with attendance tracking, capacity and a waitlist. There is no
 ticketing and no payments. Every rule here is enforced in Postgres.
 
 - **Migration:** `supabase/migrations/20261011001400_events.sql`
+- **Migration 25** (`20261011002500_past_events.sql`): `list_past_events()`, see Read API
+- **Mobile app:** RN-11, see [`events-app.md`](events-app.md)
 - **Tests:**
   - `supabase/tests/database/015_events.test.sql` (pgTAP, 72)
   - `tests/integration/events.test.mjs` (end to end, including 25 concurrent RSVPs)
@@ -201,6 +203,7 @@ Default roles: Owners and Admins hold all three; Moderators and Members hold
 ```ts
 await supabase.rpc('list_upcoming_events', { p_community_id, p_limit: 20 });   // published, not ended, soonest first
 await supabase.rpc('list_events', { p_community_id, p_from, p_to, p_statuses }); // calendar or history window
+await supabase.rpc('list_past_events', { p_community_id, p_limit: 20 });       // completed or ended, newest first (RN-11)
 await supabase.from('events').select('*').eq('id', eventId).single();           // details
 await supabase.rpc('get_event_attendance', { p_event_id: eventId });            // counts, my status and queue position
 ```

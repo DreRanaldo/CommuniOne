@@ -4,12 +4,12 @@ import { useCallback, useRef } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, Screen } from '@/components';
 import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
-import { AlertCard } from '@/features/home/components/AlertCard';
-import { AnnouncementCard } from '@/features/home/components/AnnouncementCard';
+import { AlertCard } from '@/features/alerts/AlertCard';
+import { AnnouncementItem } from '@/features/announcements/AnnouncementItem';
 import { CommunityHeader } from '@/features/home/components/CommunityHeader';
-import { EventCard } from '@/features/home/components/EventCard';
+import { EventItem } from '@/features/events/EventItem';
 import { HomeSection } from '@/features/home/components/HomeSection';
-import { PostCard } from '@/features/home/components/PostCard';
+import { PostCard } from '@/features/feed/components/PostCard';
 import { QuickActions } from '@/features/home/components/QuickActions';
 import { useCommunityHome } from '@/features/home/useCommunityHome';
 import { makeStyles, useTheme } from '@/theme';
@@ -35,7 +35,13 @@ export function CommunityHomeScreen({
   const { colors } = useTheme();
   const community = useCommunity();
   const home = useCommunityHome(community.community_id);
-  const open = (section: CommunitySection) => navigation.navigate('CommunitySection', { section });
+  const open = (section: CommunitySection) => {
+    if (section === 'feed') navigation.navigate('Feed');
+    else if (section === 'announcements') navigation.navigate('Announcements');
+    else if (section === 'alerts') navigation.navigate('Alerts');
+    else if (section === 'events') navigation.navigate('Events');
+    else navigation.navigate('CommunitySection', { section });
+  };
 
   // Coming back to the home (e.g. from a section) refreshes it, keeping what is shown.
   const { refresh } = home;
@@ -115,7 +121,15 @@ export function CommunityHomeScreen({
             empty="No active alerts."
             onSeeAll={() => open('alerts')}
             onRetry={() => void home.refresh()}
-            renderItem={(alert) => <AlertCard key={alert.id} alert={alert} timeZone={timeZone} />}
+            renderItem={(alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                compact
+                timeZone={timeZone}
+                onPress={() => navigation.navigate('AlertDetail', { alertId: alert.id })}
+              />
+            )}
           />
           <HomeSection
             title="Announcements"
@@ -126,7 +140,12 @@ export function CommunityHomeScreen({
             onSeeAll={() => open('announcements')}
             onRetry={() => void home.refresh()}
             renderItem={(announcement) => (
-              <AnnouncementCard key={announcement.id} announcement={announcement} />
+              <AnnouncementItem
+                key={announcement.id}
+                announcement={announcement}
+                compact
+                onPress={() => navigation.navigate('AnnouncementDetail', { announcementId: announcement.id })}
+              />
             )}
           />
           <HomeSection
@@ -137,7 +156,13 @@ export function CommunityHomeScreen({
             empty="No upcoming events."
             onSeeAll={() => open('events')}
             onRetry={() => void home.refresh()}
-            renderItem={(event) => <EventCard key={event.id} event={event} />}
+            renderItem={(event) => (
+              <EventItem
+                key={event.id}
+                event={event}
+                onPress={() => navigation.navigate('EventDetail', { eventId: event.id })}
+              />
+            )}
           />
           <HomeSection
             title="Recent activity"
@@ -147,7 +172,7 @@ export function CommunityHomeScreen({
             empty="No posts yet."
             onSeeAll={() => open('feed')}
             onRetry={() => void home.refresh()}
-            renderItem={(post) => <PostCard key={post.id} post={post} />}
+            renderItem={(post) => <PostCard key={post.id} post={post} compact />}
           />
         </>
       )}

@@ -6,6 +6,7 @@ This stage builds the alert domain and its secure lifecycle. **No notifications
 are delivered yet.** The integration point for that is below.
 
 - **Migration:** `supabase/migrations/20261011001300_alerts.sql`
+- **Mobile app:** RN-10, see [`alerts-app.md`](alerts-app.md)
 - **Tests:**
   - `supabase/tests/database/014_alerts.test.sql` (pgTAP, 69)
   - `tests/integration/alerts.test.mjs` (end to end, including the real service-role sweep)
