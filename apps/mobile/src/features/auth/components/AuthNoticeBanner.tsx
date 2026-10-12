@@ -13,6 +13,11 @@ const CONTENT: Record<
     message: 'Your new password is ready to use.',
   },
   emailConfirmed: { tone: 'success', title: 'Email confirmed', message: 'Welcome to CommuniOne.' },
+  accountDeleted: {
+    tone: 'info',
+    title: 'Your account has been deleted',
+    message: 'Thank you for being part of CommuniOne.',
+  },
 };
 
 /** Shows the current auth notice, if any, with a dismiss button. */

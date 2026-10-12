@@ -103,8 +103,9 @@ IP, token verifications 30 per 5 minutes per IP.
 
 ### Storage
 
-The private `documents` bucket and its policies are created by migration 16.
-Confirm after the first deploy that it exists and is **not public**, and that the
+The private `documents` bucket and its policies are created by migration 16, and
+the private `avatars` bucket (2 MiB, JPEG / PNG / WebP) by migration 23.
+Confirm after the first deploy that both exist and are **not public**, and that the
 global upload limit (Storage → Settings) is at least 50 MiB.
 
 ### Scheduled jobs (service role, server side)
@@ -114,6 +115,7 @@ global upload limit (Storage → Settings) is at least 50 MiB.
 | Alert expiry | `select public.expire_due_alerts();` | every minute |
 | Invitation housekeeping | `select public.expire_invitations();` | hourly |
 | Document purge | `list_document_files_to_purge()` then delete files | daily |
+| Avatar purge | `list_avatar_files_to_purge()` then delete those files from the `avatars` bucket (replaced avatars, deleted accounts) | daily |
 | Audit retention | `select public.purge_audit_logs(interval '730 days');` | monthly |
 | Rate-limit counters | `select public.purge_rate_limit_counters();` | hourly |
 

@@ -34,7 +34,8 @@ export type AuthNotice =
   | { kind: 'sessionExpired' }
   | { kind: 'linkError'; message: string }
   | { kind: 'passwordUpdated' }
-  | { kind: 'emailConfirmed' };
+  | { kind: 'emailConfirmed' }
+  | { kind: 'accountDeleted' };
 
 export type AuthStatus = 'restoring' | 'signedOut' | 'signedIn';
 
@@ -48,6 +49,10 @@ export interface AuthContextValue {
   /** True while an email link is being completed. */
   completingLink: boolean;
   signOut(): Promise<void>;
+  /** Signs out every device (all sessions are revoked on the server). */
+  signOutEverywhere(): Promise<void>;
+  /** Deletes the account through the backend (delete_my_account) and signs out. */
+  deleteAccount(): Promise<void>;
   /** Called after the new password is saved in recovery mode. */
   finishRecovery(): void;
   clearNotice(): void;
@@ -169,6 +174,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [services]);
 
+  const signOutEverywhere = useCallback(async () => {
+    intentionalSignOut.current = true;
+    setNotice(null);
+    try {
+      await services.auth.signOut('global');
+    } catch (error) {
+      intentionalSignOut.current = false;
+      throw error;
+    }
+  }, [services]);
+
+  const deleteAccount = useCallback(async () => {
+    intentionalSignOut.current = true;
+    try {
+      await services.auth.deleteMyAccount();
+      setNotice({ kind: 'accountDeleted' });
+    } catch (error) {
+      intentionalSignOut.current = false;
+      throw error;
+    }
+  }, [services]);
+
   const finishRecovery = useCallback(() => {
     setRecovery(false);
     setNotice({ kind: 'passwordUpdated' });
@@ -186,10 +213,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notice,
       completingLink,
       signOut,
+      signOutEverywhere,
+      deleteAccount,
       finishRecovery,
       clearNotice,
     };
-  }, [session, recovery, notice, completingLink, signOut, finishRecovery, clearNotice]);
+  }, [
+    session,
+    recovery,
+    notice,
+    completingLink,
+    signOut,
+    signOutEverywhere,
+    deleteAccount,
+    finishRecovery,
+    clearNotice,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

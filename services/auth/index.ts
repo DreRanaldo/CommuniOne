@@ -9,6 +9,41 @@ import type { Tables } from '../database.types.ts';
 
 export type Profile = Tables<'profiles'>;
 
+export const AVATAR_BUCKET = 'avatars';
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const;
+export type AvatarMimeType = keyof typeof AVATAR_TYPES;
+
+/** Account details from Supabase Auth (verified with the server, not read from the device). */
+export interface AccountInfo {
+  userId: string;
+  email: string | null;
+  emailConfirmedAt: string | null;
+  createdAt: string;
+  lastSignInAt: string | null;
+  /** The profile's account status: anything but "active" means access is restricted. */
+  status: string;
+}
+
+/**
+ * A random v4-shaped id for avatar file names. The bucket is private and
+ * access is decided by policies, so the name only needs to be unique; it is
+ * not a secret. Uses crypto when the runtime has it.
+ */
+function randomId(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoApi = (globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
+  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
+  else for (let i = 0; i < 16; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+const byteLength = (file: Blob | ArrayBuffer | Uint8Array): number =>
+  typeof Blob !== 'undefined' && file instanceof Blob ? file.size : file instanceof ArrayBuffer ? file.byteLength : (file as Uint8Array).byteLength;
+
 export interface SignUpInput {
   email: string;
   password: string;
@@ -31,7 +66,7 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 const email = (value: unknown) => v.text(value, 'email', { max: 320, pattern: EMAIL, patternMessage: 'email is not a valid address.' }).toLowerCase();
 // Mirrors the Auth policy (config.toml / dashboard): 8+ chars, letters and digits.
-const password = (value: unknown) => v.text(value, 'password', {
+const password = (value: unknown, field = 'password') => v.text(value, field, {
   min: 8, max: 72, trim: false, pattern: /^(?=.*[A-Za-z])(?=.*\d)/, patternMessage: 'password must contain letters and digits.',
 });
 
@@ -232,6 +267,115 @@ export function authService(ctx: ServiceContext) {
         });
         // user_id defaults to the caller in the database; it is never sent.
         unwrap(await db.from('profile_private').upsert({ phone: value }));
+      });
+    },
+
+    /** Email and account dates from Auth (asks the server), plus the account status. */
+    getMyAccount(): Promise<AccountInfo> {
+      return ctx.run('auth.getMyAccount', async () => {
+        const userId = await ctx.requireUserId();
+        const { data, error } = await db.auth.getUser();
+        if (error || !data.user) throw error ? fromAuthError(error) : new ServiceError(ErrorCode.Unauthenticated);
+        const profile = unwrapOne(await db.from('profiles').select('status').eq('id', userId).maybeSingle());
+        return {
+          userId: data.user.id,
+          email: data.user.email ?? null,
+          emailConfirmedAt: data.user.email_confirmed_at ?? null,
+          createdAt: data.user.created_at,
+          lastSignInAt: data.user.last_sign_in_at ?? null,
+          status: profile.status,
+        };
+      });
+    },
+
+    /**
+     * Changes the password after re-checking the current one, so an unlocked
+     * phone in someone else's hands cannot take over the account.
+     */
+    changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
+      return ctx.run('auth.changePassword', async () => {
+        await ctx.requireUserId();
+        v.only<typeof input>(input, 'input', ['currentPassword', 'newPassword']);
+        const current = v.text(input.currentPassword, 'currentPassword', { max: 72, trim: false });
+        const next = password(input.newPassword, 'newPassword');
+        if (next === current) throw new ServiceError(ErrorCode.Validation, 'Choose a different password.', { field: 'newPassword' });
+        const { data } = await db.auth.getUser();
+        const address = data.user?.email;
+        if (!address) throw new ServiceError(ErrorCode.Unauthenticated);
+        const check = await db.auth.signInWithPassword({ email: address, password: current });
+        if (check.error) {
+          const translated = fromAuthError(check.error);
+          if (translated.code === ErrorCode.Unauthenticated) {
+            throw new ServiceError(ErrorCode.Validation, 'Your current password is incorrect.', { field: 'currentPassword' }, check.error);
+          }
+          throw translated;
+        }
+        const { error } = await db.auth.updateUser({ password: next });
+        if (error) {
+          const translated = fromAuthError(error);
+          if (translated.details.field === 'password') translated.details.field = 'newPassword';
+          throw translated;
+        }
+      });
+    },
+
+    /**
+     * Uploads a new avatar image (JPEG, PNG or WebP, at most 2 MiB) to the
+     * caller's own folder in the private avatars bucket, makes it the profile
+     * avatar, and removes the previous file. Returns the updated profile.
+     */
+    uploadMyAvatar(input: { file: Blob | ArrayBuffer | Uint8Array; mimeType: AvatarMimeType }): Promise<Profile> {
+      return ctx.run('auth.uploadMyAvatar', async () => {
+        const userId = await ctx.requireUserId();
+        v.only<typeof input>(input, 'input', ['file', 'mimeType']);
+        const mimeType = v.oneOf(input.mimeType, 'mimeType', Object.keys(AVATAR_TYPES) as AvatarMimeType[]);
+        const size = byteLength(input.file);
+        if (size < 1) v.fail('file', 'The image is empty.');
+        if (size > AVATAR_MAX_BYTES) v.fail('file', 'The image is too large (at most 2 MB).');
+        const previous = unwrapOne(await db.from('profiles').select('avatar_path').eq('id', userId).maybeSingle()).avatar_path;
+        const path = `${userId}/${randomId()}.${AVATAR_TYPES[mimeType]}`;
+        const body = typeof Blob !== 'undefined' && input.file instanceof Blob && input.file.type !== mimeType ? new Blob([input.file], { type: mimeType }) : input.file;
+        const stored = await db.storage.from(AVATAR_BUCKET).upload(path, body, { contentType: mimeType, upsert: false });
+        if (stored.error) throw new ServiceError(ErrorCode.ServerError, 'The image could not be uploaded. Try again.', {}, stored.error);
+        const rows = unwrap(await db.from('profiles').update({ avatar_path: path }).eq('id', userId).select('*'));
+        const updated = rows?.[0];
+        if (!updated) {
+          await db.storage.from(AVATAR_BUCKET).remove([path]);
+          throw new ServiceError(ErrorCode.Forbidden, 'Your account cannot be changed right now.');
+        }
+        // Best effort: an unused file is otherwise removed by the purge job.
+        if (previous) await db.storage.from(AVATAR_BUCKET).remove([previous]);
+        return updated;
+      });
+    },
+
+    /** Removes the avatar (profile first, then the file). */
+    removeMyAvatar(): Promise<Profile> {
+      return ctx.run('auth.removeMyAvatar', async () => {
+        const userId = await ctx.requireUserId();
+        const previous = unwrapOne(await db.from('profiles').select('avatar_path').eq('id', userId).maybeSingle()).avatar_path;
+        const rows = unwrap(await db.from('profiles').update({ avatar_path: null, avatar_url: null }).eq('id', userId).select('*'));
+        const updated = rows?.[0];
+        if (!updated) throw new ServiceError(ErrorCode.Forbidden, 'Your account cannot be changed right now.');
+        if (previous) await db.storage.from(AVATAR_BUCKET).remove([previous]);
+        return updated;
+      });
+    },
+
+    /**
+     * A displayable URL for a profile's avatar: a short-lived signed URL for
+     * an uploaded avatar (only for people allowed to see that profile), the
+     * external https avatar_url otherwise, or null.
+     */
+    avatarUrl(profile: Pick<Profile, 'avatar_path' | 'avatar_url'>, expiresInSeconds = 3600): Promise<string | null> {
+      return ctx.run('auth.avatarUrl', async () => {
+        await ctx.requireUserId();
+        if (profile.avatar_path) {
+          const seconds = v.int(expiresInSeconds, 'expiresInSeconds', 60, 86_400);
+          const signed = await db.storage.from(AVATAR_BUCKET).createSignedUrl(profile.avatar_path, seconds);
+          return signed.error ? null : signed.data.signedUrl;
+        }
+        return profile.avatar_url ?? null;
       });
     },
 

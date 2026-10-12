@@ -73,6 +73,7 @@ describe('navigation', () => {
     const { auth } = await renderApp({ session: makeSession(), communities: [] });
     expect(await screen.findByText('No communities yet')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: /Profile/ }));
+    await user.press(await screen.findByRole('button', { name: 'Account & security' }));
     expect(await screen.findByText('ada@example.test')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(auth.signOut).toHaveBeenCalled());

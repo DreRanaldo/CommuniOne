@@ -20,7 +20,7 @@ auth state only chooses which screens to show.
 | Sign up | Welcome → Create account → "Check your email" | `auth.signUp({ email, password, displayName?, emailRedirectTo: communione://auth/callback })` | No session until the email is confirmed. The answer is the same whether or not the address already has an account. |
 | Confirm email | Email link → app opens → signed in | `auth.handleAuthRedirect(url)` → `{ kind: 'signedIn' }` | PKCE: the link carries a one-time code that only works with the verifier stored on the phone that signed up. |
 | Sign in | Welcome → Sign in → app | `auth.signIn({ email, password })` | One message for wrong password, unknown address and unconfirmed address. The password field is cleared after a failure. |
-| Sign out | Profile → Sign out → Welcome | `auth.signOut('local')` | Intentional: no "session expired" notice. |
+| Sign out | Profile → Account & security → Sign out → Welcome | `auth.signOut('local')` | Intentional: no "session expired" notice. |
 | Session restoration | Splash → loading state → app or Welcome | `getSession()` (keychain), then `getUser()` | The native splash stays up until the stored session is read. The restored session is then checked with Auth. |
 | Forgot password | Sign in → Forgot password → "Check your email" | `auth.requestPasswordReset({ email, redirectTo: communione://auth/reset-password })` | Same confirmation for every address. Network failures and rate limits are reported, so an unsent request is never shown as sent. |
 | Reset password | Email link → "Choose a new password" → app | `auth.handleAuthRedirect(url)` → `{ kind: 'recovery' }`, then `auth.updatePassword(pw)` | Recovery mode: the only reachable screen until a new password is saved, or the user cancels (which signs out). |

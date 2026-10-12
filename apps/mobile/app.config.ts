@@ -46,6 +46,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-secure-store',
     [
+      'expo-image-picker',
+      {
+        photosPermission: 'CommuniOne uses your photo library only when you choose a profile picture.',
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
+    [
       'expo-splash-screen',
       {
         image: './assets/splash-icon.png',

@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Icon, type IconName } from '@/components';
 import { CommunitiesScreen } from '@/features/communities/screens/CommunitiesScreen';
 import { NotificationsScreen } from '@/features/notifications/screens/NotificationsScreen';
-import { ProfileScreen } from '@/features/profile/screens/ProfileScreen';
+import { ProfileNavigator } from './ProfileNavigator';
 import type { AppTabParamList } from '@/types/navigation';
 import { useTabOptions } from './options';
 
@@ -25,7 +25,7 @@ export function AppTabs() {
     >
       <Tab.Screen name="Communities" component={CommunitiesScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Profile" component={ProfileNavigator} options={{ headerShown: false }} />
     </Tab.Navigator>
   );
 }

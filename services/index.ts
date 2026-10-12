@@ -56,7 +56,10 @@ export type Services = ReturnType<typeof createServices>;
 
 export { ErrorCode, ServiceError, isServiceError, type ErrorDetails } from './core/errors.ts';
 export type { ErrorListener } from './core/context.ts';
-export { AUTH_LINK_KINDS, type AuthLinkKind } from './auth/index.ts';
+export {
+  AUTH_LINK_KINDS, AVATAR_BUCKET, AVATAR_MAX_BYTES,
+  type AccountInfo, type AuthLinkKind, type AvatarMimeType, type Profile, type ProfilePatch,
+} from './auth/index.ts';
 export { consoleLogger, silentLogger, redact, type Logger, type LogLevel } from './core/logger.ts';
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type Page, type PageRequest } from './core/pagination.ts';
 export type { Database } from './database.types.ts';

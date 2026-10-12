@@ -25,6 +25,8 @@ and invitations, which complete Stage 4 (see
 service layer on top of the schema, plus database rate limits and an RSVP
 hardening fix (see
 [`docs/architecture/service-layer.md`](../architecture/service-layer.md)).
+RN-03 added uploaded profile avatars in a private bucket (see
+[`docs/features/profile.md`](../features/profile.md)).
 
 - **Platform:** PostgreSQL 15+ on Supabase (Auth, RLS, Data API).
 - **Source of truth:** `supabase/migrations/*.sql`. The database can be rebuilt
@@ -87,6 +89,7 @@ runs `pg_prove`.
 | 20 | `20261011002000_invitations.sql` | Pre-Stage 12 / Stage 4: invitations, invitation_redemptions, hashed tokens, create / revoke / redeem / list RPCs, audit actions |
 | 21 | `20261011002100_rate_limits.sql` | Stage 12: `private.rate_limit_rules` / `rate_limit_counters`, `private.enforce_rate_limit()`, BEFORE INSERT limit triggers on posts, comments, alerts, invitations, invitation_redemptions, documents; `purge_rate_limit_counters()` |
 | 22 | `20261011002200_service_layer_hardening.sql` | Stage 12: member-list keyset index (replaces `memberships_community_status_idx`); RSVP capacity trigger refuses missing, foreign and closed events identically before locking any event |
+| 23 | `20261011002300_avatars.sql` | RN-03: private `avatars` bucket (2 MiB, JPEG / PNG / WebP), `profiles.avatar_path` with the `profiles_check_avatar` trigger, storage.objects policies (read = profile visibility, upload / delete = own folder), `list_avatar_files_to_purge()` |
 
 ## Entity relationships
 
@@ -113,7 +116,8 @@ profiles ──1:N── posts / comments / reactions (author / user)
 |---|---|---|
 | id | uuid PK | FK → `auth.users.id` **ON DELETE CASCADE** |
 | first_name, last_name, display_name | text | ≤ 100 chars |
-| avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes) |
+| avatar_url | text | ≤ 2048 chars, must start with `https://` (`NOT VALID` constraint: enforced for all new writes). External avatars (sign-up metadata). |
+| avatar_path | text | RN-03. Uploaded avatar in the private `avatars` bucket: `{user_id}/{uuid}.{jpg\|png\|webp}` (format CHECK). The `profiles_check_avatar` trigger requires the file to exist in the owner's own folder (`42501` otherwise; `22023` if not uploaded). Takes precedence over `avatar_url`. |
 | bio | text | ≤ 1000 chars |
 | status | text NOT NULL | `active` \| `suspended` \| `deactivated`, default `active`. Only changed through `admin_set_account_status()`. Anything other than `active` removes all access immediately. |
 | created_at, updated_at | timestamptz NOT NULL | `updated_at` is maintained by a trigger |

@@ -17,6 +17,7 @@ Supabase integration, tooling, tests and CI. Feature screens come in later stage
 | Variants | `app.config.ts` with `APP_VARIANT` = development / preview / production; EAS profiles in `eas.json` | Separate names and bundle ids per variant, so test builds never overwrite the store app. |
 | State / data loading | React context + a small `useAsync` hook | No state or query library yet; add one (e.g. TanStack Query) when feature screens need caching, with a documented decision. |
 | Fonts and icons | System fonts; Ionicons from `@expo/vector-icons` | No font downloads; one consistent icon family. |
+| Images (RN-03) | `expo-image-picker` + `expo-image-manipulator` behind a `MediaPicker` dependency | Expo's own modules for the photo library and resizing; a 512 px JPEG keeps uploads small and drops EXIF. Injected, so tests use a fake. |
 | Tests | Jest (`jest-expo`) + React Native Testing Library 14 | The Expo-supported setup; RNTL 14 matches React 19 (async render). |
 | Lint / format | ESLint 9 with `eslint-config-expo` (flat config) + Prettier | Expo's recommended rules, including the React Compiler-era hooks rules; Prettier owns formatting. |
 
@@ -43,7 +44,7 @@ apps/mobile/
                            PlaceholderScreen, ConfigErrorScreen
     hooks/                 useAsync (+ re-exports of useServices, useAuth)
     lib/                   env (validation), supabase (client), secureStorage,
-                           dependencies (context), logger
+                           dependencies (context), media (photo picker), logger
     types/                 navigation param lists
     utils/                 error presentation (ServiceError → message / field)
     constants/             app name, URL scheme
@@ -59,7 +60,8 @@ There is no `src/services/`: the service layer is the repository's `services/`.
 RootStack
 ├── (signed out)  Auth ── Welcome · SignIn · SignUp · ForgotPassword
 ├── (recovery)    ResetPassword            ← communione://auth/reset-password?code=…
-└── (signed in)   App (tabs) ── Communities · Notifications · Profile
+└── (signed in)   App (tabs) ── Communities · Notifications · Profile (stack)
+                  │   Profile ── ProfileHome · EditProfile · Account · ChangePassword · DeleteAccount
                   Community (stack, scoped by communityId) ── CommunityHome · CommunitySection
                   JoinCommunity (modal)  ← communione://join?token=…
 ```
@@ -78,7 +80,8 @@ RootStack
 Built now: Welcome, Sign in, Sign up, Forgot password, Reset password
 (authentication: see [`mobile-authentication.md`](mobile-authentication.md)),
 the community list (`services.communities.listMine`), the community hub, and
-Profile with sign-out. Placeholders: Join, Notifications, community sections.
+the profile and account screens (RN-03: see [`../features/profile.md`](../features/profile.md)).
+Placeholders: Join, Notifications, community sections.
 
 ## Design system
 
@@ -124,7 +127,7 @@ Profile with sign-out. Placeholders: Join, Notifications, community sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 63 tests: authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 92 tests: profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |

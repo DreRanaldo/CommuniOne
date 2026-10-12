@@ -122,6 +122,7 @@ describe('sign out', () => {
     const user = userEvent.setup();
     const { auth } = await renderApp({ session: makeSession(), communities: [] });
     await user.press(await screen.findByRole('button', { name: /Profile/ }));
+    await user.press(await screen.findByRole('button', { name: 'Account & security' }));
     await user.press(await screen.findByRole('button', { name: 'Sign out' }));
     expect(await screen.findByText(WELCOME)).toBeOnTheScreen();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });

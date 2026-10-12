@@ -5,6 +5,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { createServices, ErrorCode, type Services } from '@communione/services';
 import { expoLinkSource, type LinkSource } from './links';
 import { logger } from './logger';
+import { expoMediaPicker, type MediaPicker } from './media';
 import { createSessionEvents, type SessionEvents } from './sessionEvents';
 import type { AppSupabaseClient } from './supabase';
 
@@ -13,6 +14,7 @@ export interface Dependencies {
   services: Services;
   links: LinkSource;
   sessionEvents: SessionEvents;
+  media: MediaPicker;
 }
 
 /**
@@ -25,11 +27,14 @@ const SIGNED_OUT_OPERATIONS = new Set([
   'auth.signOut',
   'auth.requestPasswordReset',
   'auth.handleAuthRedirect',
+  // A wrong current password while changing it is not an expired session.
+  'auth.changePassword',
 ]);
 
 export function createDependencies(
   supabase: AppSupabaseClient,
   links: LinkSource = expoLinkSource,
+  media: MediaPicker = expoMediaPicker,
 ): Dependencies {
   const sessionEvents = createSessionEvents();
   const services = createServices(supabase, {
@@ -39,7 +44,7 @@ export function createDependencies(
         sessionEvents.emitExpired();
     },
   });
-  return { supabase, services, links, sessionEvents };
+  return { supabase, services, links, sessionEvents, media };
 }
 
 export function DependenciesProvider({ value, children }: { value: Dependencies; children: ReactNode }) {

@@ -9,11 +9,20 @@ export type AuthStackParamList = {
   ForgotPassword: undefined;
 };
 
+/** The signed-in user's own profile and account. */
+export type ProfileStackParamList = {
+  ProfileHome: undefined;
+  EditProfile: undefined;
+  Account: { passwordChanged?: boolean } | undefined;
+  ChangePassword: undefined;
+  DeleteAccount: undefined;
+};
+
 /** Main tabs once signed in. */
 export type AppTabParamList = {
   Communities: undefined;
   Notifications: undefined;
-  Profile: undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
 /** Sections inside one community. Every route carries the community it belongs to. */

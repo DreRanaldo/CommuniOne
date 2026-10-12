@@ -110,6 +110,11 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `getMyProfile()` | Own profile | – | → `Profile` | `NOT_FOUND` | – |
 | `updateMyProfile(patch)` | Edit own profile (active account) | – | `{ displayName?, firstName?, lastName?, bio?, avatarUrl? (https) }` → `Profile` | `FORBIDDEN` | – |
 | `getMyPhone()` / `setMyPhone(phone \| null)` | Private phone number (visible to nobody else) | – | → `string \| null` / `void` | – | – |
+| `getMyAccount()` | Account information (RN-03) | signed in | → `{ userId, email, emailConfirmedAt, createdAt, lastSignInAt, status }` | `UNAUTHENTICATED` | Asks Auth (`getUser`), not the cached session |
+| `changePassword(input)` | Change password, re-checking the current one (RN-03) | signed in | `{ currentPassword, newPassword }` → `void` | `VALIDATION` (`currentPassword` incorrect; `newPassword` rules or unchanged) | Re-authenticates (new session), then updates the password |
+| `uploadMyAvatar(input)` | Upload a new avatar (RN-03) | active account | `{ file: Blob \| ArrayBuffer \| Uint8Array, mimeType: 'image/jpeg' \| 'image/png' \| 'image/webp' }` (≤ 2 MiB) → `Profile` | `VALIDATION` (`file`, `mimeType`), `FORBIDDEN`, `SERVER_ERROR` | Stores `avatars/{userId}/{uuid}.{ext}`, sets `avatar_path`, removes the previous file |
+| `removeMyAvatar()` | Remove the avatar (RN-03) | active account | → `Profile` | `FORBIDDEN` | Clears `avatar_path` and `avatar_url`, then deletes the file |
+| `avatarUrl(profile, expiresInSeconds = 3600)` | Displayable avatar URL (RN-03) | signed in | `Pick<Profile, 'avatar_path' \| 'avatar_url'>` → `string \| null` | `VALIDATION` (expiry 60 s–24 h) | Signed URL for uploaded avatars; `null` when the caller may not see that profile |
 | `deleteMyAccount()` | Permanently delete own account | – | → `void` | `CONFLICT` (only role manager of a community with other members: transfer ownership first) | Erases personal data, keeps community history as "Deleted User", audits `account.deleted`, signs out |
 
 ### communities

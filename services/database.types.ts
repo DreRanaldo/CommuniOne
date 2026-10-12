@@ -635,14 +635,14 @@ isOneToOne: true
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar_url": string | null,"bio": string | null,"created_at": string,"display_name": string | null,"first_name": string | null,"id": string,"last_name": string | null,"status": string,"updated_at": string
+                    "avatar_path": string | null,"avatar_url": string | null,"bio": string | null,"created_at": string,"display_name": string | null,"first_name": string | null,"id": string,"last_name": string | null,"status": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "avatar_url"?: string | null,"bio"?: string | null,"created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"id": string,"last_name"?: string | null,"status"?: string,"updated_at"?: string
+                    "avatar_path"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"id": string,"last_name"?: string | null,"status"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "avatar_url"?: string | null,"bio"?: string | null,"created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"id"?: string,"last_name"?: string | null,"status"?: string,"updated_at"?: string
+                    "avatar_path"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"id"?: string,"last_name"?: string | null,"status"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -773,7 +773,8 @@ isOneToOne: false
           Functions: {
             "admin_set_account_status":
 { Args: { "p_status": string,"p_user_id": string }; Returns: {
-              "avatar_url": string | null,
+              "avatar_path": string | null,
+"avatar_url": string | null,
 "bio": string | null,
 "created_at": string,
 "display_name": string | null,
@@ -911,6 +912,11 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"list_avatar_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
+            }[]
+                           },
 "list_community_posts":
 { Args: { "p_community_id": string,"p_cursor_created_at"?: string,"p_cursor_id"?: string,"p_limit"?: number,"p_status"?: string }; Returns: {
               "author_avatar_url": string,"author_display_name": string,"author_user_id": string,"body": string,"comment_count": number,"community_id": string,"created_at": string,"edited_at": string,"id": string,"moderation_reason": string,"my_reaction_type": string,"reaction_count": number,"status": string,"updated_at": string,"visibility": string
