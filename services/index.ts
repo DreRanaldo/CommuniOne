@@ -69,3 +69,7 @@ export {
   type Community, type CommunityImageKind, type CommunityImages, type CommunityType, type MyCommunity,
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
+export type { ActiveAlert } from './alerts/index.ts';
+export type { CurrentAnnouncement } from './announcements/index.ts';
+export type { CommunityEvent } from './events/index.ts';
+export type { FeedPost } from './posts/index.ts';

@@ -61,6 +61,15 @@ export interface FakeOptions {
   creationLimitReached?: boolean;
   /** The first N create_community calls find their address (slug) already taken. */
   slugsTaken?: number;
+  /** Community content by community id (alerts, announcements, upcoming events, posts). */
+  content?: Record<string, FakeContent>;
+}
+
+export interface FakeContent {
+  alerts?: Record<string, unknown>[];
+  announcements?: Record<string, unknown>[];
+  events?: Record<string, unknown>[];
+  posts?: Record<string, unknown>[];
 }
 
 /**
@@ -439,6 +448,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
   communities.forEach((c) => addCommunityRow(c as Record<string, unknown>));
   const invitations = new Map(Object.entries(options.invitations ?? {}));
   const redemptions: { token: string; userId: string }[] = [];
+  const content: Record<string, FakeContent> = { ...options.content };
+  const rpcFailures = new Map<string, DbError>();
   let createdCount = 0;
   let slugsTaken = options.slugsTaken ?? 0;
   let failNext = options.failFirstRpc ?? false;
@@ -457,6 +468,30 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return row ? { ...(c as object), logo_path: row.logo_path ?? null } : c;
       });
       return { data: rows, error: null };
+    }
+    const CONTENT_RPCS: Record<string, keyof FakeContent> = {
+      list_active_alerts: 'alerts',
+      list_current_announcements: 'announcements',
+      list_upcoming_events: 'events',
+      list_community_posts: 'posts',
+    };
+    const failure = rpcFailures.get(name);
+    if (failure) {
+      rpcFailures.delete(name);
+      return { data: null, error: failure };
+    }
+    if (name in CONTENT_RPCS) {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      // Like the database: only active members of that community see its content (otherwise nothing).
+      const id = String(args.p_community_id);
+      const member = communities.some(
+        (c) =>
+          (c as { community_id: string }).community_id === id &&
+          (c as { membership_status: string }).membership_status === 'active',
+      );
+      const rows = member ? (content[id]?.[CONTENT_RPCS[name]!] ?? []) : [];
+      return { data: rows.slice(0, Number(args.p_limit ?? 20)), error: null };
     }
     if (name === 'create_community') {
       if (offline) return { data: null, error: OFFLINE };
@@ -609,6 +644,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     redemptions,
     /** Server-side invitations by token (change one to simulate a revocation). */
     invitations,
+    /** Community content by community id (change it to simulate new posts, alerts, ...). */
+    content,
     /** The user's memberships as my_communities() currently returns them. */
     memberships: () => communities,
     /** Every Data API query, in order (table, operation, filters, values). */
@@ -616,6 +653,13 @@ export function fakeSupabase(options: FakeOptions = {}) {
     /** Change the user's memberships on the server (e.g. removed from a community). */
     setCommunities: (rows: unknown[]) => {
       communities = rows;
+    },
+    /** The next call of one RPC fails (default: an internal error). */
+    failRpcOnce: (
+      rpcName: string,
+      error: DbError = { code: 'XX000', message: 'internal error at /var/lib/postgresql' },
+    ) => {
+      rpcFailures.set(rpcName, error);
     },
     /** The next RPC fails with an internal error. */
     failNextRpc: () => {
@@ -722,3 +766,72 @@ export const sampleCommunities = [
     role_names: ['Member'],
   },
 ];
+
+// ---- Community content rows, as the list functions return them ----
+const at = (minutes: number) => new Date(Date.UTC(2026, 9, 12, 12, 0) + minutes * 60_000).toISOString();
+
+export const makeAlert = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
+  id: `a1a1a1a1-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  title: `Alert ${n}`,
+  body: `Alert body ${n}`,
+  severity: 'warning',
+  severity_rank: 2,
+  is_emergency: false,
+  published_at: at(-n),
+  published_by: null,
+  expires_at: null,
+  edited_at: null,
+  ...overrides,
+});
+
+export const makeAnnouncement = (
+  communityId: string,
+  n: number,
+  overrides: Record<string, unknown> = {},
+) => ({
+  id: `b2b2b2b2-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  title: `Announcement ${n}`,
+  body: `Announcement body ${n}`,
+  priority: 'normal',
+  status: 'published',
+  author_user_id: null,
+  published_at: at(-60 * n),
+  expires_at: null,
+  edited_at: null,
+  ...overrides,
+});
+
+export const makeEvent = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
+  id: `c3c3c3c3-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  title: `Event ${n}`,
+  description: null,
+  location_text: `Hall ${n}`,
+  starts_at: at(60 * 24 * n),
+  ends_at: at(60 * 24 * n + 120),
+  timezone: 'UTC',
+  status: 'published',
+  capacity: null,
+  ...overrides,
+});
+
+export const makePost = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
+  id: `d4d4d4d4-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  author_user_id: OTHER_USER_ID,
+  author_display_name: 'Grace H.',
+  author_avatar_url: null,
+  body: `Post body ${n}`,
+  status: 'published',
+  visibility: 'members',
+  reaction_count: n,
+  comment_count: 0,
+  my_reaction_type: null,
+  moderation_reason: null,
+  created_at: at(-30 * n),
+  updated_at: at(-30 * n),
+  edited_at: null,
+  ...overrides,
+});

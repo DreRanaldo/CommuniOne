@@ -16,3 +16,8 @@ export function errorMessage(error: unknown): string {
 export function errorField(error: unknown): string | undefined {
   return isServiceError(error) && error.code === ErrorCode.Validation ? error.details.field : undefined;
 }
+
+/** True when the device could not reach the server (offline, timeout). */
+export function isNetworkError(error: unknown): boolean {
+  return isServiceError(error) && error.details.network === true;
+}

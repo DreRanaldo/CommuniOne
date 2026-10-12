@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import type { ReactElement, ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, View, type RefreshControlProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { makeStyles } from '@/theme';
 
@@ -11,6 +11,8 @@ export interface ScreenProps {
   edges?: Edge[];
   centered?: boolean;
   testID?: string;
+  /** Pull to refresh (scrolling screens only). */
+  refreshControl?: ReactElement<RefreshControlProps>;
 }
 
 /** Standard screen container: safe areas, background, padding and keyboard handling. */
@@ -20,12 +22,14 @@ export function Screen({
   edges = ['bottom', 'left', 'right'],
   centered,
   testID,
+  refreshControl,
 }: ScreenProps) {
   const styles = useStyles();
   const content = scroll ? (
     <ScrollView
       contentContainerStyle={[styles.content, centered && styles.centered]}
       keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>

@@ -85,7 +85,9 @@ describe('create community', () => {
     });
     // Ownership, membership and roles come from the database function only.
     expect(writes(queries)).toEqual([]);
-    expect(rpcNames(rpc).filter((n) => n !== 'my_communities')).toEqual(['create_community']);
+    expect(rpcNames(rpc).filter((n) => !n.startsWith('list_') && n !== 'my_communities')).toEqual([
+      'create_community',
+    ]);
   });
 
   test("the time zone defaults to the device's", async () => {
@@ -222,7 +224,7 @@ describe('join with an invitation', () => {
     ).toBeOnTheScreen();
     expect(within(screen.getByTestId('community-home-screen')).getByText('Club · Member')).toBeOnTheScreen();
     expect(redemptions).toHaveLength(1);
-    const names = rpcNames(rpc).filter((n) => n !== 'my_communities');
+    const names = rpcNames(rpc).filter((n) => !n.startsWith('list_') && n !== 'my_communities');
     expect(names).toEqual(['preview_invitation', 'redeem_invitation']);
     expect(rpc.mock.calls.find(([n]) => n === 'redeem_invitation')![1]).toEqual({ p_token: VALID });
     expect(writes(queries)).toEqual([]);

@@ -7,3 +7,4 @@ export { Screen, type ScreenProps } from './Screen';
 export { LoadingState, ErrorState, EmptyState, type ErrorStateProps, type EmptyStateProps } from './states';
 export { Banner, type BannerProps, type BannerTone } from './Banner';
 export { Avatar, type AvatarProps } from './Avatar';
+export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
