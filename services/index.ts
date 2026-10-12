@@ -77,6 +77,9 @@ export {
   ANNOUNCEMENT_PRIORITIES, ANNOUNCEMENT_STATUSES,
   type Announcement, type AnnouncementHistoryItem, type CurrentAnnouncement,
 } from './announcements/index.ts';
-export type { CommunityEvent } from './events/index.ts';
+export {
+  EVENT_STATUSES, RSVP_STATUSES,
+  type Attendance, type CommunityEvent, type EventInput, type EventPatch,
+} from './events/index.ts';
 export type { FeedPost, Post } from './posts/index.ts';
 export type { Comment, ThreadComment } from './comments/index.ts';

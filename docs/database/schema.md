@@ -93,6 +93,7 @@ runs `pg_prove`.
 | 22 | `20261011002200_service_layer_hardening.sql` | Stage 12: member-list keyset index (replaces `memberships_community_status_idx`); RSVP capacity trigger refuses missing, foreign and closed events identically before locking any event |
 | 23 | `20261011002300_avatars.sql` | RN-03: private `avatars` bucket (2 MiB, JPEG / PNG / WebP), `profiles.avatar_path` with the `profiles_check_avatar` trigger, storage.objects policies (read = profile visibility, upload / delete = own folder), `list_avatar_files_to_purge()` |
 | 24 | `20261011002400_community_media_and_invitation_preview.sql` | RN-05: public `community-media` bucket (5 MiB, JPEG / PNG / WebP), `communities.logo_path` / `cover_image_path` with the `communities_check_media` trigger, storage.objects policies (upload / delete = `community.update`, API reads = `community.view`), `list_community_media_to_purge()`; `my_communities()` returns `logo_path`; `preview_invitation()` |
+| 25 | `20261011002500_past_events.sql` | RN-11: `list_past_events()` (completed, or published / cancelled and ended; newest first; keyset on `(starts_at, id)` descending). No table, policy or privilege change |
 
 ## Entity relationships
 
@@ -676,6 +677,7 @@ restricted by it.
 | `public.rsvp_to_event(event_id, status)` / `public.cancel_rsvp(event_id)` | stored status / boolean | Stage 8, SECURITY INVOKER; take the event lock first |
 | `public.get_event_attendance(event_id)` | counts, my status, queue position | Stage 8, SECURITY DEFINER (totals only, visible events only) |
 | `public.list_upcoming_events(...)` / `public.list_events(...)` | events | Stage 8, SECURITY INVOKER |
+| `public.list_past_events(...)` | events | RN-11 (migration 25), SECURITY INVOKER: completed or ended events, newest first |
 | `public.list_my_notifications(...)`, `unread_notification_count(...)`, `mark_notification_read / unread(id)`, `mark_all_notifications_read(...)`, `archive_notification(id)` | | Stage 9, SECURITY INVOKER |
 | `public.create_notification(...)` | id | Stage 9, **service role only** |
 | `public.create_document_upload(...)` / `public.complete_document_upload(id)` | path / document | Stage 10, SECURITY DEFINER, fully validated |

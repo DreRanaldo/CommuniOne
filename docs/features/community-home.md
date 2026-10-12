@@ -23,7 +23,7 @@ community is, what needs attention now, and the way into everything else.
 | – | Community header: cover, logo, name, type, your role, description | `my_communities()` (current community) + `communities.get` | |
 | 1 | **Alerts** | `alerts.listActive` | Emergencies first (severity rank), then newest; up to 5 |
 | 2 | **Announcements** | `announcements.listCurrent` | Important first, then newest; up to 3 |
-| 3 | **Upcoming events** | `events.listUpcoming` | Soonest first, in the event's time zone; up to 3 |
+| 3 | **Upcoming events** | `events.listUpcoming` | Soonest first, in the event's time zone; up to 3; each opens the event detail (RN-11) |
 | 4 | **Recent activity** | `posts.list` | Newest 3 posts |
 | – | **Explore**: Feed, Announcements, Alerts, Events, Documents, Members | | |
 
@@ -66,8 +66,8 @@ community is, what needs attention now, and the way into everything else.
 ## Known limitations
 
 - "See all recent activity" and the Feed shortcut open the feed (RN-07);
-  announcements (RN-09) and alerts (RN-10) open their own screens. Events,
-  documents and members are placeholders until their stages are built.
+  announcements (RN-09), alerts (RN-10) and events (RN-11) open their own
+  screens. Documents and members are placeholders until their stages are built.
 - Posts on the home show `author_display_name` only. Uploaded avatars are not
   in the feed functions yet (see `profile.md`).
 - No offline cache: after an app restart without a network, the home shows the

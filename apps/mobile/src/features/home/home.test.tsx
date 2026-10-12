@@ -315,7 +315,7 @@ describe('content refresh', () => {
   test('coming back to the home refreshes it', async () => {
     const { user, content } = await home();
     await user.press(screen.getByRole('button', { name: 'See all upcoming events' }));
-    await screen.findByText('Coming soon');
+    await screen.findByTestId('events-screen');
     content[M]!.events = [makeEvent(M, 5, { title: 'Summer barbecue' })];
     await user.press(screen.getByRole('button', { name: /^Home/ }));
     expect(await screen.findByText('Summer barbecue')).toBeOnTheScreen();

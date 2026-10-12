@@ -8,6 +8,9 @@ import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHom
 import { AlertDetailScreen } from '@/features/alerts/AlertDetailScreen';
 import { AlertEditorScreen } from '@/features/alerts/AlertEditorScreen';
 import { AlertsScreen } from '@/features/alerts/AlertsScreen';
+import { EventDetailScreen } from '@/features/events/EventDetailScreen';
+import { EventEditorScreen } from '@/features/events/EventEditorScreen';
+import { EventsScreen } from '@/features/events/EventsScreen';
 import { AnnouncementDetailScreen } from '@/features/announcements/AnnouncementDetailScreen';
 import { AnnouncementEditorScreen } from '@/features/announcements/AnnouncementEditorScreen';
 import { AnnouncementsScreen } from '@/features/announcements/AnnouncementsScreen';
@@ -66,6 +69,13 @@ function CommunityStack({ community }: { community: MyCommunity }) {
       />
       <Stack.Screen name="Feed" component={FeedScreen} options={{ title: 'Feed' }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />
+      <Stack.Screen name="Events" component={EventsScreen} options={{ title: 'Events' }} />
+      <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: 'Event' }} />
+      <Stack.Screen
+        name="EventEditor"
+        component={EventEditorScreen}
+        options={{ title: 'New event', presentation: 'modal' }}
+      />
       <Stack.Screen name="Alerts" component={AlertsScreen} options={{ title: 'Alerts' }} />
       <Stack.Screen name="AlertDetail" component={AlertDetailScreen} options={{ title: 'Alert' }} />
       <Stack.Screen

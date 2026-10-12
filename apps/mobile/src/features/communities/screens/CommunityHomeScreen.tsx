@@ -7,7 +7,7 @@ import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
 import { AlertCard } from '@/features/alerts/AlertCard';
 import { AnnouncementItem } from '@/features/announcements/AnnouncementItem';
 import { CommunityHeader } from '@/features/home/components/CommunityHeader';
-import { EventCard } from '@/features/home/components/EventCard';
+import { EventItem } from '@/features/events/EventItem';
 import { HomeSection } from '@/features/home/components/HomeSection';
 import { PostCard } from '@/features/feed/components/PostCard';
 import { QuickActions } from '@/features/home/components/QuickActions';
@@ -39,6 +39,7 @@ export function CommunityHomeScreen({
     if (section === 'feed') navigation.navigate('Feed');
     else if (section === 'announcements') navigation.navigate('Announcements');
     else if (section === 'alerts') navigation.navigate('Alerts');
+    else if (section === 'events') navigation.navigate('Events');
     else navigation.navigate('CommunitySection', { section });
   };
 
@@ -155,7 +156,13 @@ export function CommunityHomeScreen({
             empty="No upcoming events."
             onSeeAll={() => open('events')}
             onRetry={() => void home.refresh()}
-            renderItem={(event) => <EventCard key={event.id} event={event} />}
+            renderItem={(event) => (
+              <EventItem
+                key={event.id}
+                event={event}
+                onPress={() => navigation.navigate('EventDetail', { eventId: event.id })}
+              />
+            )}
           />
           <HomeSection
             title="Recent activity"

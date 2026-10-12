@@ -217,6 +217,8 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `cancelRsvp(id)` | Remove my RSVP | as rsvp | → `boolean` | – | Next waitlisted person promoted and notified |
 | `attendance(id)` | Totals, places left, my status / queue position | `events.view` | → `Attendance` | `NOT_FOUND` | – |
 | `listUpcoming(input)` / `list(input)` | Upcoming, or a calendar window | `events.view` | `{ communityId, from?, to?, statuses?, limit?, cursor? }` → `Page<Event>` | – | – |
+| `listPast(input)` | Completed or ended events, newest first (RN-11) | `events.view` | `{ communityId, limit?, cursor? }` → `Page<Event>` | – | – |
+| `organizerName(createdBy)` | The organizer's display name (RN-11) | profile visibility (co-members with `members.view`) | `string \| null` → `string \| null` (null: deleted account, no name, or not visible) | – | – |
 
 ### notifications
 

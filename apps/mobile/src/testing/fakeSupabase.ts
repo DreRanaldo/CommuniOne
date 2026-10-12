@@ -71,6 +71,8 @@ export interface FakeContent {
   alerts?: Record<string, unknown>[];
   announcements?: Record<string, unknown>[];
   events?: Record<string, unknown>[];
+  /** Event RSVPs (see makeRsvp). */
+  rsvps?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
   comments?: Record<string, unknown>[];
 }
@@ -118,6 +120,7 @@ type DbError = { code: string; message: string; status?: number };
 const MEMBER_PERMISSIONS = [
   'alerts.view',
   'announcements.view',
+  'events.view',
   'posts.view',
   'posts.create',
   'posts.edit_own',
@@ -127,7 +130,14 @@ const MEMBER_PERMISSIONS = [
   'comments.delete_own',
 ];
 const MODERATION = ['posts.moderate', 'comments.moderate'];
-const MANAGEMENT = ['alerts.create', 'alerts.manage', 'announcements.create', 'announcements.manage'];
+const MANAGEMENT = [
+  'alerts.create',
+  'alerts.manage',
+  'announcements.create',
+  'announcements.manage',
+  'events.create',
+  'events.manage',
+];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
   Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
@@ -139,6 +149,8 @@ type PostRow = ReturnType<typeof makePost>;
 type CommentRow = ReturnType<typeof makeComment>;
 type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
 type AlertRow = ReturnType<typeof makeAlert>;
+type EventRow = ReturnType<typeof makeEvent>;
+type RsvpRow = ReturnType<typeof makeRsvp>;
 const SEVERITY_RANK: Record<string, number> = { info: 1, warning: 2, urgent: 3, emergency: 4 };
 type Filter = [column: string, value: unknown];
 
@@ -379,6 +391,107 @@ export function fakeSupabase(options: FakeOptions = {}) {
           values,
           'body' in (values ?? {}) ? { edited_at: new Date().toISOString() } : {},
         );
+        return { data: [pick(visible, columns)], error: null };
+      }
+    }
+    if (table === 'events') {
+      const now = new Date().toISOString();
+      const invalid = (message: string) => ({ data: null, error: { code: '22023', message } });
+      const denied = (message: string) => ({ data: null, error: { code: '42501', message } });
+      if (op === 'insert') {
+        // events_insert_authorized + enforce_event_write().
+        const communityId = String(values?.community_id);
+        const status = String(values?.status ?? 'draft');
+        if (!permissionsIn(communityId).includes('events.create'))
+          return denied('new row violates row-level security policy for table "events"');
+        if (Date.parse(String(values?.ends_at)) < Date.parse(String(values?.starts_at)))
+          return { data: null, error: { code: '23514', message: 'events_time_order' } };
+        if (status === 'published' && Date.parse(String(values?.ends_at)) <= Date.now())
+          return invalid('an event that has already ended cannot be published');
+        const row: EventRow = {
+          ...makeEvent(communityId, ++eventCount),
+          title: String(values?.title),
+          description: (values?.description as string | null) ?? null,
+          location_text: (values?.location_text as string | null) ?? null,
+          starts_at: String(values?.starts_at),
+          ends_at: String(values?.ends_at),
+          timezone: (values?.timezone as string | undefined) ?? 'UTC',
+          capacity: (values?.capacity as number | null) ?? null,
+          status,
+          created_by: user,
+          published_at: status === 'published' ? now : null,
+          created_at: now,
+          updated_at: now,
+        };
+        content[communityId] = {
+          ...content[communityId],
+          events: [...(content[communityId]?.events ?? []), row],
+        };
+        return { data: pick(row, columns), error: null };
+      }
+      const target = allEvents().find((row) => row.id === filters.find(([c]) => c === 'id')?.[1]);
+      const visible = target && canViewEvent(target) ? target : undefined;
+      if (op === 'select') {
+        const rows = visible ? [pick(visible, columns)] : [];
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update') {
+        if (!visible || !canManageEvent(visible)) return { data: [], error: null };
+        const next = { ...visible, ...values } as EventRow;
+        const going = rsvpsOf(visible).filter((r) => r.status === 'going').length;
+        if (next.capacity !== visible.capacity && next.capacity !== null && next.capacity < going)
+          return invalid(
+            `capacity (${next.capacity}) cannot be lower than the number of people going (${going})`,
+          );
+        if (visible.status === 'cancelled' || visible.status === 'completed')
+          return denied(`${visible.status} events cannot be modified`);
+        if (next.status !== visible.status) {
+          const allowed: Record<string, string[]> = {
+            draft: ['published', 'cancelled'],
+            published: ['cancelled', 'completed'],
+          };
+          if (!allowed[visible.status]?.includes(next.status))
+            return invalid(`invalid event transition: ${visible.status} -> ${next.status}`);
+          if (next.status === 'published') {
+            if (Date.parse(next.ends_at) <= Date.now())
+              return invalid('an event that has already ended cannot be published');
+            next.published_at = now;
+          }
+          if (next.status === 'cancelled') next.cancelled_at = now;
+          if (next.status === 'completed') {
+            if (Date.parse(visible.starts_at) > Date.now())
+              return invalid('an event cannot be completed before it starts');
+            next.completed_at = now;
+          }
+        }
+        if (
+          next.cancellation_reason !== visible.cancellation_reason &&
+          !(next.status === 'cancelled' && visible.status !== 'cancelled')
+        )
+          return invalid('a cancellation reason can only be given when cancelling');
+        const edited = [
+          'title',
+          'description',
+          'location_text',
+          'starts_at',
+          'ends_at',
+          'timezone',
+          'capacity',
+        ].some(
+          (k) =>
+            k in (values ?? {}) &&
+            (values as Record<string, unknown>)[k] !== (visible as Record<string, unknown>)[k],
+        );
+        if (edited) {
+          if (!['draft', 'published'].includes(next.status))
+            return denied('only draft or published events can be edited');
+          if (Date.parse(next.ends_at) < Date.parse(next.starts_at))
+            return { data: null, error: { code: '23514', message: 'events_time_order' } };
+          if (visible.status === 'published') next.edited_at = now;
+        }
+        next.updated_at = now;
+        Object.assign(visible, next);
+        promoteWaitlist(visible); // on_event_capacity_change()
         return { data: [pick(visible, columns)], error: null };
       }
     }
@@ -893,6 +1006,45 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   };
+  let eventCount = 500;
+  const allEvents = () => Object.values(content).flatMap((c) => c.events ?? []) as EventRow[];
+  /** private.can_view_event_row(): drafts → manage, or own with create; otherwise view or manage. */
+  const canViewEvent = (row: EventRow) => {
+    const perms = permissionsIn(row.community_id);
+    if (row.status === 'draft') {
+      return perms.includes('events.manage') || (row.created_by === me() && perms.includes('events.create'));
+    }
+    return perms.includes('events.view') || perms.includes('events.manage');
+  };
+  /** private.can_manage_event_row(): manage any; your own with create. */
+  const canManageEvent = (row: EventRow) => {
+    const perms = permissionsIn(row.community_id);
+    return perms.includes('events.manage') || (row.created_by === me() && perms.includes('events.create'));
+  };
+  /** private.can_rsvp(): published, not started, events.view in its community. */
+  const canRsvp = (row: EventRow) =>
+    row.status === 'published' &&
+    Date.parse(row.starts_at) > Date.now() &&
+    permissionsIn(row.community_id).includes('events.view');
+  const rsvpsOf = (event: EventRow) =>
+    ((content[event.community_id]?.rsvps ?? []) as RsvpRow[]).filter((r) => r.event_id === event.id);
+  let rsvpClock = 0;
+  /** FIFO promotion while places are free (apply_rsvp_capacity / on_event_capacity_change). */
+  const promoteWaitlist = (event: EventRow) => {
+    const rows = rsvpsOf(event);
+    const waiting = rows
+      .filter((r) => r.status === 'waitlisted')
+      .sort(
+        (a, b) => String(a.waitlisted_at).localeCompare(String(b.waitlisted_at)) || a.id.localeCompare(b.id),
+      );
+    let going = rows.filter((r) => r.status === 'going').length;
+    for (const row of waiting) {
+      if (event.capacity !== null && going >= event.capacity) break;
+      row.status = 'going';
+      row.waitlisted_at = null;
+      going += 1;
+    }
+  };
   let alertCount = 500;
   /** private.can_view_alert_row(): drafts → manage, or own with create; otherwise view or manage. */
   const canViewAlert = (row: AlertRow) => {
@@ -977,9 +1129,127 @@ export function fakeSupabase(options: FakeOptions = {}) {
       rpcFailures.delete(name);
       return { data: null, error: failure };
     }
-    const CONTENT_RPCS: Record<string, keyof FakeContent> = {
-      list_upcoming_events: 'events',
-    };
+    const CONTENT_RPCS: Record<string, keyof FakeContent> = {};
+    if (['list_upcoming_events', 'list_events', 'list_past_events'].includes(name)) {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const now = Date.now();
+      const all = ((content[String(args.p_community_id)]?.events ?? []) as EventRow[]).filter(canViewEvent);
+      const byStart = (a: EventRow, b: EventRow) =>
+        a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id);
+      let rows: EventRow[];
+      if (name === 'list_upcoming_events') {
+        rows = all.filter((e) => e.status === 'published' && Date.parse(e.ends_at) > now).sort(byStart);
+      } else if (name === 'list_events') {
+        const statuses = (args.p_statuses as string[] | undefined) ?? ['published', 'cancelled', 'completed'];
+        const from = args.p_from ? Date.parse(String(args.p_from)) : null;
+        const to = args.p_to ? Date.parse(String(args.p_to)) : null;
+        rows = all
+          .filter(
+            (e) =>
+              statuses.includes(e.status) &&
+              (from === null || Date.parse(e.ends_at) >= from) &&
+              (to === null || Date.parse(e.starts_at) < to),
+          )
+          .sort(byStart);
+      } else {
+        rows = all
+          .filter(
+            (e) =>
+              e.status === 'completed' ||
+              (['published', 'cancelled'].includes(e.status) && Date.parse(e.ends_at) <= now),
+          )
+          .sort((a, b) => byStart(b, a));
+      }
+      const after = args.p_cursor_id ? rows.findIndex((row) => row.id === args.p_cursor_id) + 1 : 0;
+      return {
+        data: rows.slice(after, after + Number(args.p_limit ?? 20)).map((row) => ({ ...row })),
+        error: null,
+      };
+    }
+    if (name === 'get_event_attendance') {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const event = allEvents().find((e) => e.id === args.p_event_id);
+      if (!event || !canViewEvent(event)) return { data: [], error: null };
+      const rows = rsvpsOf(event);
+      const count = (status: string) => rows.filter((r) => r.status === status).length;
+      const mine = rows.find((r) => r.user_id === me());
+      const queue = rows
+        .filter((r) => r.status === 'waitlisted')
+        .sort(
+          (a, b) =>
+            String(a.waitlisted_at).localeCompare(String(b.waitlisted_at)) || a.id.localeCompare(b.id),
+        );
+      return {
+        data: [
+          {
+            event_id: event.id,
+            capacity: event.capacity,
+            going_count: count('going'),
+            maybe_count: count('maybe'),
+            not_going_count: count('not_going'),
+            waitlisted_count: count('waitlisted'),
+            spots_left: event.capacity === null ? null : Math.max(event.capacity - count('going'), 0),
+            my_status: mine?.status ?? null,
+            my_waitlist_position: mine?.status === 'waitlisted' ? queue.indexOf(mine) + 1 : null,
+          },
+        ],
+        error: null,
+      };
+    }
+    if (name === 'rsvp_to_event' || name === 'cancel_rsvp') {
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      const event = allEvents().find((e) => e.id === args.p_event_id);
+      if (name === 'cancel_rsvp') {
+        // RLS: only while can_rsvp(); otherwise nothing is removed.
+        if (!event || !canRsvp(event)) return { data: false, error: null };
+        const bucket = content[event.community_id]!;
+        const before = (bucket.rsvps ?? []) as RsvpRow[];
+        const mine = before.find((r) => r.event_id === event.id && r.user_id === user);
+        bucket.rsvps = before.filter((r) => r !== mine);
+        if (mine?.status === 'going') promoteWaitlist(event);
+        return { data: !!mine, error: null };
+      }
+      const status = String(args.p_status);
+      if (!['going', 'maybe', 'not_going'].includes(status))
+        return { data: null, error: { code: '22023', message: 'status must be going, maybe or not_going' } };
+      if (!event || !canRsvp(event))
+        return { data: null, error: { code: '42501', message: 'you cannot RSVP to this event' } };
+      const bucket = content[event.community_id]!;
+      bucket.rsvps = bucket.rsvps ?? [];
+      let mine = (bucket.rsvps as RsvpRow[]).find((r) => r.event_id === event.id && r.user_id === user);
+      if (!mine) {
+        mine = makeRsvp(event.id, user, 'not_going');
+        mine.status = '';
+        bucket.rsvps.push(mine);
+      }
+      const wasGoing = mine.status === 'going';
+      if (status === 'going') {
+        const going = rsvpsOf(event).filter((r) => r.status === 'going' && r !== mine).length;
+        if (wasGoing) {
+          // unchanged
+        } else if (event.capacity !== null && going >= event.capacity) {
+          // Full: waitlisted; an existing place in the queue is kept.
+          if (mine.status !== 'waitlisted')
+            mine.waitlisted_at = new Date(Date.now() + ++rsvpClock).toISOString();
+          mine.status = 'waitlisted';
+        } else {
+          mine.status = 'going';
+          mine.waitlisted_at = null;
+        }
+      } else {
+        mine.status = status;
+        mine.waitlisted_at = null;
+        if (wasGoing) promoteWaitlist(event);
+      }
+      return {
+        data: [{ event_id: event.id, status: mine.status, waitlisted_at: mine.waitlisted_at }],
+        error: null,
+      };
+    }
     if (name === 'my_community_permissions') {
       return { data: permissionsIn(String(args.p_community_id)), error: null };
     }
@@ -1458,18 +1728,45 @@ export const makeAnnouncement = (
   ...overrides,
 });
 
+const fromNow = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+
+/** An event starting n days from now (relative to the real clock: upcoming/past depend on it). */
 export const makeEvent = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
   id: `c3c3c3c3-0000-4000-8000-${String(n).padStart(12, '0')}`,
   community_id: communityId,
   title: `Event ${n}`,
-  description: null,
-  location_text: `Hall ${n}`,
-  starts_at: at(60 * 24 * n),
-  ends_at: at(60 * 24 * n + 120),
+  description: null as string | null,
+  location_text: `Hall ${n}` as string | null,
+  starts_at: fromNow(60 * 24 * n),
+  ends_at: fromNow(60 * 24 * n + 120),
   timezone: 'UTC',
   status: 'published',
-  capacity: null,
+  capacity: null as number | null,
+  created_by: null as string | null,
+  published_at: fromNow(-60) as string | null,
+  cancelled_at: null as string | null,
+  cancellation_reason: null as string | null,
+  completed_at: null as string | null,
+  edited_at: null as string | null,
+  created_at: fromNow(-120),
+  updated_at: fromNow(-120),
   ...overrides,
+});
+
+let rsvpIds = 0;
+/** One person's RSVP to an event (waitlisted ones carry their queue time). */
+export const makeRsvp = (
+  eventId: string,
+  userId: string,
+  status: string,
+  waitlistedAt: string | null = null,
+) => ({
+  id: `d4d4d4d4-0000-4000-8000-${String(++rsvpIds).padStart(12, '0')}`,
+  event_id: eventId,
+  user_id: userId,
+  status,
+  waitlisted_at:
+    status === 'waitlisted' ? (waitlistedAt ?? new Date(Date.now() - 60_000 + rsvpIds).toISOString()) : null,
 });
 
 export const makePost = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
