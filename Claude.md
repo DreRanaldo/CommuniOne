@@ -359,14 +359,157 @@ A stage is complete only when:
 
 # Current Priority
 
-Start with the DATABASE.
+COMMUNIONE
 
-Do not build the React Native UI yet.
+REACT NATIVE / EXPO DEVELOPMENT ROADMAP
 
-Do not build the admin dashboard yet.
+IMPORTANT DEVELOPMENT RULE
 
-Do not build the marketplace yet.
+The backend/database/service layer must already be completed and verified before beginning this track.
 
-Do not build unrelated features.
+The mobile application must consume the existing backend.
 
-The immediate goal is to establish a secure, production-quality PostgreSQL foundation for CommuniOne.
+Claude Code must NOT:
+
+redesign the database unnecessarily
+
+create duplicate backend logic
+
+bypass existing authorization
+
+create insecure direct database access
+
+invent a second authentication system
+
+implement future stages early
+
+rewrite working code without a clear reason
+
+For every stage:
+
+Read CLAUDE.md.
+
+Inspect the existing repository.
+
+Inspect the current implementation before changing anything.
+
+Reuse existing architecture.
+
+Implement only the current stage.
+
+Write/update tests.
+
+Run linting.
+
+Run type checking.
+
+Run the appropriate build/tests.
+
+Perform a security/accessibility review.
+
+Update documentation.
+
+Report what was changed.
+
+Report any unresolved issues.
+
+STOP.
+
+Do not automatically begin the next stage.
+
+PRODUCT PRINCIPLES
+
+CommuniOne is a multi-community platform.
+
+A user can belong to multiple communities.
+
+Example:
+
+John
+→ Green Meadows → Admin
+
+John
+→ Football Club → Member
+
+John
+→ Church → Moderator
+
+The mobile application must always make it obvious:
+
+which community the user is currently viewing
+
+what actions they are allowed to perform
+
+whether something is personal or community-specific
+
+Community data must never leak between communities.
+
+BRAND / UX DIRECTION
+
+Product:
+
+CommuniOne
+
+Tagline:
+
+"One Platform. Every Community."
+
+Design direction:
+
+modern
+
+trustworthy
+
+approachable
+
+clean
+
+professional
+
+accessible
+
+rounded cards
+
+clear hierarchy
+
+large touch targets
+
+restrained visual design
+
+strong readability
+
+obvious community context
+
+Avoid:
+
+generic social-media appearance
+
+excessive gradients
+
+cluttered dashboards
+
+tiny controls
+
+unnecessary animations
+
+engagement mechanics that distract from community communication
+
+Emergency alerts must visually stand apart from normal content.
+
+PRIMARY MOBILE NAVIGATION
+
+Use the established mobile navigation structure:
+
+Home
+
+Communities
+
+Marketplace
+
+Alerts
+
+Profile
+
+Marketplace can initially be a prepared navigation destination/placeholder if its backend/mobile feature is not yet implemented.
+
+Do NOT build marketplace functionality during these stages.
