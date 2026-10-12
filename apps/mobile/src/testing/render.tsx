@@ -4,18 +4,19 @@ import { AppProviders } from '@/AppProviders';
 import { createDependencies } from '@/lib/dependencies';
 import { RootNavigator } from '@/navigation';
 import { ThemeProvider } from '@/theme';
-import { fakeSupabase, type FakeOptions } from './fakeSupabase';
+import { fakeLinks, fakeSupabase, type FakeOptions } from './fakeSupabase';
 
 /** Renders the whole navigation tree with a fake backend. */
-export async function renderApp(options: FakeOptions = {}) {
+export async function renderApp(options: FakeOptions & { initialURL?: string } = {}) {
   const fake = fakeSupabase(options);
-  const dependencies = createDependencies(fake.client);
+  const links = fakeLinks(options.initialURL ?? null);
+  const dependencies = createDependencies(fake.client, links.source);
   const view = await render(
     <AppProviders dependencies={dependencies}>
       <RootNavigator />
     </AppProviders>,
   );
-  return { ...fake, view };
+  return { ...fake, links, dependencies, view };
 }
 
 /** Renders a component inside the theme only (design-system tests). */

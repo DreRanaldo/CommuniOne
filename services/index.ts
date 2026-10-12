@@ -11,7 +11,7 @@
 // session. Never pass a service-role client: it bypasses Row Level Security.
 // See docs/api/README.md.
 
-import { createContext, type Db } from './core/context.ts';
+import { createContext, type Db, type ErrorListener } from './core/context.ts';
 import type { Logger } from './core/logger.ts';
 import { alertsService } from './alerts/index.ts';
 import { announcementsService } from './announcements/index.ts';
@@ -29,10 +29,12 @@ import { rolesService } from './roles/index.ts';
 
 export interface ServicesOptions {
   logger?: Logger;
+  /** Notified of every failed operation (after translation and logging). */
+  onError?: ErrorListener;
 }
 
 export function createServices(db: Db, options: ServicesOptions = {}) {
-  const ctx = createContext(db, options.logger);
+  const ctx = createContext(db, options.logger, options.onError);
   return {
     auth: authService(ctx),
     communities: communitiesService(ctx),
@@ -53,6 +55,8 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
 export type Services = ReturnType<typeof createServices>;
 
 export { ErrorCode, ServiceError, isServiceError, type ErrorDetails } from './core/errors.ts';
+export type { ErrorListener } from './core/context.ts';
+export { AUTH_LINK_KINDS, type AuthLinkKind } from './auth/index.ts';
 export { consoleLogger, silentLogger, redact, type Logger, type LogLevel } from './core/logger.ts';
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type Page, type PageRequest } from './core/pagination.ts';
 export type { Database } from './database.types.ts';

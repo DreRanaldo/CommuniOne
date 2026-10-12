@@ -28,6 +28,7 @@ site_url = "http://127.0.0.1:3000"
 # the future admin web app's callback. Anything else is rejected.
 additional_redirect_urls = [
   "communione://auth/callback",
+  "communione://auth/reset-password",
   "http://127.0.0.1:3000/auth/callback",
   "http://localhost:3000/auth/callback",
 ]
@@ -47,8 +48,10 @@ minimum_password_length = 8
 password_requirements = "letters_digits"
 
 [auth.rate_limit]
-# Local defaults; tune production limits in the dashboard.
-email_sent = 2
+# Local/test defaults; production limits are set in the dashboard (see
+# docs/deployment/supabase-auth.md). Emails go to the local Mailpit only, and
+# the test suites send several confirmation and reset emails per run.
+email_sent = 100
 sms_sent = 30
 anonymous_users = 30
 token_refresh = 150

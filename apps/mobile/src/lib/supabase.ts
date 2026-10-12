@@ -17,8 +17,12 @@ export function createSupabaseClient(config: PublicConfig): AppSupabaseClient {
       storage: secureStorage,
       persistSession: true,
       autoRefreshToken: true,
-      // No browser URL to read sessions from in a native app; deep links are handled explicitly.
+      // No browser URL to read sessions from in a native app; email links are
+      // handled explicitly (services.auth.handleAuthRedirect).
       detectSessionInUrl: false,
+      // PKCE: email links carry a one-time code, never tokens, and the code
+      // only works together with the verifier kept on this device.
+      flowType: 'pkce',
     },
   });
 }

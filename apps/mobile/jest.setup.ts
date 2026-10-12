@@ -23,3 +23,9 @@ jest.mock(
   'react-native-safe-area-context',
   () => jest.requireActual<{ default: unknown }>('react-native-safe-area-context/jest/mock').default,
 );
+
+// Native splash screen: no-op in tests.
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(async () => true),
+  hideAsync: jest.fn(async () => true),
+}));

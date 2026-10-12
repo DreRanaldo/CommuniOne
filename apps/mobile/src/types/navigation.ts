@@ -6,6 +6,7 @@ export type AuthStackParamList = {
   Welcome: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  ForgotPassword: undefined;
 };
 
 /** Main tabs once signed in. */
@@ -30,6 +31,8 @@ export type RootStackParamList = {
   Community: { communityId: string; name?: string } & Partial<NavigatorScreenParams<CommunityStackParamList>>;
   /** Modal: join a community from an invitation link or code. */
   JoinCommunity: { token?: string } | undefined;
+  /** Recovery mode only: choose a new password after a reset link. */
+  ResetPassword: undefined;
 };
 
 declare global {

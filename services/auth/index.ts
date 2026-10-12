@@ -2,7 +2,7 @@
 // account deletion. Identity always comes from the Supabase session.
 
 import type { AuthError, Session } from '@supabase/supabase-js';
-import { ErrorCode, ServiceError } from '../core/errors.ts';
+import { ErrorCode, ServiceError, networkError } from '../core/errors.ts';
 import { unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import * as v from '../core/validate.ts';
 import type { Tables } from '../database.types.ts';
@@ -38,6 +38,13 @@ const password = (value: unknown) => v.text(value, 'password', {
 /** Supabase Auth errors are mapped without revealing whether an account exists. */
 function fromAuthError(error: AuthError): ServiceError {
   const status = error.status ?? 0;
+  if (error.name === 'AuthRetryableFetchError' || status === 0) return networkError(error);
+  if (error.code === 'same_password') {
+    return new ServiceError(ErrorCode.Validation, 'Choose a password you have not used here before.', { field: 'password' }, error);
+  }
+  if (error.code === 'reauthentication_needed') {
+    return new ServiceError(ErrorCode.Forbidden, 'For your security, sign in again before changing your password.', {}, error);
+  }
   if (status === 429 || error.code === 'over_request_rate_limit' || error.code === 'over_email_send_rate_limit') {
     return new ServiceError(ErrorCode.RateLimited, undefined, {}, error);
   }
@@ -51,6 +58,25 @@ function fromAuthError(error: AuthError): ServiceError {
   if (status === 401 || status === 403) return new ServiceError(ErrorCode.Unauthenticated, undefined, {}, error);
   return new ServiceError(ErrorCode.ServerError, undefined, {}, error);
 }
+
+/**
+ * Email links handled by the app, by route (custom scheme: host + path;
+ * https: path). The confirmation link signs the user in; the recovery link
+ * signs them in so they can choose a new password.
+ */
+export const AUTH_LINK_KINDS = {
+  '/auth/callback': 'signedIn',
+  '/auth/reset-password': 'recovery',
+} as const;
+
+export type AuthLinkKind = (typeof AUTH_LINK_KINDS)[keyof typeof AUTH_LINK_KINDS];
+
+function authLinkRoute(url: URL): string {
+  const path = url.protocol === 'https:' || url.protocol === 'http:' ? url.pathname : `/${url.host}${url.pathname}`;
+  return path.replace(/\/+$/, '');
+}
+
+const LINK_EXPIRED = 'This link is invalid or has expired. Request a new one.';
 
 export function authService(ctx: ServiceContext) {
   const { db } = ctx;
@@ -75,6 +101,10 @@ export function authService(ctx: ServiceContext) {
           password: password(input.password),
           options: { data, emailRedirectTo: redirect },
         });
+        // An existing address gets the same answer as a new one, so the app
+        // never reveals whether someone has an account (the owner can sign in
+        // or reset their password).
+        if (result.error?.code === 'user_already_exists') return { userId: null, needsEmailConfirmation: true };
         if (result.error) throw fromAuthError(result.error);
         return { userId: result.data.user?.id ?? null, needsEmailConfirmation: result.data.session === null };
       });
@@ -106,8 +136,57 @@ export function authService(ctx: ServiceContext) {
         const { error } = await db.auth.resetPasswordForEmail(email(input.email), {
           redirectTo: input.redirectTo === undefined ? undefined : v.text(input.redirectTo, 'redirectTo', { max: 2048 }),
         });
-        // Do not reveal whether the address has an account.
-        if (error && (error.status === 429 || error.code === 'over_email_send_rate_limit')) throw fromAuthError(error);
+        // Do not reveal whether the address has an account: only transport
+        // failures and rate limits are reported; everything else looks sent.
+        if (!error) return;
+        const translated = fromAuthError(error);
+        if (translated.code === ErrorCode.RateLimited || translated.details.network) throw translated;
+      });
+    },
+
+    /**
+     * Completes an email link opened in the app (sign-up confirmation or
+     * password recovery): exchanges its one-time code for a session (PKCE).
+     * Returns which kind of link it was; a recovery session must be followed
+     * by updatePassword().
+     */
+    handleAuthRedirect(link: string): Promise<{ kind: AuthLinkKind }> {
+      return ctx.run('auth.handleAuthRedirect', async () => {
+        let url: URL;
+        try {
+          url = new URL(v.text(link, 'link', { max: 4096 }));
+        } catch {
+          throw new ServiceError(ErrorCode.Validation, LINK_EXPIRED, { field: 'link' });
+        }
+        const kind = AUTH_LINK_KINDS[authLinkRoute(url) as keyof typeof AUTH_LINK_KINDS];
+        if (!kind) throw new ServiceError(ErrorCode.Validation, LINK_EXPIRED, { field: 'link' });
+        // Auth reports failures (e.g. an expired link) in the query or the fragment.
+        const params = new URLSearchParams(url.search);
+        for (const [key, value] of new URLSearchParams(url.hash.replace(/^#/, ''))) if (!params.has(key)) params.set(key, value);
+        if (params.get('error') || params.get('error_code')) {
+          throw new ServiceError(ErrorCode.Validation, LINK_EXPIRED, { field: 'link' });
+        }
+        const code = params.get('code');
+        if (!code || code.length > 512) throw new ServiceError(ErrorCode.Validation, LINK_EXPIRED, { field: 'link' });
+        const { error } = await db.auth.exchangeCodeForSession(code);
+        if (error) {
+          if (error.code === 'pkce_code_verifier_not_found') {
+            throw new ServiceError(ErrorCode.Validation, 'Open this link on the device where you requested it.', { field: 'link' }, error);
+          }
+          const translated = fromAuthError(error);
+          if (translated.details.network) throw translated;
+          throw new ServiceError(ErrorCode.Validation, LINK_EXPIRED, { field: 'link' }, error);
+        }
+        return { kind };
+      });
+    },
+
+    /** Sets a new password for the signed-in user (also completes password recovery). */
+    updatePassword(newPassword: string): Promise<void> {
+      return ctx.run('auth.updatePassword', async () => {
+        await ctx.requireUserId();
+        const { error } = await db.auth.updateUser({ password: password(newPassword) });
+        if (error) throw fromAuthError(error);
       });
     },
 

@@ -2,6 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { FlatList, View } from 'react-native';
 import { Button, Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '@/components';
+import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
 import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles } from '@/theme';
@@ -26,6 +27,7 @@ export function CommunitiesScreen() {
         data={mine.data}
         keyExtractor={(item) => item.community_id}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={<AuthNoticeBanner only={['emailConfirmed', 'passwordUpdated', 'linkError']} />}
         ListEmptyComponent={
           <EmptyState
             icon="people-outline"

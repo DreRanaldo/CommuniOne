@@ -24,7 +24,13 @@ export interface ServiceContext {
   requireUserId(): Promise<string>;
 }
 
-export function createContext(db: Db, logger: Logger = silentLogger): ServiceContext {
+/**
+ * Called with every failure after it is translated and logged, e.g. so an app
+ * can react to UNAUTHENTICATED (an expired or revoked session) in one place.
+ */
+export type ErrorListener = (error: ServiceError, operation: string) => void;
+
+export function createContext(db: Db, logger: Logger = silentLogger, onError?: ErrorListener): ServiceContext {
   const log = safeLogger(logger);
   return {
     db,
@@ -40,6 +46,11 @@ export function createContext(db: Db, logger: Logger = silentLogger): ServiceCon
           log.log('warn', 'service.rate_limited', { operation, retryAfterSeconds: error.details.retryAfterSeconds });
         } else {
           log.log('debug', 'service.refused', { operation, code: error.code });
+        }
+        try {
+          onError?.(error, operation);
+        } catch {
+          // A listener must never change the outcome of an operation.
         }
         throw error;
       }

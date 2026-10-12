@@ -4,11 +4,13 @@ import { Button, Icon, Screen, Text } from '@/components';
 import { APP_NAME, TAGLINE } from '@/constants/app';
 import { makeStyles } from '@/theme';
 import type { AuthStackParamList } from '@/types/navigation';
+import { AuthNoticeBanner } from '../components/AuthNoticeBanner';
 
 export function WelcomeScreen({ navigation }: NativeStackScreenProps<AuthStackParamList, 'Welcome'>) {
   const styles = useStyles();
   return (
     <Screen edges={['top', 'bottom', 'left', 'right']} testID="welcome-screen">
+      <AuthNoticeBanner />
       <View style={styles.hero}>
         <View style={styles.badge}>
           <Icon name="people" size={40} color="onPrimary" />

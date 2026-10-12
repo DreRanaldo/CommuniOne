@@ -57,7 +57,8 @@ There is no `src/services/`: the service layer is the repository's `services/`.
 
 ```
 RootStack
-├── (signed out)  Auth ── Welcome · SignIn · SignUp
+├── (signed out)  Auth ── Welcome · SignIn · SignUp · ForgotPassword
+├── (recovery)    ResetPassword            ← communione://auth/reset-password?code=…
 └── (signed in)   App (tabs) ── Communities · Notifications · Profile
                   Community (stack, scoped by communityId) ── CommunityHome · CommunitySection
                   JoinCommunity (modal)  ← communione://join?token=…
@@ -74,9 +75,10 @@ RootStack
   token is treated like a password: never displayed or logged.
 - **Typed routes:** every navigator has a param list in `src/types/navigation.ts`.
 
-Built now: Welcome, Sign in (working, through `services.auth`), the community
-list (working, `services.communities.listMine`), the community hub, Profile with
-sign-out. Placeholders: Sign up, Join, Notifications, community sections.
+Built now: Welcome, Sign in, Sign up, Forgot password, Reset password
+(authentication: see [`mobile-authentication.md`](mobile-authentication.md)),
+the community list (`services.communities.listMine`), the community hub, and
+Profile with sign-out. Placeholders: Join, Notifications, community sections.
 
 ## Design system
 
@@ -99,7 +101,8 @@ sign-out. Placeholders: Sign up, Join, Notifications, community sections.
 
 - One client per app run, created from validated config with the anon /
   publishable key: `persistSession`, `autoRefreshToken`, keychain storage,
-  `detectSessionInUrl: false`. Creating it makes no network request.
+  `detectSessionInUrl: false`, PKCE email links (RN-02). Creating it makes no
+  network request.
 - Token refresh runs only in the foreground (`AppState`), as Supabase recommends
   for React Native.
 - Screens use `useServices()` (the shared service layer); the raw client is used
@@ -121,7 +124,7 @@ sign-out. Placeholders: Sign up, Join, Notifications, community sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 40 tests: app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 63 tests: authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |
@@ -135,5 +138,5 @@ All of these run in CI (job "Mobile app", see [`../development/ci.md`](../develo
   Native builds run on EAS.
 - Placeholder app icons and splash image (from the Expo template) and placeholder
   bundle ids (`com.communione.app`): replace before the first store build.
-- Sign-up, invitations, notifications and community sections are placeholders.
+- Invitations, notifications and community sections are placeholders.
 - No offline cache or query library yet.

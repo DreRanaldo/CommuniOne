@@ -71,6 +71,17 @@ constraint or policy names) are never included.
 | `RATE_LIMITED` | Too many requests | per-user limits (see service-layer.md); `details.retryAfterSeconds` |
 | `SERVER_ERROR` | Unexpected failure | logged (redacted); generic message to the client |
 
+### Network failures and the `onError` hook
+
+A request that never reached the server (offline, DNS, timeout) is a
+`SERVER_ERROR` with `details.network: true` and the message "We couldn't reach
+CommuniOne. Check your connection and try again." It is safe to retry.
+
+`createServices(client, { onError })` calls `onError(error, operation)` after
+every failure. The mobile app uses it to detect a session the server no longer
+accepts (`UNAUTHENTICATED` from any operation other than sign-in / sign-up /
+reset / link handling) and sign out locally.
+
 ### Pagination
 
 List operations return `Page<T> = { items: T[], nextCursor: string | null }`.
@@ -90,10 +101,12 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
-| `signUp(input)` | Create an account (no auth needed) | – | `{ email, password, displayName?, firstName?, lastName?, emailRedirectTo? }` → `{ userId, needsEmailConfirmation }` | `RATE_LIMITED` | Sends a confirmation email; profile created by the database |
+| `signUp(input)` | Create an account (no auth needed) | – | `{ email, password, displayName?, firstName?, lastName?, emailRedirectTo? }` → `{ userId, needsEmailConfirmation }` (identical for an address that already has an account) | `RATE_LIMITED`, network | Sends a confirmation email; profile created by the database |
 | `signIn(input)` | Password sign-in (no auth needed) | – | `{ email, password }` → `Session` | `UNAUTHENTICATED` (one message for wrong password, unknown or unconfirmed email), `RATE_LIMITED` | Creates a session |
 | `signOut(scope?)` | Sign out this device, others, or everywhere | – | `'local' \| 'others' \| 'global'` → `void` | – | Ends sessions immediately (server-side check) |
-| `requestPasswordReset(input)` | Email a reset link (no auth needed) | – | `{ email, redirectTo? }` → `void` | `RATE_LIMITED` | Email, if the account exists (never revealed) |
+| `requestPasswordReset(input)` | Email a reset link (no auth needed) | – | `{ email, redirectTo? }` → `void` | `RATE_LIMITED`, `SERVER_ERROR` with `details.network` (never sent) | Email, if the account exists (never revealed) |
+| `handleAuthRedirect(url)` | Complete an email link opened in the app (PKCE code exchange) | – | `communione://auth/callback?code=…` or `…/auth/reset-password?code=…` → `{ kind: 'signedIn' \| 'recovery' }` | `VALIDATION` (invalid / expired link, or opened on another device), network | Creates a session; `recovery` must be followed by `updatePassword` |
+| `updatePassword(newPassword)` | Set a new password (also completes recovery) | signed in | password (8–72, letters and digits) → `void` | `VALIDATION` (rules, same as current password), `FORBIDDEN` (re-authentication needed) | Other sessions are kept unless signed out |
 | `getMyProfile()` | Own profile | – | → `Profile` | `NOT_FOUND` | – |
 | `updateMyProfile(patch)` | Edit own profile (active account) | – | `{ displayName?, firstName?, lastName?, bio?, avatarUrl? (https) }` → `Profile` | `FORBIDDEN` | – |
 | `getMyPhone()` / `setMyPhone(phone \| null)` | Private phone number (visible to nobody else) | – | → `string \| null` / `void` | – | – |
