@@ -154,3 +154,22 @@ Files are stored at `post-images/{community_id}/{user_id}/{uuid}.{jpg|png|webp}`
   Alerts. Notifications remains a placeholder screen in the code, for its own
   stage.
 - **Dark mode** is off by design for now.
+
+## Device fixes (after RN-15)
+
+- **The photo library opened too early.** Opening the editor with "Add photos"
+  (feed, or the + sheet) launched the library while the editor was still
+  animating in; iOS silently refuses that, so nothing appeared. The editor now
+  waits for its opening transition to end (`transitionEnd`, with a 450 ms
+  fallback) before opening the library.
+- **Picked photos are no longer read back from a file.** The re-encoded JPEG
+  comes straight from the image manipulator as base64 (`saveAsync({ base64:
+  true })`). Other local files (documents) are read with `XMLHttpRequest`,
+  because `fetch(file://…).arrayBuffer()` is not supported on every React
+  Native build.
+- **A server missing a migration says so.** A missing database function or
+  table (PostgREST `PGRST202` / `PGRST205`, Postgres `42883` / `42P01`) or a
+  missing storage bucket now shows "The server is missing an update this
+  feature needs (a database migration has not been applied)…" instead of
+  "Something went wrong". Posting with photos needs migration 26
+  (`create_post`, the `post-images` bucket) on the Supabase project.

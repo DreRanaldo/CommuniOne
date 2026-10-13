@@ -13,14 +13,16 @@ for an element of the mockups, the element was **left out rather than faked**
 
 | Before | Now |
 |---|---|
-| Home · Communities · Marketplace · Alerts · Profile | Home · Communities · Discover · **+** · Market · Profile |
+| Home · Communities · Marketplace · Alerts · Profile | Home · Communities · Discover · Market · Profile, with a floating **+** above the bar |
 
 - **Alerts left the tab bar** (as in the mockups). Alerts are still reachable:
   - from the hub's Alerts tile and Alerts section;
   - from the feed, where urgent and emergency alerts stay pinned above the posts;
   - from notifications;
   - from `communione://alerts`, which now opens the hub's Alerts list.
-- **The centre "+"** opens the **Create** sheet (root modal):
+- **The floating "+"** (bottom right, just above the tab bar) opens the **Create** sheet (root modal).
+  It shows on the main screen of Home, Communities and Discover only, never over a post, an editor or a detail screen.
+  The sheet offers:
   - Post, Photos and Story need `posts.create`;
   - Event needs `events.create`;
   - Alert needs `alerts.create`;

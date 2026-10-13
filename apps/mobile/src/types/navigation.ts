@@ -25,16 +25,15 @@ export type ProfileStackParamList = {
  *   Home        the community feed, with stories
  *   Communities the community hub (sections, alerts, announcements, events, documents)
  *   Discover    finding and joining communities
- *   CreateTab   the centre "+": opens the Create sheet (never shown as a screen)
  *   Marketplace placeholder (a later module)
  *   Profile     the user's own profile and account
- * Alerts open from the hub, the feed's pinned alerts and notifications.
+ * Alerts open from the hub, the feed's pinned alerts and notifications. A
+ * floating "+" above the tab bar opens the Create sheet.
  */
 export type AppTabParamList = {
   Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
   CommunitiesTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Discover: undefined;
-  CreateTab: undefined;
   Marketplace: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };

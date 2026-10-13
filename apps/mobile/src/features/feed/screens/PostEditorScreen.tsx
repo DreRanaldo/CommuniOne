@@ -21,6 +21,8 @@ import { newRequestId } from '@/utils/ids';
 type Props = NativeStackScreenProps<CommunityStackParamList, 'PostEditor'>;
 
 export const POST_MAX_LENGTH = 10_000;
+/** Longest wait for the screen's opening animation before showing the photo library. */
+export const PICKER_DELAY_MS = 450;
 
 /**
  * Writes a new post (caption and up to 10 photos), or edits one's caption
@@ -119,14 +121,29 @@ function PostEditor({ navigation, route, existing }: Props & { existing: Post | 
     ]);
   }, [media, photos.length]);
 
-  // Opened from the feed's photo button: go straight to the photo library.
+  // Opened from a photo button: go straight to the photo library, but only
+  // once this screen has finished appearing. iOS refuses (silently) to show
+  // the picker while a modal is still animating in, which left the user with
+  // nothing happening.
   const openedWithPhotos = route.params?.addPhotos === true && !editing;
   const asked = useRef(false);
   useEffect(() => {
-    if (!openedWithPhotos || asked.current) return;
-    asked.current = true;
-    void addPhotos();
-  }, [openedWithPhotos, addPhotos]);
+    if (!openedWithPhotos || asked.current) return undefined;
+    const open = () => {
+      if (asked.current) return;
+      asked.current = true;
+      void addPhotos();
+    };
+    const unsubscribe = navigation.addListener('transitionEnd', (event) => {
+      if (!event.data.closing) open();
+    });
+    // Fallback when no transition event comes (e.g. no animation).
+    const timer = setTimeout(open, PICKER_DELAY_MS);
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+  }, [openedWithPhotos, addPhotos, navigation]);
 
   const removePhoto = (key: string) => {
     const photo = photos.find((p) => p.key === key);

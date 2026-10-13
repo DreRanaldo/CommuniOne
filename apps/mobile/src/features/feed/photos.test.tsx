@@ -219,6 +219,37 @@ describe('creating a post with photos', () => {
     expect(postsBy(content, 'No photos today')).toHaveLength(1);
   });
 
+  test('a server missing the posting update says so plainly (not "something went wrong")', async () => {
+    const { user, failRpcOnce } = await openHome();
+    failRpcOnce('create_post', {
+      code: 'PGRST202',
+      message: 'Could not find the function public.create_post(p_body, p_community_id) in the schema cache',
+    });
+    await user.press(screen.getByRole('button', { name: 'New post' }));
+    await user.type(await screen.findByLabelText('What would you like to share?'), 'Hello neighbours');
+    await user.press(screen.getByRole('button', { name: 'Post' }));
+    expect(await screen.findByTestId('post-editor-error')).toHaveTextContent(
+      /database migration has not been applied/,
+    );
+    expect(screen.getByTestId('post-editor-error')).not.toHaveTextContent(/create_post|schema/);
+  });
+
+  test('the photo library opens once the editor has appeared, from the feed and from the + sheet', async () => {
+    const { user, media } = await openHome();
+    media.nextPhotos([makePhoto(1)]);
+    await user.press(screen.getByRole('button', { name: 'Add photos' }));
+    await screen.findByTestId('post-editor-screen');
+    await screen.findByTestId('composer-photo-0');
+    expect(media.picker.pickPhotos).toHaveBeenCalledTimes(1);
+    await user.press(screen.getByRole('button', { name: 'Cancel' }));
+
+    media.nextPhotos([makePhoto(2)]);
+    await user.press(await screen.findByTestId('fab-create'));
+    await user.press(await screen.findByRole('button', { name: 'Photos' }));
+    await screen.findByTestId('composer-photo-0');
+    expect(media.picker.pickPhotos).toHaveBeenCalledTimes(2);
+  });
+
   test('a failed upload keeps the caption and photos; "Try again" finishes without re-sending what was uploaded', async () => {
     const { user, media, postImagesStorage, failUploads, content } = await openHome();
     media.nextPhotos([makePhoto(1), makePhoto(2)]);

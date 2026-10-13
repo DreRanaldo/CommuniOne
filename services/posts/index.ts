@@ -3,7 +3,7 @@
 // moderators change status, never text (database trigger).
 
 import { mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
-import { ErrorCode, ServiceError } from '../core/errors.ts';
+import { ErrorCode, serverOutdated, ServiceError } from '../core/errors.ts';
 import { checkImage, randomId, uploadBody, type ImageMimeType, type UploadBody } from '../core/files.ts';
 import { decodeCursor, pageSize, toPage, type Page, type PageRequest } from '../core/pagination.ts';
 import * as v from '../core/validate.ts';
@@ -111,6 +111,7 @@ export function postsService(ctx: ServiceContext) {
           if (status === 403 || /row-level security|unauthorized/i.test(stored.error.message)) {
             throw new ServiceError(ErrorCode.Forbidden, "You can't post pictures in this community.", {}, stored.error);
           }
+          if (/bucket not found/i.test(stored.error.message)) throw serverOutdated(stored.error);
           throw new ServiceError(ErrorCode.ServerError, 'The picture could not be uploaded. Try again.', {}, stored.error);
         }
         return { path };

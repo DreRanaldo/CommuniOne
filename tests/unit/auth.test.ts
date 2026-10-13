@@ -142,3 +142,18 @@ describe('onError hook', () => {
     assert.deepEqual(seen, ['auth.updatePassword:UNAUTHENTICATED']);
   });
 });
+
+describe('an outdated server', () => {
+  test('a missing function or table says a migration is missing, without internals', () => {
+    for (const error of [
+      { code: 'PGRST202', message: 'Could not find the function public.create_post(p_body, p_community_id) in the schema cache' },
+      { code: '42883', message: 'function public.create_story(uuid) does not exist' },
+      { code: 'PGRST205', message: "Could not find the table 'public.stories' in the schema cache" },
+    ]) {
+      const translated = fromDbError(error);
+      assert.equal(translated.code, ErrorCode.ServerError);
+      assert.match(translated.message, /database migration has not been applied/);
+      assert.doesNotMatch(translated.message, /create_post|create_story|stories|schema/);
+    }
+  });
+});
