@@ -61,6 +61,8 @@ export type CommunityStackParamList = {
   EventDetail: { eventId: string };
   /** New event, or edit one (`eventId`, loaded from the server). */
   EventEditor: { eventId?: string } | undefined;
+  /** One document (metadata and a short-lived download link), read from the server. */
+  DocumentDetail: { documentId: string };
   /** The current community's alerts (active, history, drafts). */
   Alerts: undefined;
   /** One alert, read from the server. */
@@ -83,6 +85,10 @@ export type RootStackParamList = {
    * link; it is removed from the route as soon as it is read.
    */
   JoinCommunity: { token?: string } | undefined;
+  /** The notification center (communione://notifications). */
+  Notifications: undefined;
+  /** One notification (communione://notifications/<id>), read from the server. */
+  NotificationDetail: { notificationId: string };
   /** Modal: create a community (the caller becomes its Owner). */
   CreateCommunity: undefined;
   /** Recovery mode only: choose a new password after a reset link. */

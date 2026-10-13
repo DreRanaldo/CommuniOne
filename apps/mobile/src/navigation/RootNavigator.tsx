@@ -7,6 +7,8 @@ import { ResetPasswordScreen } from '@/features/auth/screens/ResetPasswordScreen
 import { CommunitiesScreen } from '@/features/communities/screens/CommunitiesScreen';
 import { CreateCommunityScreen } from '@/features/communities/create/CreateCommunityScreen';
 import { JoinCommunityScreen } from '@/features/communities/join/JoinCommunityScreen';
+import { NotificationDetailScreen } from '@/features/notifications/screens/NotificationDetailScreen';
+import { NotificationsScreen } from '@/features/notifications/screens/NotificationsScreen';
 import type { RootStackParamList } from '@/types/navigation';
 import { AppTabs } from './AppTabs';
 import { AuthNavigator } from './AuthNavigator';
@@ -51,6 +53,16 @@ export function RootNavigator() {
             name="Communities"
             component={CommunitiesScreen}
             options={{ presentation: 'modal', headerShown: true, title: 'Switch community' }}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{ headerShown: true, title: 'Notifications' }}
+          />
+          <Stack.Screen
+            name="NotificationDetail"
+            component={NotificationDetailScreen}
+            options={{ headerShown: true, title: 'Notification' }}
           />
           <Stack.Screen
             name="CreateCommunity"

@@ -59,9 +59,16 @@ export function FeedScreen({ navigation }: Props) {
     );
   }, [alerts, community.community_id]);
   const pinnedAlerts = useAsync(loadPinned);
+  const { notifications } = useServices();
+  const loadUnread = useCallback(() => notifications.unreadCount(), [notifications]);
+  const unread = useAsync(loadUnread);
+  const { reload: reloadUnread } = unread;
   const pinned = pinnedAlerts.status === 'success' ? pinnedAlerts.data : [];
   const { reload: reloadPinned } = pinnedAlerts;
-  const loadAlerts = useCallback(async () => reloadPinned(), [reloadPinned]);
+  const loadAlerts = useCallback(async () => {
+    reloadPinned();
+    reloadUnread();
+  }, [reloadPinned, reloadUnread]);
 
   // Members can see their own hidden posts; only moderators get a "Deleted" view.
   const filters = FILTERS.filter((f) => f.status !== 'deleted' || canModerate);
@@ -72,6 +79,8 @@ export function FeedScreen({ navigation }: Props) {
         onCompose={() => navigation.navigate('PostEditor')}
         onAddPhotos={() => navigation.navigate('PostEditor', { addPhotos: true })}
         alerts={pinned}
+        unread={unread.status === 'success' ? unread.data : 0}
+        onOpenNotifications={() => navigation.getParent()?.getParent()?.navigate('Notifications')}
         onOpenAlert={(alertId) =>
           navigation
             .getParent()

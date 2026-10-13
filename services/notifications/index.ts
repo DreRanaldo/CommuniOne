@@ -2,7 +2,7 @@
 // created by the database (producers) and trusted backend code, never by
 // clients.
 
-import { unwrap, type ServiceContext } from '../core/context.ts';
+import { unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import { decodeCursor, pageSize, toPage, type Page, type PageRequest } from '../core/pagination.ts';
 import * as v from '../core/validate.ts';
 import type { Tables } from '../database.types.ts';
@@ -29,6 +29,17 @@ export function notificationsService(ctx: ServiceContext) {
           p_include_archived: input.includeArchived === undefined ? false : v.bool(input.includeArchived, 'includeArchived'),
         }));
         return toPage(rows, limit, (last) => [last.created_at, last.id]);
+      });
+    },
+
+    /** One of the caller's own notifications (RLS: owner only, and membership for community types). */
+    get(notificationId: string): Promise<Notification> {
+      return ctx.run('notifications.get', async () => {
+        await ctx.requireUserId();
+        return unwrapOne(
+          await db.from('notifications').select('*').eq('id', v.uuid(notificationId, 'notificationId')).maybeSingle(),
+          'Notification not found.',
+        );
       });
     },
 

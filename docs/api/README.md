@@ -229,6 +229,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
 | `list(input?)` | My inbox, newest first | own only | `{ unreadOnly?, communityId?, includeArchived?, limit?, cursor? }` → `Page<Notification>` | – | – |
+| `get(id)` | One notification (RN-12 detail and deep link) | own only (RLS) | → `Notification` | `NOT_FOUND` (missing or someone else's) | – |
 | `unreadCount(communityId?)` | Badge count | own | → `number` | – | – |
 | `markRead(id)` / `markUnread(id)` / `archive(id)` / `delete(id)` | Inbox actions | own | → `boolean` (false: nothing changed / not yours) | – | Server-stamped times |
 | `markAllRead(communityId?)` | Clear the badge | own | → `number` changed | – | – |

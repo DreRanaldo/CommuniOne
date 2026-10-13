@@ -8,6 +8,7 @@ import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHom
 import { AlertDetailScreen } from '@/features/alerts/AlertDetailScreen';
 import { AlertEditorScreen } from '@/features/alerts/AlertEditorScreen';
 import { AlertsScreen } from '@/features/alerts/AlertsScreen';
+import { DocumentDetailScreen } from '@/features/documents/DocumentDetailScreen';
 import { EventDetailScreen } from '@/features/events/EventDetailScreen';
 import { EventEditorScreen } from '@/features/events/EventEditorScreen';
 import { EventsScreen } from '@/features/events/EventsScreen';
@@ -78,6 +79,7 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
       />
       <Stack.Screen name="Feed" component={FeedScreen} options={{ headerShown: false, title: 'Home' }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />
+      <Stack.Screen name="DocumentDetail" component={DocumentDetailScreen} options={{ title: 'Document' }} />
       <Stack.Screen name="Events" component={EventsScreen} options={{ title: 'Events' }} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: 'Event' }} />
       <Stack.Screen

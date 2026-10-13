@@ -4,6 +4,7 @@ In-app notifications, plus the reusable server-side notification service that
 other modules use. Push, email and SMS are **not** implemented. The design leaves
 room for them without changing the `notifications` table.
 
+- **Mobile app:** the notification center, see [`notifications-app.md`](notifications-app.md) (RN-12)
 - **Migration:** `supabase/migrations/20261011001500_notifications.sql`
 - **Tests:**
   - `supabase/tests/database/016_notifications.test.sql` (pgTAP, 59)

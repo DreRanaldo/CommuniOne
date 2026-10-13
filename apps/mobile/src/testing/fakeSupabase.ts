@@ -65,6 +65,8 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** The signed-in user's notifications (see makeNotification). */
+  notifications?: Record<string, unknown>[];
   /** Permission keys by community id; otherwise derived from the user's roles there. */
   permissions?: Record<string, string[]>;
 }
@@ -77,6 +79,8 @@ export interface FakeContent {
   rsvps?: Record<string, unknown>[];
   /** Post pictures (see makePostImage); their files exist in the post-images bucket. */
   postImages?: Record<string, unknown>[];
+  /** Documents (see makeDocument). */
+  documents?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
   comments?: Record<string, unknown>[];
 }
@@ -124,6 +128,7 @@ type DbError = { code: string; message: string; status?: number };
 const MEMBER_PERMISSIONS = [
   'alerts.view',
   'announcements.view',
+  'documents.view',
   'events.view',
   'posts.view',
   'posts.create',
@@ -139,6 +144,7 @@ const MANAGEMENT = [
   'alerts.manage',
   'announcements.create',
   'announcements.manage',
+  'documents.manage',
   'events.create',
   'events.manage',
 ];
@@ -153,6 +159,17 @@ type PostRow = ReturnType<typeof makePost>;
 type CommentRow = ReturnType<typeof makeComment>;
 type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
 type PostImageRow = ReturnType<typeof makePostImage>;
+type NotificationRow = ReturnType<typeof makeNotification>;
+type DocumentRow = ReturnType<typeof makeDocument>;
+/** notification_types.requires_membership (seeded catalog). */
+const MEMBERSHIP_TYPES = new Set([
+  'announcement',
+  'alert',
+  'event_created',
+  'event_updated',
+  'event_cancelled',
+  'comment',
+]);
 type AlertRow = ReturnType<typeof makeAlert>;
 type EventRow = ReturnType<typeof makeEvent>;
 type RsvpRow = ReturnType<typeof makeRsvp>;
@@ -350,6 +367,29 @@ export function fakeSupabase(options: FakeOptions = {}) {
         own.forEach((row) => Object.assign(row, values, { updated_at: new Date().toISOString() }));
         return { data: own.map((row) => pick(row, columns)), error: null };
       }
+    }
+    if (table === 'notifications' && op === 'select') {
+      const rows = notificationRows.filter(
+        (row) => canReadNotification(row) && matches(row as unknown as Record<string, unknown>),
+      );
+      const picked = rows.map((row) => pick(row, columns));
+      return { data: single ? (picked[0] ?? null) : picked, error: null };
+    }
+    if (table === 'documents' && op === 'select') {
+      // RLS: active members with documents.view; managers-only documents need documents.manage.
+      const rows = (Object.values(content).flatMap((c) => c.documents ?? []) as DocumentRow[]).filter(
+        (row) => {
+          const perms = permissionsIn(row.community_id);
+          if (row.status !== 'active' && !perms.includes('documents.manage')) return false;
+          return row.visibility === 'managers'
+            ? perms.includes('documents.manage')
+            : perms.includes('documents.view');
+        },
+      );
+      const picked = rows
+        .filter((row) => matches(row as unknown as Record<string, unknown>))
+        .map((row) => pick(row, columns));
+      return { data: single ? (picked[0] ?? null) : picked, error: null };
     }
     if (table === 'post_images' && op === 'select') {
       // RLS: pictures of posts the caller can see.
@@ -974,6 +1014,14 @@ export function fakeSupabase(options: FakeOptions = {}) {
       error: null,
     })),
   };
+  // ---- Storage: the private documents bucket (signed links for visible documents only) ----
+  const documentsBucket = {
+    createSignedUrl: jest.fn(async (path: string, seconds: number) =>
+      me()
+        ? { data: { signedUrl: `https://storage.test/documents/${path}?expires=${seconds}` }, error: null }
+        : { data: null, error: { message: 'Object not found' } },
+    ),
+  };
   // ---- Storage: the private post-images bucket ({community}/{user}/{file}; migration 26) ----
   const postImageFiles = new Map<string, string>(); // path → uploader
   let uploadFailures = 0;
@@ -1054,7 +1102,9 @@ export function fakeSupabase(options: FakeOptions = {}) {
         ? mediaBucket
         : bucket === 'post-images'
           ? postImagesBucket
-          : storageBucket,
+          : bucket === 'documents'
+            ? documentsBucket
+            : storageBucket,
     ),
   };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
@@ -1104,6 +1154,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   };
+  // ---- Notifications: the user's own inbox (private.can_read_notification) ----
+  const notificationRows = (options.notifications ?? []).map((row) => ({ ...row })) as NotificationRow[];
+  const isActiveMember = (communityId: string) =>
+    communities.some(
+      (c) =>
+        (c as { community_id: string }).community_id === communityId &&
+        (c as { membership_status: string }).membership_status === 'active',
+    );
+  const canReadNotification = (row: NotificationRow) =>
+    row.user_id === me() &&
+    (row.community_id === null || !MEMBERSHIP_TYPES.has(row.type) || isActiveMember(row.community_id));
   let eventCount = 500;
   const allEvents = () => Object.values(content).flatMap((c) => c.events ?? []) as EventRow[];
   /** private.can_view_event_row(): drafts → manage, or own with create; otherwise view or manage. */
@@ -1228,6 +1289,54 @@ export function fakeSupabase(options: FakeOptions = {}) {
       return { data: null, error: failure };
     }
     const CONTENT_RPCS: Record<string, keyof FakeContent> = {};
+    if (
+      [
+        'list_my_notifications',
+        'unread_notification_count',
+        'mark_notification_read',
+        'mark_notification_unread',
+        'mark_all_notifications_read',
+      ].includes(name)
+    ) {
+      if (offline) return { data: null, error: OFFLINE };
+      if (!me()) return { data: null, error: AUTH_REQUIRED };
+      const community = (args.p_community_id as string | undefined) ?? null;
+      const mine = notificationRows.filter(
+        (row) => canReadNotification(row) && (community === null || row.community_id === community),
+      );
+      const now = new Date().toISOString();
+      if (name === 'unread_notification_count')
+        return { data: mine.filter((row) => !row.read_at && !row.archived_at).length, error: null };
+      if (name === 'mark_all_notifications_read') {
+        const unread = mine.filter((row) => !row.read_at && !row.archived_at);
+        unread.forEach((row) => (row.read_at = now));
+        return { data: unread.length, error: null };
+      }
+      if (name === 'mark_notification_read' || name === 'mark_notification_unread') {
+        const row = mine.find((r) => r.id === args.p_notification_id);
+        if (!row) return { data: false, error: null };
+        const read = name === 'mark_notification_read';
+        if (!!row.read_at === read) return { data: false, error: null };
+        row.read_at = read ? now : null;
+        return { data: true, error: null };
+      }
+      const rows = mine
+        .filter(
+          (row) =>
+            (args.p_include_archived ? true : !row.archived_at) && (!args.p_unread_only || !row.read_at),
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+      const cursor = args.p_cursor_created_at
+        ? [String(args.p_cursor_created_at), String(args.p_cursor_id)]
+        : null;
+      const page = rows
+        .filter(
+          (row) =>
+            !cursor || row.created_at < cursor[0]! || (row.created_at === cursor[0] && row.id < cursor[1]!),
+        )
+        .slice(0, Number(args.p_limit ?? 20));
+      return { data: page.map((row) => ({ ...row })), error: null };
+    }
     if (name === 'create_post') {
       // public.create_post(): post + pictures atomically; idempotent per (author, request id).
       if (offline) return { data: null, error: OFFLINE };
@@ -1706,6 +1815,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     rpc,
     from,
     storage: storageBucket,
+    /** The user's notifications on the "server" (change them to simulate new ones). */
+    notifications: notificationRows,
     /** The private post-images bucket (path → uploader). */
     postImagesStorage: postImagesBucket,
     postImageFiles,
@@ -1969,6 +2080,45 @@ export const makePost = (communityId: string, n: number, overrides: Record<strin
   created_at: at(-30 * n),
   updated_at: at(-30 * n),
   edited_at: null as string | null,
+  ...overrides,
+});
+
+/** A notification for the signed-in user (TEST_USER_ID), newest = smallest n. */
+export const makeNotification = (n: number, overrides: Record<string, unknown> = {}) => ({
+  id: `a9a9a9a9-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  user_id: TEST_USER_ID,
+  community_id: null as string | null,
+  type: 'system',
+  title: `Notification ${n}`,
+  body: `Notification body ${n}`,
+  data: {} as Record<string, unknown>,
+  dedupe_key: null as string | null,
+  read_at: null as string | null,
+  archived_at: null as string | null,
+  created_at: new Date(Date.now() - n * 60_000).toISOString(),
+  ...overrides,
+});
+
+/** An active document in a community. */
+export const makeDocument = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
+  id: `b8b8b8b8-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  community_id: communityId,
+  folder_id: null as string | null,
+  name: `Document ${n}.pdf`,
+  file_extension: 'pdf',
+  mime_type: 'application/pdf',
+  file_size: 120_000,
+  visibility: 'members',
+  status: 'active',
+  storage_path: `${communityId}/b8b8b8b8-0000-4000-8000-${String(n).padStart(12, '0')}.pdf`,
+  uploaded_by: OTHER_USER_ID as string | null,
+  uploaded_at: new Date(Date.now() - 86_400_000).toISOString(),
+  created_at: new Date(Date.now() - 86_400_000).toISOString(),
+  updated_at: new Date(Date.now() - 86_400_000).toISOString(),
+  archived_at: null as string | null,
+  deleted_at: null as string | null,
+  file_purged_at: null as string | null,
+  updated_by_user_id: null as string | null,
   ...overrides,
 });
 

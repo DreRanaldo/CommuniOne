@@ -86,3 +86,5 @@ export {
   type FeedPost, type Post, type PostImage, type PostImageInput,
 } from './posts/index.ts';
 export type { Comment, ThreadComment } from './comments/index.ts';
+export type { Notification } from './notifications/index.ts';
+export type { Document } from './documents/index.ts';
