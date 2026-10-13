@@ -130,6 +130,8 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `imageUrl(community, kind)` | Displayable logo / cover URL (RN-05) | – | any row with `logo_path` / `logo_url` (communities, `listMine()`, an invitation preview) → `string \| null` | – | Public URL of the uploaded file, else the external https URL; no network request |
 | `listMine()` | Community switcher: my pending / active / suspended memberships | – | → `MyCommunity[]` (`community_id`, `name`, `slug`, `community_type`, `logo_url`, `community_status`, `membership_id`, `membership_status`, `joined_at`, `role_names`; bounded by membership count) | – | `role_names` are display labels only |
 | `myPermissions(id)` | My permission keys, **for UI gating only** | – | → `string[]` | – | – |
+| `notificationSettings(id)` | My notification preferences for a community (RN-15) | active member | → `{ announcements, events, comments, alerts }` (defaults: all `true`) | `FORBIDDEN` | – |
+| `setNotificationSettings(id, patch)` | Change some of them | active member | `Partial<…>` → all four | `FORBIDDEN`, `VALIDATION` | Producers skip the muted kinds (urgent / emergency alerts always delivered) |
 | `stats(id)` | Hub tile counts (design pass) | active member (`community.view`) | → `{ member_count, posts_today, current_announcements, active_alerts, upcoming_events, document_count }`; a count the caller may not see is `null` | `FORBIDDEN` | – |
 
 ### memberships

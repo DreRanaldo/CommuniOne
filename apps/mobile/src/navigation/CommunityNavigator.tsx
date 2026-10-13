@@ -21,6 +21,8 @@ import { FeedScreen } from '@/features/feed/screens/FeedScreen';
 import { PostEditorScreen } from '@/features/feed/screens/PostEditorScreen';
 import { MemberProfileScreen } from '@/features/members/screens/MemberProfileScreen';
 import { MembersScreen } from '@/features/members/screens/MembersScreen';
+import { CommunitySettingsScreen } from '@/features/settings/screens/CommunitySettingsScreen';
+import { EditCommunityScreen } from '@/features/settings/screens/EditCommunityScreen';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
 import { useStackOptions } from './options';
@@ -109,6 +111,16 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         options={{ title: 'New post', presentation: 'modal' }}
       />
       <Stack.Screen name="Members" component={MembersScreen} options={{ title: 'Members' }} />
+      <Stack.Screen
+        name="CommunitySettings"
+        component={CommunitySettingsScreen}
+        options={{ title: 'Community settings' }}
+      />
+      <Stack.Screen
+        name="EditCommunity"
+        component={EditCommunityScreen}
+        options={{ title: 'Edit community', presentation: 'modal' }}
+      />
       <Stack.Screen name="MemberProfile" component={MemberProfileScreen} options={{ title: 'Member' }} />
     </Stack.Navigator>
   );

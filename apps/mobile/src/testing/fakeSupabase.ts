@@ -68,6 +68,8 @@ export interface FakeOptions {
   content?: Record<string, FakeContent>;
   /** Other members per community (see makeMember); the signed-in user is added from `communities`. */
   members?: Record<string, FakeMember[]>;
+  /** Someone else can also manage roles (so an Owner may leave). */
+  otherRoleManagers?: boolean;
   /** community_stats() overrides per community (unset counts are computed from content). */
   communityStats?: Record<string, Record<string, number | null>>;
   /** my_profile_stats() overrides. */
@@ -169,8 +171,9 @@ const MANAGEMENT = [
   'events.manage',
 ];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
-  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
+  // Seed templates: Owners hold everything; Admins everything except roles.manage.
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update', 'roles.manage'],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update'],
   Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
   Member: MEMBER_PERMISSIONS,
 };
@@ -951,6 +954,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: single ? (rows[0] ?? null) : rows, error: null };
       }
       if (op === 'update') {
+        // Column grants: slug and status are never client-writable.
+        if (values && ('slug' in values || 'status' in values))
+          return { data: null, error: { code: '42501', message: 'permission denied for table communities' } };
+        // private.validate_community_timezone()
+        if (typeof values?.timezone === 'string') {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: values.timezone }).format(0);
+          } catch {
+            return { data: null, error: { code: '22023', message: `unknown time zone: ${values.timezone}` } };
+          }
+        }
         const writable = visible.filter((row) => manages(row.id));
         for (const key of ['logo_path', 'cover_image_path'] as const) {
           const path = values?.[key];
@@ -969,6 +983,47 @@ export function fakeSupabase(options: FakeOptions = {}) {
         }
         writable.forEach((row) => Object.assign(row, values));
         return { data: writable.map((row) => pick(row, columns)), error: null };
+      }
+    }
+    if (table === 'memberships') {
+      // The caller's own memberships (my_communities rows); leaving is the only self-change.
+      const own = communities
+        .map(
+          (c) =>
+            c as {
+              community_id: string;
+              membership_id: string;
+              membership_status: string;
+              role_names: string[];
+            },
+        )
+        .map((c) => ({
+          id: c.membership_id,
+          community_id: c.community_id,
+          user_id: user,
+          status: c.membership_status,
+          roles: c.role_names,
+        }))
+        .filter((row) => matches(row));
+      if (op === 'select') {
+        const rows = own.map((row) => pick(row, columns));
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update' && values?.status === 'left') {
+        for (const row of own) {
+          // private.is_sole_role_manager: the last member able to manage roles cannot leave.
+          if (permissionsIn(row.community_id).includes('roles.manage') && !options.otherRoleManagers)
+            return {
+              data: null,
+              error: {
+                code: '42501',
+                message: 'the last member able to manage roles cannot leave the community',
+              },
+            };
+        }
+        const ids = new Set(own.map((row) => row.id));
+        communities = communities.filter((c) => !ids.has((c as { membership_id: string }).membership_id));
+        return { data: own.map((row) => pick({ ...row, status: 'left' }, columns)), error: null };
       }
     }
     if (table === 'profile_private') {
@@ -1208,13 +1263,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
   };
   // ---- Storage: the public community-media bucket (community managers only) ----
   const mediaFiles = new Set<string>();
-  const manages = (communityId: string) =>
-    communities.some(
-      (c) =>
-        (c as { community_id: string }).community_id === communityId &&
-        (c as { membership_status: string }).membership_status === 'active' &&
-        (c as { role_names: string[] }).role_names.some((r) => r === 'Owner' || r === 'Admin'),
-    );
+  /** community.update (RLS on communities and the community-media storage policies). */
+  const manages = (communityId: string) => permissionsIn(communityId).includes('community.update');
   const mediaBucket = {
     upload: jest.fn(async (path: string, _body: unknown, _options?: unknown) => {
       if (offline) return { data: null, error: { message: 'Network request failed' } };
@@ -1307,6 +1357,11 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const canReadNotification = (row: NotificationRow) =>
     row.user_id === me() &&
     (row.community_id === null || !MEMBERSHIP_TYPES.has(row.type) || isActiveMember(row.community_id));
+  // ---- Per-community notification preferences (migration 29) ----
+  const notificationSettings = new Map<
+    string,
+    { announcements: boolean; events: boolean; comments: boolean; alerts: boolean }
+  >();
   // ---- Member directory (migration 28): other members + the signed-in user ----
   const memberRows = options.members ?? {};
   for (const list of Object.values(memberRows))
@@ -1741,6 +1796,26 @@ export function fakeSupabase(options: FakeOptions = {}) {
         ],
         error: null,
       };
+    }
+    if (name === 'my_community_notification_settings' || name === 'set_community_notification_settings') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      if (!me() || !permissionsIn(communityId).includes('community.view'))
+        return { data: null, error: { code: '42501', message: 'not a member of this community' } };
+      const current = notificationSettings.get(communityId) ?? {
+        announcements: true,
+        events: true,
+        comments: true,
+        alerts: true,
+      };
+      if (name === 'set_community_notification_settings') {
+        for (const key of ['announcements', 'events', 'comments', 'alerts'] as const) {
+          const value = args[`p_${key}`];
+          if (typeof value === 'boolean') current[key] = value;
+        }
+        notificationSettings.set(communityId, current);
+      }
+      return { data: [{ ...current }], error: null };
     }
     if (name === 'list_community_members' || name === 'get_community_member') {
       if (offline) return { data: null, error: OFFLINE };
@@ -2429,6 +2504,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     storage: storageBucket,
     /** The user's notifications on the "server" (change them to simulate new ones). */
     notifications: notificationRows,
+    /** Notification preferences per community (as stored on the "server"). */
+    notificationSettings,
     /** Pictures in the private stories bucket, and who saw which story. */
     storyFiles,
     storyViews,

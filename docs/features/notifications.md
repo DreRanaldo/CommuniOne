@@ -5,6 +5,7 @@ other modules use. Push, email and SMS are **not** implemented. The design leave
 room for them without changing the `notifications` table.
 
 - **Mobile app:** the notification center, see [`notifications-app.md`](notifications-app.md) (RN-12)
+- **Preferences:** per-community notification settings, enforced at creation (RN-15, migration 29), see [`community-settings.md`](community-settings.md)
 - **Migration:** `supabase/migrations/20261011001500_notifications.sql`
 - **Tests:**
   - `supabase/tests/database/016_notifications.test.sql` (pgTAP, 59)

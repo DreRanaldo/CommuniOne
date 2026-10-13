@@ -217,6 +217,32 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"community_notification_settings": {
+                  Row: {
+                    "alerts": boolean,"announcements": boolean,"comments": boolean,"community_id": string,"events": boolean,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "alerts"?: boolean,"announcements"?: boolean,"comments"?: boolean,"community_id": string,"events"?: boolean,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "alerts"?: boolean,"announcements"?: boolean,"comments"?: boolean,"community_id"?: string,"events"?: boolean,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "community_notification_settings_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "community_notification_settings_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"document_folders": {
                   Row: {
                     "community_id": string,"created_at": string,"created_by": string | null,"id": string,"name": string,"parent_folder_id": string | null,"updated_at": string
@@ -1262,6 +1288,11 @@ isOneToOne: false
               "community_id": string,"community_status": string,"community_type": string,"joined_at": string,"logo_path": string,"logo_url": string,"membership_id": string,"membership_status": string,"name": string,"role_names": (string)[],"slug": string
             }[]
                            },
+"my_community_notification_settings":
+{ Args: { "p_community_id": string }; Returns: {
+              "alerts": boolean,"announcements": boolean,"comments": boolean,"events": boolean
+            }[]
+                           },
 "my_community_permissions":
 { Args: { "p_community_id": string }; Returns: string[]
                            },
@@ -1298,6 +1329,11 @@ isOneToOne: false
 "rsvp_to_event":
 { Args: { "p_event_id": string,"p_status": string }; Returns: {
               "event_id": string,"status": string,"waitlisted_at": string
+            }[]
+                           },
+"set_community_notification_settings":
+{ Args: { "p_alerts"?: boolean,"p_announcements"?: boolean,"p_comments"?: boolean,"p_community_id": string,"p_events"?: boolean }; Returns: {
+              "alerts": boolean,"announcements": boolean,"comments": boolean,"events": boolean
             }[]
                            },
 "unread_notification_count":

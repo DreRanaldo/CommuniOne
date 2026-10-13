@@ -72,7 +72,7 @@ export type { Database } from './database.types.ts';
 export { parseInvitationToken, type InvitationPreview } from './invitations/index.ts';
 export {
   COMMUNITY_COVER_MAX_BYTES, COMMUNITY_LOGO_MAX_BYTES, COMMUNITY_MEDIA_BUCKET, COMMUNITY_TYPES,
-  type Community, type CommunityImageKind, type CommunityImages, type CommunityStats, type CommunityType, type MyCommunity,
+  type Community, type CommunityImageKind, type CommunityImages, type CommunityNotificationSettings, type CommunityStats, type CommunityType, type MyCommunity,
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
 export {

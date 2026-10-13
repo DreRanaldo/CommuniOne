@@ -11,6 +11,14 @@ import type { Database, Json, Tables } from '../database.types.ts';
 export type Community = Tables<'communities'>;
 /** One of the caller's memberships, as listed by my_communities() (community switcher). */
 export type MyCommunity = Database['public']['Functions']['my_communities']['Returns'][number];
+/** Which kinds of notification the caller receives from one community (RN-15). Urgent and emergency alerts are always delivered. */
+export interface CommunityNotificationSettings {
+  announcements: boolean;
+  events: boolean;
+  comments: boolean;
+  /** Info and warning alerts only. */
+  alerts: boolean;
+}
 /** community_stats(): null = the caller may not see that kind of content. */
 export type CommunityStats = Database['public']['Functions']['community_stats']['Returns'][number];
 
@@ -198,6 +206,30 @@ export function communitiesService(ctx: ServiceContext) {
       return ctx.run('communities.stats', async () => {
         await ctx.requireUserId();
         return firstRow(unwrap(await db.rpc('community_stats', { p_community_id: v.uuid(communityId, 'communityId') })));
+      });
+    },
+
+    /** The caller's notification preferences for a community (defaults: all on). Active members only. */
+    notificationSettings(communityId: string): Promise<CommunityNotificationSettings> {
+      return ctx.run('communities.notificationSettings', async () => {
+        await ctx.requireUserId();
+        return firstRow(unwrap(await db.rpc('my_community_notification_settings', { p_community_id: v.uuid(communityId, 'communityId') })));
+      });
+    },
+
+    /** Changes some of the caller's notification preferences for a community; returns all of them. */
+    setNotificationSettings(communityId: string, patch: Partial<CommunityNotificationSettings>): Promise<CommunityNotificationSettings> {
+      return ctx.run('communities.setNotificationSettings', async () => {
+        await ctx.requireUserId();
+        v.only<Partial<CommunityNotificationSettings>>(patch, 'patch', ['announcements', 'events', 'comments', 'alerts']);
+        const flag = (value: unknown, field: string) => (value === undefined ? undefined : v.bool(value, field));
+        return firstRow(unwrap(await db.rpc('set_community_notification_settings', {
+          p_community_id: v.uuid(communityId, 'communityId'),
+          p_announcements: flag(patch.announcements, 'announcements'),
+          p_events: flag(patch.events, 'events'),
+          p_comments: flag(patch.comments, 'comments'),
+          p_alerts: flag(patch.alerts, 'alerts'),
+        })));
       });
     },
 
