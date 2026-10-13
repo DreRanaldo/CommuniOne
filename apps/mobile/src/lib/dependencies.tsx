@@ -2,7 +2,7 @@
 // events), provided through context so screens never import singletons and
 // tests can pass fakes.
 import { createContext, useContext, type ReactNode } from 'react';
-import { createServices, ErrorCode, type Services } from '@communione/services';
+import { createServices, ErrorCode, type FileUploader, type Services } from '@communione/services';
 import { expoLinkSource, type LinkSource } from './links';
 import { logger } from './logger';
 import { expoMediaPicker, type MediaPicker } from './media';
@@ -35,6 +35,8 @@ export function createDependencies(
   supabase: AppSupabaseClient,
   links: LinkSource = expoLinkSource,
   media: MediaPicker = expoMediaPicker,
+  /** Document upload transport (with progress); default: supabase-js. */
+  uploadFile?: FileUploader,
 ): Dependencies {
   const sessionEvents = createSessionEvents();
   const services = createServices(supabase, {
@@ -43,6 +45,7 @@ export function createDependencies(
       if (error.code === ErrorCode.Unauthenticated && !SIGNED_OUT_OPERATIONS.has(operation))
         sessionEvents.emitExpired();
     },
+    uploadFile,
   });
   return { supabase, services, links, sessionEvents, media };
 }

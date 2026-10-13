@@ -13,9 +13,8 @@ needed.** Push notifications are a later stage.
   - `useOpenNotification.ts`: mark read, switch community (server-checked), navigate
   - `useNotificationList.ts`: keyset pages, refresh, local read state
   - `NotificationItem.tsx`: one row
-- **Document destination:** `apps/mobile/src/features/documents/DocumentDetailScreen.tsx`
-  (minimal: name, type, size, date and "Open document" through a 60-second signed link;
-  the document library is a later stage)
+- **Document destination:** `apps/mobile/src/features/documents/screens/DocumentDetailScreen.tsx`
+  (see [`documents-app.md`](documents-app.md), RN-13)
 - **Entry point:** the bell in the feed header, with an unread badge (99+ above 99)
 - **Service:** `notifications.get(id)` (new; owner only through RLS)
 - **Tests:**

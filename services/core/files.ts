@@ -37,3 +37,53 @@ export function checkImage(input: { file: UploadBody; mimeType: unknown }, maxBy
 /** A Blob whose type matches the declared MIME type (Storage checks it). */
 export const uploadBody = (file: UploadBody, mimeType: string): UploadBody =>
   typeof Blob !== 'undefined' && file instanceof Blob && file.type !== mimeType ? new Blob([file], { type: mimeType }) : file;
+
+/**
+ * Sends one file to a Storage path the caller is authorized to write (the
+ * storage policies decide). The default sends it through supabase-js; an app
+ * can pass its own (e.g. XMLHttpRequest, for progress and cancellation) in
+ * createServices({ uploadFile }). It must never choose the path itself.
+ */
+export type FileUploader = (request: FileUploadRequest) => Promise<void>;
+
+export interface FileUploadRequest {
+  bucket: string;
+  path: string;
+  body: UploadBody;
+  contentType: string;
+  /** Bytes sent so far, out of total. */
+  onProgress?: (sent: number, total: number) => void;
+  /** Aborting stops the transfer where the transport supports it. */
+  signal?: AbortSignal;
+}
+
+/** How a transport reports a failed upload. */
+export class UploadError extends Error {
+  /** HTTP status from Storage (0: no response, e.g. offline). */
+  readonly status: number;
+  /** The transfer was cancelled (AbortSignal). */
+  readonly aborted: boolean;
+  constructor(message: string, status = 0, aborted = false) {
+    super(message);
+    this.name = 'UploadError';
+    this.status = status;
+    this.aborted = aborted;
+  }
+}
+
+type StorageDb = { storage: { from(bucket: string): { upload(path: string, body: UploadBody, options: { contentType: string; upsert: boolean }): Promise<{ error: unknown }> } } };
+
+/** The default transport: supabase-js (no byte progress; cancellation only before the transfer starts). */
+export function storageUploader(db: StorageDb): FileUploader {
+  return async ({ bucket, path, body, contentType, onProgress, signal }) => {
+    const total = byteLength(body);
+    if (signal?.aborted) throw new UploadError('The upload was cancelled.', 0, true);
+    onProgress?.(0, total);
+    const { error } = await db.storage.from(bucket).upload(path, uploadBody(body, contentType), { contentType, upsert: false });
+    if (error) {
+      const e = error as { statusCode?: string | number; status?: number; message?: string };
+      throw new UploadError(e.message ?? 'Upload failed.', Number(e.statusCode ?? e.status ?? 0) || 0);
+    }
+    onProgress?.(total, total);
+  };
+}

@@ -64,7 +64,7 @@ RootStack
 └── (signed in)   App (tabs) ── Home · Communities · Marketplace · Alerts · Profile
                   │   Home, Communities and Alerts = the current community, one stack each, starting at
                   │          Feed (Home), CommunityHome (Communities) or Alerts (Alerts); every stack has
-                  │          PostDetail · PostEditor · Announcements · Alerts · Events (+ details, editors) · DocumentDetail
+                  │          PostDetail · PostEditor · Announcements · Alerts · Events (+ details, editors) · Documents · DocumentDetail · DocumentUpload
                   │          (or "Your communities" when none is selected)
                   │   Marketplace = placeholder (a later module)
                   │   Profile ── ProfileHome · EditProfile · Account · ChangePassword · DeleteAccount
@@ -99,9 +99,10 @@ announcements (RN-09: see [`../features/announcements-app.md`](../features/annou
 alerts (RN-10: see [`../features/alerts-app.md`](../features/alerts-app.md)),
 events and RSVPs (RN-11: see [`../features/events-app.md`](../features/events-app.md)),
 the notification center (RN-12: see [`../features/notifications-app.md`](../features/notifications-app.md)),
+community documents (RN-13: see [`../features/documents-app.md`](../features/documents-app.md)),
 creating and joining communities (RN-05: see [`../features/create-and-join.md`](../features/create-and-join.md)), and
 the profile and account screens (RN-03: see [`../features/profile.md`](../features/profile.md)).
-Placeholders: the Documents library and Members sections (a single document opens from a notification).
+Placeholder: the Members section.
 
 ## Design system
 
@@ -166,7 +167,7 @@ Placeholders: the Documents library and Members sections (a single document open
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 372 tests: notification center (24 + 13 rules, see `../features/notifications-app.md`), feed redesign and photo posts (17, see `../features/feed-images.md`), PKCE WebCrypto (3), brand logo (1) and colour contrast (12, brand and severity), events and RSVPs (22 + 6 rules), alerts (22 + 5 rules), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 405 tests: documents (24 + 5 rules + 4 upload transport, see `../features/documents-app.md`), notification center (24 + 13 rules, see `../features/notifications-app.md`), feed redesign and photo posts (17, see `../features/feed-images.md`), PKCE WebCrypto (3), brand logo (1) and colour contrast (12, brand and severity), events and RSVPs (22 + 6 rules), alerts (22 + 5 rules), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |
@@ -181,5 +182,5 @@ All of these run in CI (job "Mobile app", see [`../development/ci.md`](../develo
 - The app icon and splash come from a 1254 px logo image; ask for a vector
   (SVG) or larger master before store submission. The bundle ids
   (`com.communione.app`) are placeholders: confirm them before the first store build.
-- Push notifications, the document library and the Members section are not built yet. Creating invitations (sharing a code or QR) is not in the app yet.
+- Push notifications and the Members section are not built yet. Creating invitations (sharing a code or QR) is not in the app yet.
 - No offline cache or query library yet.

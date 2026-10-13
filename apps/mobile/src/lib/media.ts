@@ -2,6 +2,7 @@
 // (no camera, no broad library permission on modern iOS/Android), cropped to
 // the image's shape, then re-encoded as a JPEG at a fixed size. Re-encoding
 // keeps uploads small and strips metadata such as GPS location.
+import * as DocumentPicker from 'expo-document-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -20,7 +21,24 @@ export const POST_PHOTO_MAX_EDGE = 2048;
 
 export type ImageKind = 'avatar' | 'logo' | 'cover';
 
+/**
+ * A file chosen with the system document picker (copied into the app's
+ * cache). Its name, type and size are only hints for the UI: the server
+ * decides the stored type, path and accepted size.
+ */
+export interface PickedFile {
+  name: string;
+  mimeType: string | null;
+  /** Bytes, when the picker reports it. */
+  size: number | null;
+  uri: string;
+  /** Reads the content (only after the size has been checked). */
+  read(): Promise<Uint8Array>;
+}
+
 export interface MediaPicker {
+  /** One file for the community's documents. Resolves null when the user cancels. */
+  pickDocument(): Promise<PickedFile | null>;
   /** Resolves null when the user cancels. */
   pickImage(kind: ImageKind): Promise<PickedImage | null>;
   /** Several photos for a post, uncropped (at most `limit`). Resolves [] when the user cancels. */
@@ -35,6 +53,19 @@ export const IMAGE_SHAPES: Record<ImageKind, { aspect: [number, number]; width: 
 };
 
 export const expoMediaPicker: MediaPicker = {
+  async pickDocument() {
+    const result = await DocumentPicker.getDocumentAsync({ multiple: false, copyToCacheDirectory: true });
+    const asset = result.canceled ? undefined : result.assets[0];
+    if (!asset) return null;
+    return {
+      name: asset.name,
+      mimeType: asset.mimeType ?? null,
+      size: typeof asset.size === 'number' ? asset.size : null,
+      uri: asset.uri,
+      read: async () => new Uint8Array(await (await fetch(asset.uri)).arrayBuffer()),
+    };
+  },
+
   async pickImage(kind) {
     const shape = IMAGE_SHAPES[kind];
     const result = await ImagePicker.launchImageLibraryAsync({

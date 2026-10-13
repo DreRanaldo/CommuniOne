@@ -143,7 +143,7 @@ describe('correct community', () => {
   test("shortcuts open the community's sections", async () => {
     const { user } = await home();
     await user.press(screen.getByRole('button', { name: 'Documents' }));
-    expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
+    expect(await screen.findByTestId('documents-screen')).toBeOnTheScreen();
   });
 });
 

@@ -239,6 +239,11 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
 | `upload(input)` | Upload a file (two-phase) | `documents.upload`; `managers` visibility: `documents.manage` | `{ communityId, name (≤255, no slashes), mimeType (allow-list), file (Blob/bytes ≤ limit), folderId?, visibility? }` → `Document` | `FORBIDDEN`, `VALIDATION` (type, size, folder), `RATE_LIMITED` | **Atomic per phase:** reserve path → upload to that exact path → server checks real size/type → active; audited |
+| `uploadRules()` | Accepted types and size limit, for UI checks (RN-13) | signed in | → `{ maxFileSize, types: { mimeType, extension }[] }` | – | – |
+| `beginUpload(input)` | Step 1: reserve (server validates permission, type, size, folder; makes the path) | as `upload` | `{ communityId, name, mimeType, size, folderId?, visibility? }` → `{ documentId, maxFileSize }` | `FORBIDDEN`, `VALIDATION`, `RATE_LIMITED` | Pending row (invisible to members) |
+| `sendFile(id, file, { onProgress?, signal? })` | Step 2: send the bytes to the reserved path (read back through RLS, never from the caller); safe to retry | the caller's own pending upload | → `void` | `NOT_FOUND`, `FORBIDDEN`, `VALIDATION` (size differs), `CONFLICT` with `details.cancelled` (aborted), `SERVER_ERROR` (`details.network`) | Storage object; transport from `createServices({ uploadFile })` (default supabase-js) |
+| `completeUpload(id)` | Step 3: server checks the stored object's size and type | own pending upload | → `Document` (active) | `NOT_FOUND` (nothing stored), `VALIDATION` | Audited |
+| `cancelUpload(id)` | Discard own pending upload | own pending upload | → `void` | `NOT_FOUND` | Removes its file, status → deleted |
 | `get(id)` | Metadata | visible document | → `Document` | `NOT_FOUND` | – |
 | `getDownloadUrl(id, seconds?)` | Signed link (10–300 s) | visible, active/archived | → `string` | `NOT_FOUND` | – |
 | `list(input)` | Newest first | `documents.view` (restricted: `documents.manage`) | `{ communityId, folderId?, rootOnly?, statuses?, limit?, cursor? }` → `Page<Document>` | – | – |

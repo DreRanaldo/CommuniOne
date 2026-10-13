@@ -10,6 +10,7 @@ layers enforce access:
 The storage policies do not assume the metadata RLS protects anything. They
 re-check the rules through SECURITY DEFINER helpers.
 
+- **Mobile app:** see [`documents-app.md`](documents-app.md) (RN-13)
 - **Migration:** `supabase/migrations/20261011001600_documents.sql`
 - **Tests:**
   - `supabase/tests/database/017_documents.test.sql` (pgTAP, 75; writes `storage.objects` as the user, exactly as the Storage API does)
