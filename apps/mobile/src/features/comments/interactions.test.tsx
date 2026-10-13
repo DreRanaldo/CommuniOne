@@ -13,7 +13,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -48,7 +48,7 @@ async function openPost(options: FakeOptions = {}, body = 'Choir trip') {
     content: choirContent(),
     ...options,
   });
-  await screen.findByTestId('community-home-screen');
+  await openHub();
   await user.press(screen.getByRole('button', { name: 'Feed' }));
   await screen.findByText(body);
   await user.press(screen.getByRole('button', { name: /comments?\. Open comments$/ }));
@@ -364,7 +364,7 @@ describe('moderation and permissions', () => {
   });
 
   async function asModerator(user: User) {
-    await screen.findByTestId('community-home-screen');
+    await openHub();
     await user.press(screen.getByRole('button', { name: 'Feed' }));
   }
 
@@ -377,6 +377,7 @@ describe('moderation and permissions', () => {
       content: { [M]: { posts: [mPost] } },
     });
     await asModerator(user);
+    await user.press(await screen.findByRole('button', { name: 'Post options' }));
     await user.press(await screen.findByRole('button', { name: 'Hide post' }));
     await user.type(screen.getByLabelText('Reason (optional)'), 'Spam');
     await user.press(screen.getAllByRole('button', { name: 'Hide post' }).at(-1)!);
@@ -385,6 +386,7 @@ describe('moderation and permissions', () => {
 
     await user.press(screen.getByRole('tab', { name: 'Hidden' }));
     expect(await screen.findByText('Hidden by a moderator: Spam')).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Post options' }));
     await user.press(screen.getByRole('button', { name: 'Restore post' }));
     await waitFor(() => expect(fake.content[M]!.posts![0]!.status).toBe('published'));
   });
@@ -429,12 +431,12 @@ describe('cross-community protection', () => {
       communities: [maple, choir],
       content: { ...choirContent(), [M]: { posts: [makePost(M, 9, { body: 'Maple only' })] } },
     });
+    // Home is the chosen community's feed.
     await user.press(await screen.findByTestId(`community-card-${C}`));
-    await user.press(await screen.findByRole('button', { name: 'Feed' }));
     await user.press(await screen.findByRole('button', { name: /comments?\. Open comments$/ }));
     await screen.findByText('Count me in');
 
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByTestId('community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${M}`));
     await screen.findByLabelText('Switch community. Current community: Maple Grove HOA');
@@ -445,7 +447,7 @@ describe('cross-community protection', () => {
   test("a post hidden after the feed loaded is not shown from the feed's copy", async () => {
     const user = userEvent.setup();
     const fake = await renderApp({ session: makeSession(), communities: [choir], content: choirContent() });
-    await screen.findByTestId('community-home-screen');
+    await openHub();
     await user.press(screen.getByRole('button', { name: 'Feed' }));
     await screen.findByText('Choir trip');
     // A moderator hides it meanwhile; opening re-reads the post from the server.

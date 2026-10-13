@@ -27,7 +27,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
       App: {
         screens: {
           Home: 'home',
-          Notifications: 'notifications',
+          CommunitiesTab: 'community',
+          Marketplace: 'marketplace',
+          AlertsTab: 'alerts',
           Profile: { path: 'profile', screens: { ProfileHome: '' } },
         },
       },

@@ -1,7 +1,7 @@
 import { getStateFromPath } from '@react-navigation/native';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 import { makeSession, sampleCommunities, TEST_PASSWORD } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 import { linking } from './linking';
 
 describe('navigation', () => {
@@ -56,7 +56,7 @@ describe('navigation', () => {
 
     // Community navigation.
     await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
-    expect(await screen.findByTestId('community-home-screen')).toBeOnTheScreen();
+    expect(await openHub()).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Documents' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
   });

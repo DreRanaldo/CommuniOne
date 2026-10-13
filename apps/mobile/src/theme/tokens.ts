@@ -2,10 +2,13 @@
 // Components read these through useTheme(); no screen hard-codes a colour,
 // font size or spacing value.
 //
-// Direction: calm, trustworthy and neutral enough for any community (a
-// residents' association, a church, a school). The CommuniOne logo's blue for
-// actions, its navy for text, warm neutrals, generous spacing, and a severity
-// scale reserved for safety alerts.
+// Direction (feed redesign): a clean, predominantly white interface, close to
+// the photo-first feeds people already know, neutral enough for any community
+// (a residents' association, a church, a school). Pure white surfaces,
+// near-black text, light-gray hairlines and secondary text, the CommuniOne
+// logo's blue as the one accent for actions, and a severity scale reserved for
+// safety alerts. Light is the app's appearance; the dark tokens are kept for a
+// later dark mode but are not used by default.
 
 /** Logo colours (assets/brand). The bright green and orange are decorative only: they fail AA as text. */
 export const brand = {
@@ -27,6 +30,11 @@ const palette = {
   blue300: '#6FB1F2',
   navy900: brand.navy,
   gray0: '#FFFFFF',
+  // Feed redesign neutrals: near-black text, quiet grays.
+  ink: '#121417',
+  gray25: '#F7F8FA',
+  gray150: '#E7E9ED',
+  gray550: '#5E6470',
   gray50: '#F6F7FB',
   gray100: '#EEF0F5',
   gray200: '#E1E4EC',
@@ -66,17 +74,19 @@ export interface ColorTokens {
   danger: string;
   success: string;
   focus: string;
+  /** Translucent dark backdrop for text over photos (counters, badges). */
+  scrim: string;
   /** Alert severities (Stage 7): info, warning, urgent, emergency. */
   severity: { info: string; warning: string; urgent: string; emergency: string };
 }
 
 export const lightColors: ColorTokens = {
-  background: palette.gray50,
+  background: palette.gray0,
   surface: palette.gray0,
-  surfaceMuted: palette.gray100,
-  border: palette.gray200,
-  text: palette.navy900,
-  textMuted: palette.gray600,
+  surfaceMuted: palette.gray25,
+  border: palette.gray150,
+  text: palette.ink,
+  textMuted: palette.gray550,
   textInverse: palette.gray0,
   primary: palette.blue500,
   primaryPressed: palette.blue600,
@@ -85,6 +95,7 @@ export const lightColors: ColorTokens = {
   danger: palette.red500,
   success: palette.green600,
   focus: palette.blue300,
+  scrim: 'rgba(18, 20, 23, 0.72)',
   severity: {
     info: palette.blue500,
     warning: palette.amber700,
@@ -108,6 +119,7 @@ export const darkColors: ColorTokens = {
   danger: palette.red300,
   success: palette.green300,
   focus: palette.blue100,
+  scrim: 'rgba(0, 0, 0, 0.72)',
   severity: {
     info: palette.blue300,
     warning: palette.amber300,

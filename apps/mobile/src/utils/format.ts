@@ -31,3 +31,22 @@ export function formatDateTime(iso: string | null | undefined, timeZone?: string
 export function formatTime(epochMs: number): string {
   return format(new Date(epochMs), { hour: 'numeric', minute: '2-digit' });
 }
+
+/**
+ * A short relative time for feeds: "Just now", "5 minutes ago", "2 hours ago",
+ * "Yesterday", "3 days ago", then the date.
+ */
+export function formatRelative(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return '—';
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return '—';
+  const minutes = Math.floor((now - then) / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return formatDate(iso);
+}

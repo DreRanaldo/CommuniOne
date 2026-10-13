@@ -1,5 +1,9 @@
 # Community Feed (RN-07)
 
+> **Redesigned:** the feed is now the Home tab, with a white, photo-first
+> layout and photo posts. See [`feed-images.md`](feed-images.md). The rules below
+> (visibility, pagination, permissions) are unchanged.
+
 The posts feed of the current community in the mobile app, built on the
 existing posts backend (Stage 5 schema and RLS, Stage 12 service layer).
 

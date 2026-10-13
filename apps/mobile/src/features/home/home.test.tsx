@@ -56,10 +56,14 @@ const contentCalls = (rpc: jest.Mock) =>
     .filter(([name]) => CONTENT_RPCS.includes(name as string))
     .map(([, args]) => args as { p_community_id: string });
 
+/** The Communities tab (the hub), opened by its link: Home is the feed. */
+const HUB = 'communione://community';
+
 /** Signed in with Maple Grove as the only community (opened directly). */
 async function home(options: FakeOptions = {}) {
   const user = userEvent.setup();
   const app = await renderApp({
+    initialURL: HUB,
     session: makeSession(),
     communities: [maple],
     content: { [M]: mapleContent(), [C]: choirContent() },
@@ -165,6 +169,7 @@ describe('states', () => {
   test("loading: shown while the community's content loads", async () => {
     const user = userEvent.setup();
     const fake = await renderApp({
+      initialURL: HUB,
       session: makeSession(),
       communities: [maple, choir],
       content: { [M]: mapleContent() },
@@ -199,6 +204,7 @@ describe('states', () => {
   test('error: a failing section shows a safe message and retry; the rest stays', async () => {
     const user = userEvent.setup();
     const fake = await renderApp({
+      initialURL: HUB,
       session: makeSession(),
       communities: [maple, choir],
       content: { [M]: mapleContent() },
@@ -216,6 +222,7 @@ describe('states', () => {
   test('error: when nothing can be loaded, one error with retry', async () => {
     const user = userEvent.setup();
     const fake = await renderApp({
+      initialURL: HUB,
       session: makeSession(),
       communities: [maple, choir],
       content: { [M]: mapleContent() },
@@ -231,6 +238,7 @@ describe('states', () => {
   test('offline at first load: an offline state with retry', async () => {
     const user = userEvent.setup();
     const fake = await renderApp({
+      initialURL: HUB,
       session: makeSession(),
       communities: [maple, choir],
       content: { [M]: mapleContent() },
@@ -290,6 +298,7 @@ describe('unauthorized community', () => {
   test('the server returns nothing for a community the user is not active in', async () => {
     const pendingMaple = { ...maple, membership_status: 'pending' };
     await renderApp({
+      initialURL: HUB,
       session: makeSession(),
       communities: [pendingMaple, choir],
       content: { [M]: mapleContent(), [C]: choirContent() },
@@ -317,7 +326,7 @@ describe('content refresh', () => {
     await user.press(screen.getByRole('button', { name: 'See all upcoming events' }));
     await screen.findByTestId('events-screen');
     content[M]!.events = [makeEvent(M, 5, { title: 'Summer barbecue' })];
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     expect(await screen.findByText('Summer barbecue')).toBeOnTheScreen();
   });
 });

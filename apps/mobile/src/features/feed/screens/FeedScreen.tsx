@@ -1,16 +1,26 @@
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { FeedPost } from '@communione/services';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
+import type { ActiveAlert, FeedPost } from '@communione/services';
+import { useCallback, useRef, useState, type ReactElement } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, EmptyState, ErrorState, LoadingState, Text } from '@/components';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { useCommunityPermissions } from '@/features/communities/useCommunityPermissions';
+import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles, useTheme } from '@/theme';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
+import { FeedHeader } from '../components/FeedHeader';
 import { PostCard } from '../components/PostCard';
 import { useFeed, type FeedStatus } from '../useFeed';
 
@@ -22,40 +32,52 @@ const FILTERS: { status: FeedStatus; label: string }[] = [
   { status: 'deleted', label: 'Deleted' },
 ];
 
+/** Urgent and emergency alerts stay visible above the feed. */
+const PINNED_SEVERITIES = new Set(['urgent', 'emergency']);
+
 /**
- * The current community's feed. Controls are shown from the user's
- * permissions (posts.create / edit_own / delete_own / moderate) and from
- * authorship, but only as hints: the database authorizes every action and
- * decides which posts are returned (hidden and deleted posts reach only
- * moderators and their own author).
+ * The Home tab: the current community's feed, photo first, newest first.
+ * Controls are shown from the user's permissions (posts.create / edit_own /
+ * delete_own / moderate) and from authorship, but only as hints: the database
+ * authorizes every action and decides which posts are returned (hidden and
+ * deleted posts reach only moderators and their own author).
  */
 export function FeedScreen({ navigation }: Props) {
   const styles = useStyles();
+  const { alerts } = useServices();
+  const community = useCommunity();
   const permissions = useCommunityPermissions();
   const canCreate = permissions.can('posts.create');
   const canModerate = permissions.can('posts.moderate');
   const [status, setStatus] = useState<FeedStatus>('published');
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: canCreate
-        ? () => (
-            <Button
-              title="New post"
-              variant="ghost"
-              fullWidth={false}
-              onPress={() => navigation.navigate('PostEditor')}
-            />
-          )
-        : undefined,
-    });
-  }, [navigation, canCreate]);
+  // Urgent and emergency alerts in force, refreshed with the feed (never blocks it).
+  const loadPinned = useCallback(async (): Promise<ActiveAlert[]> => {
+    const page = await alerts.listActive({ communityId: community.community_id, limit: 5 });
+    return page.items.filter(
+      (a) => a.community_id === community.community_id && PINNED_SEVERITIES.has(a.severity),
+    );
+  }, [alerts, community.community_id]);
+  const pinnedAlerts = useAsync(loadPinned);
+  const pinned = pinnedAlerts.status === 'success' ? pinnedAlerts.data : [];
+  const { reload: reloadPinned } = pinnedAlerts;
+  const loadAlerts = useCallback(async () => reloadPinned(), [reloadPinned]);
 
   // Members can see their own hidden posts; only moderators get a "Deleted" view.
   const filters = FILTERS.filter((f) => f.status !== 'deleted' || canModerate);
-
-  return (
-    <View style={styles.container} testID="feed-screen">
+  const header = (
+    <>
+      <FeedHeader
+        canCreate={canCreate}
+        onCompose={() => navigation.navigate('PostEditor')}
+        onAddPhotos={() => navigation.navigate('PostEditor', { addPhotos: true })}
+        alerts={pinned}
+        onOpenAlert={(alertId) =>
+          navigation
+            .getParent()
+            ?.navigate('AlertsTab', { screen: 'AlertDetail', params: { alertId }, initial: false })
+        }
+      />
       <View style={styles.filters} accessibilityRole="tablist">
         {filters.map((f) => (
           <Pressable
@@ -66,34 +88,45 @@ export function FeedScreen({ navigation }: Props) {
             onPress={() => setStatus(f.status)}
             style={[styles.filter, f.status === status && styles.filterSelected]}
           >
-            <Text variant="label" tone={f.status === status ? 'inverse' : 'default'}>
+            <Text variant="label" tone={f.status === status ? 'default' : 'muted'}>
               {f.label}
             </Text>
           </Pressable>
         ))}
       </View>
+    </>
+  );
+
+  return (
+    <SafeAreaView edges={['top']} style={styles.container} testID="feed-screen">
       {/* A new list per filter: no rows of one view leak into another. */}
       <FeedList
         key={status}
         status={status}
+        header={header}
         canCreate={canCreate}
+        onRefreshed={loadAlerts}
         onCompose={() => navigation.navigate('PostEditor')}
         onEdit={(postId) => navigation.navigate('PostEditor', { postId })}
         onOpen={(post) => navigation.navigate('PostDetail', { postId: post.id, post })}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 function FeedList({
   status,
+  header,
   canCreate,
+  onRefreshed,
   onCompose,
   onEdit,
   onOpen,
 }: {
   status: FeedStatus;
+  header: ReactElement;
   canCreate: boolean;
+  onRefreshed(): Promise<void>;
   onCompose(): void;
   onEdit(postId: string): void;
   onOpen(post: FeedPost): void;
@@ -107,6 +140,7 @@ function FeedList({
   const feed = useFeed(community.community_id, status);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const viewerId = session?.user.id ?? null;
+  const { width } = useWindowDimensions();
   const canModerate = permissions.can('posts.moderate');
 
   // Back from writing or editing a post: show the server's current feed.
@@ -115,8 +149,11 @@ function FeedList({
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
-      else void refresh();
-    }, [refresh]),
+      else {
+        void refresh();
+        void onRefreshed();
+      }
+    }, [refresh, onRefreshed]),
   );
 
   const failed = (postId: string, error: unknown) =>
@@ -173,10 +210,24 @@ function FeedList({
     };
   };
 
-  if (feed.status === 'loading') return <LoadingState label="Loading posts…" />;
+  if (feed.status === 'loading') {
+    return (
+      <View style={styles.flex}>
+        {header}
+        <LoadingState label="Loading posts…" />
+      </View>
+    );
+  }
   if (feed.status === 'error') {
     return (
-      <ErrorState title="Posts could not be loaded" message={errorMessage(feed.error)} onRetry={feed.retry} />
+      <View style={styles.flex}>
+        {header}
+        <ErrorState
+          title="Posts could not be loaded"
+          message={errorMessage(feed.error)}
+          onRetry={feed.retry}
+        />
+      </View>
     );
   }
 
@@ -186,9 +237,13 @@ function FeedList({
       data={feed.items}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.list}
+      ListHeaderComponent={header}
       renderItem={({ item }) => (
         <PostCard
           post={item}
+          images={feed.images[item.id]}
+          avatarUrl={item.author_user_id ? (feed.avatars[item.author_user_id] ?? null) : null}
+          galleryWidth={width}
           reactionCounts={feed.reactionCounts[item.id] ?? null}
           error={errors[item.id]}
           {...actionsFor(item)}
@@ -199,7 +254,10 @@ function FeedList({
       refreshControl={
         <RefreshControl
           refreshing={feed.refreshing}
-          onRefresh={() => void feed.refresh()}
+          onRefresh={() => {
+            void feed.refresh();
+            void onRefreshed();
+          }}
           tintColor={colors.primary}
         />
       }
@@ -256,23 +314,22 @@ function FeedList({
 
 const useStyles = makeStyles((t) => ({
   container: { flex: 1, backgroundColor: t.colors.background },
+  flex: { flex: 1 },
   filters: {
     flexDirection: 'row',
-    gap: t.spacing.sm,
+    gap: t.spacing.lg,
     paddingHorizontal: t.spacing.lg,
-    paddingTop: t.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: t.colors.border,
   },
   filter: {
-    minHeight: 36,
+    minHeight: 40,
     justifyContent: 'center',
-    paddingHorizontal: t.spacing.md,
-    borderRadius: t.radius.pill,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    backgroundColor: t.colors.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  filterSelected: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
-  list: { flexGrow: 1, gap: t.spacing.md, padding: t.spacing.lg },
+  filterSelected: { borderBottomColor: t.colors.text },
+  list: { flexGrow: 1, paddingBottom: t.spacing.xl },
   footer: { alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.md },
   end: { paddingVertical: t.spacing.md },
 }));

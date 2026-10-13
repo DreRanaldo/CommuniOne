@@ -11,7 +11,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 import { CURRENT_COMMUNITY_KEY } from './CurrentCommunityProvider';
 
 afterEach(() => jest.restoreAllMocks());
@@ -58,7 +58,8 @@ async function signedIn(options: FakeOptions & { initialURL?: string } = {}) {
 
 /** Opens the switcher from the community hub header. */
 async function openSwitcher(user: ReturnType<typeof userEvent.setup>) {
-  await user.press(await screen.findByTestId('community-switcher'));
+  // The feed header (Home) and the hub header (Communities) both open it.
+  await user.press((await screen.findAllByLabelText(/^Switch community\. Current community/))[0]!);
   return screen.findByTestId('communities-screen');
 }
 
@@ -90,7 +91,7 @@ describe('multiple communities', () => {
   test('choosing one opens its hub; the header shows the current community', async () => {
     const { user } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^St\. Mark Choir/ }));
-    const hub = await screen.findByTestId('community-home-screen');
+    const hub = await openHub();
     expect(within(hub).getByText('St. Mark Choir')).toBeOnTheScreen();
     expect(within(hub).getByText('Church · Member')).toBeOnTheScreen();
     expect(screen.getByLabelText('Switch community. Current community: St. Mark Choir')).toBeOnTheScreen();
@@ -99,7 +100,7 @@ describe('multiple communities', () => {
 
   test('a single community is opened directly', async () => {
     await signedIn({ communities: [maple, pending] });
-    expect(await screen.findByTestId('community-home-screen')).toBeOnTheScreen();
+    expect(await openHub()).toBeOnTheScreen();
     expect(screen.getByLabelText('Switch community. Current community: Maple Grove HOA')).toBeOnTheScreen();
   });
 
@@ -137,7 +138,7 @@ describe('switching communities', () => {
   test('switches without signing out; the switcher marks the current one and re-checks memberships', async () => {
     const { user, rpc, auth } = await signedIn({ communities: [maple, choir, school] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
 
     const before = listCalls(rpc);
     await openSwitcher(user);
@@ -159,14 +160,15 @@ describe('switching communities', () => {
   test("switching closes the previous community's screens", async () => {
     const { user } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'Documents' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
 
     // Back to the hub, switch: the new community opens on its hub, not on Maple Grove's section.
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await openSwitcher(user);
     await user.press(card(choir));
-    const hub = await screen.findByTestId('community-home-screen');
+    const hub = await openHub();
     expect(within(hub).getByText('St. Mark Choir')).toBeOnTheScreen();
     expect(screen.queryByText('Coming soon')).not.toBeOnTheScreen();
   });
@@ -229,7 +231,7 @@ describe('invalid community selection', () => {
   test('losing access to the current community drops it with a notice', async () => {
     const { user, setCommunities } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
 
     // Removed from Maple Grove on the server; the switcher re-checks when it opens.
     setCommunities([choir]);
@@ -252,7 +254,7 @@ describe('invalid community selection', () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const { user, setCommunities } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
 
     setCommunities([{ ...maple, membership_status: 'suspended' }, choir]);
     now.mockReturnValue(1_000_000 + 61_000);
@@ -323,7 +325,7 @@ describe('unauthorized community id', () => {
   test('every community screen still depends on the server: a revoked session ends at sign-in', async () => {
     const { user, revokeSession } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
     revokeSession();
     // Opening the switcher re-checks memberships; the database refuses the revoked session.
     await user.press(screen.getByTestId('community-switcher'));
@@ -336,7 +338,7 @@ describe('state restoration', () => {
   test('the last community is reopened on the next start, after the server confirms it', async () => {
     const { user, view } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^St\. Mark Choir/ }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
     await view.unmount();
 
     const { rpc } = await signedIn({ communities: [maple, choir] });

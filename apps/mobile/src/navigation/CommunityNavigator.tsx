@@ -33,13 +33,15 @@ const SECTION_TITLES = {
   members: 'Members',
 } as const;
 
+type StackRoot = 'Feed' | 'CommunityHome' | 'Alerts';
+
 /**
- * The Home tab: the current community (from CurrentCommunityProvider, never
- * from a route parameter). With no community selected it shows the list to
- * choose one. Switching community remounts the stack, so no screen of the
- * previous community stays open.
+ * A tab that shows the current community (from CurrentCommunityProvider,
+ * never from a route parameter), starting at `root`. With no community
+ * selected it shows the list to choose one. Switching community remounts the
+ * stack, so no screen of the previous community stays open.
  */
-export function CommunityNavigator() {
+function CommunityTab({ root }: { root: StackRoot }) {
   const { status, error, current, retry } = useCurrentCommunity();
   if (status === 'loading' || status === 'idle') return <LoadingState label="Loading your communities…" />;
   if (status === 'error') {
@@ -52,13 +54,20 @@ export function CommunityNavigator() {
     );
   }
   if (!current) return <ChooseCommunityScreen />;
-  return <CommunityStack key={current.community_id} community={current} />;
+  return <CommunityStack key={current.community_id} community={current} root={root} />;
 }
 
-function CommunityStack({ community }: { community: MyCommunity }) {
+/** Home tab: the current community's feed. */
+export const HomeNavigator = () => <CommunityTab root="Feed" />;
+/** Communities tab: the current community's hub (sections, announcements, events). */
+export const CommunityHubNavigator = () => <CommunityTab root="CommunityHome" />;
+/** Alerts tab: the current community's alerts. */
+export const AlertsNavigator = () => <CommunityTab root="Alerts" />;
+
+function CommunityStack({ community, root }: { community: MyCommunity; root: StackRoot }) {
   const screenOptions = useStackOptions();
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator screenOptions={screenOptions} initialRouteName={root}>
       <Stack.Screen
         name="CommunityHome"
         component={CommunityHomeScreen}
@@ -67,7 +76,7 @@ function CommunityStack({ community }: { community: MyCommunity }) {
           headerTitle: () => <CommunitySwitcherButton community={community} />,
         }}
       />
-      <Stack.Screen name="Feed" component={FeedScreen} options={{ title: 'Feed' }} />
+      <Stack.Screen name="Feed" component={FeedScreen} options={{ headerShown: false, title: 'Home' }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />
       <Stack.Screen name="Events" component={EventsScreen} options={{ title: 'Events' }} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: 'Event' }} />

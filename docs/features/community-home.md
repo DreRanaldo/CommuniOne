@@ -3,6 +3,7 @@
 The landing page of the current community in the mobile app: who the
 community is, what needs attention now, and the way into everything else.
 
+- **Where:** the **Communities** tab since the feed redesign (Home is now the feed; see [`feed-images.md`](feed-images.md)). Its "Feed" shortcut and "See all recent activity" open the Home tab.
 - **Screen:** `apps/mobile/src/features/communities/screens/CommunityHomeScreen.tsx`
 - **Data:** `apps/mobile/src/features/home/useCommunityHome.ts`
 - **Components:** `apps/mobile/src/features/home/components/`

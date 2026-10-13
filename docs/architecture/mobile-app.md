@@ -61,10 +61,12 @@ There is no `src/services/`: the service layer is the repository's `services/`.
 RootStack
 ├── (signed out)  Auth ── Welcome · SignIn · SignUp · ForgotPassword
 ├── (recovery)    ResetPassword            ← communione://auth/reset-password?code=…
-└── (signed in)   App (tabs) ── Home · Notifications · Profile
-                  │   Home = the current community: CommunityHome · Feed · PostDetail · PostEditor ·
-                  │          Announcements · AnnouncementDetail · AnnouncementEditor · CommunitySection
+└── (signed in)   App (tabs) ── Home · Communities · Marketplace · Alerts · Profile
+                  │   Home, Communities and Alerts = the current community, one stack each, starting at
+                  │          Feed (Home), CommunityHome (Communities) or Alerts (Alerts); every stack has
+                  │          PostDetail · PostEditor · Announcements · Alerts · Events (+ details, editors)
                   │          (or "Your communities" when none is selected)
+                  │   Marketplace = placeholder (a later module)
                   │   Profile ── ProfileHome · EditProfile · Account · ChangePassword · DeleteAccount
                   Communities (modal, the switcher)  ← communione://communities[/<communityId>]
                   CreateCommunity (modal)
@@ -100,6 +102,7 @@ Placeholders: Notifications, and the Documents and Members sections.
 
 ## Design system
 
+- **White, photo-first redesign:** pure white surfaces, near-black text, light-gray hairlines and the logo blue as the one accent. Light is the app's appearance; the dark tokens are kept for later. See [`../features/feed-images.md`](../features/feed-images.md).
 - **Brand** (from the CommuniOne logo, `apps/mobile/assets/brand/`):
   - **Colours.** The logo's blue `#0069CE` is the primary colour (5.4:1 with
     white text), its navy `#162B46` is the body text colour, and success text
@@ -160,7 +163,7 @@ Placeholders: Notifications, and the Documents and Members sections.
 | Lint | `npm run lint` | ESLint (Expo rules), zero warnings |
 | Format | `npm run format:check` | Prettier |
 | Types | `npm run typecheck` | Strict TS (`noUncheckedIndexedAccess`) for the app and the shared services |
-| Tests | `npm test` | 318 tests: PKCE WebCrypto (3), brand logo (1) and colour contrast (12, brand and severity), events and RSVPs (22 + 6 rules), alerts (22 + 5 rules), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
+| Tests | `npm test` | 335 tests: feed redesign and photo posts (17, see `../features/feed-images.md`), PKCE WebCrypto (3), brand logo (1) and colour contrast (12, brand and severity), events and RSVPs (22 + 6 rules), alerts (22 + 5 rules), announcements (17 + 5 rules), comments, reactions and moderation (24), feed (23), community home (16), create and join (21 + 9 rules), community selection (25 + 15 rules), profile and account (29, see `../features/profile.md`), authentication flows (23, see `mobile-authentication.md`), app launch (valid config / service-role key / missing config), navigation (restoring, signed-out gate, sign-in errors, sign-in → tabs → community → section, Join modal, sign-out, error + retry, deep links), design system, secure storage, Supabase client safety, config validation, error presentation, `useAsync` |
 | Config | `npm run config:check` | Every variant's Expo config resolves with the right name, ids and scheme, and holds no secrets |
 | Production build | `npm run export:check` | Release bundles for Android and iOS build (Hermes); public values inlined; server-only values and secret keys absent |
 | Health | `npm run doctor` | expo-doctor (SDK compatibility; needs network) |

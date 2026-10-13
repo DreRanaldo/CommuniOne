@@ -46,7 +46,7 @@ const listCalls = (rpc: jest.Mock) =>
         args as { p_community_id: string; p_limit: number; p_cursor_created_at?: string; p_status: string },
     );
 
-/** Signed in, the choir open, then its feed. */
+/** Signed in with the choir: Home is its feed. */
 async function openFeed(options: FakeOptions = {}) {
   const user = userEvent.setup();
   const app = await renderApp({
@@ -55,9 +55,8 @@ async function openFeed(options: FakeOptions = {}) {
     content: { [C]: { posts: [mine(1), theirs(2)] } },
     ...options,
   });
-  await screen.findByTestId('community-home-screen');
-  await user.press(screen.getByRole('button', { name: 'Feed' }));
   await screen.findByTestId('feed-screen');
+  await waitFor(() => expect(screen.queryByText('Loading posts…')).not.toBeOnTheScreen());
   return { user, ...app };
 }
 
@@ -84,9 +83,13 @@ const pullToRefresh = async () => {
 };
 
 const post = (body: string) => screen.getByText(body);
+/** Opens a post's "…" menu (edit, delete and moderation live there). */
+const openMenu = async (user: ReturnType<typeof userEvent.setup>, body: string) =>
+  user.press(within(cardOf(body)).getByRole('button', { name: 'Post options' }));
 const cardOf = (body: string) => {
   let node = post(body) as unknown as { parent: unknown; props: { testID?: string } } | null;
-  while (node && !String(node.props.testID ?? '').startsWith('post-')) node = node.parent as typeof node;
+  while (node && !/^post-[0-9a-f]{8}-/.test(String(node.props.testID ?? '')))
+    node = node.parent as typeof node;
   return node as unknown as Parameters<typeof within>[0];
 };
 
@@ -126,14 +129,12 @@ describe('feed loading', () => {
 
   test('a failure shows a safe error with retry', async () => {
     const user = userEvent.setup();
-    const fake = await renderApp({
+    await renderApp({
       session: makeSession(),
       communities: [choir],
       content: { [C]: { posts: [theirs(1)] } },
+      failFirstRpcNamed: 'list_community_posts',
     });
-    await screen.findByTestId('community-home-screen');
-    fake.failRpcOnce('list_community_posts');
-    await user.press(screen.getByRole('button', { name: 'Feed' }));
     expect(await screen.findByText('Posts could not be loaded')).toBeOnTheScreen();
     expect(screen.queryByText(/postgresql/)).not.toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Try again' }));
@@ -232,6 +233,7 @@ describe('create post', () => {
 describe('edit own post', () => {
   test('the editor loads the post from the server; saving updates only the body', async () => {
     const { user, queries } = await openFeed();
+    await openMenu(user, 'My post 1');
     await user.press(within(cardOf('My post 1')).getByRole('button', { name: 'Edit post' }));
     const field = await screen.findByLabelText('Your post');
     expect(field).toHaveDisplayValue('My post 1');
@@ -249,21 +251,28 @@ describe('edit own post', () => {
 
 describe('unauthorized edit', () => {
   test("no edit or delete on other people's posts", async () => {
-    await openFeed();
+    const { user } = await openFeed();
     const card = cardOf('Their post 2');
+    // No menu at all on someone else's post for a plain member.
+    expect(within(card).queryByRole('button', { name: 'Post options' })).not.toBeOnTheScreen();
     expect(within(card).queryByRole('button', { name: 'Edit post' })).not.toBeOnTheScreen();
     expect(within(card).queryByRole('button', { name: 'Delete post' })).not.toBeOnTheScreen();
+    await openMenu(user, 'My post 1');
     expect(within(cardOf('My post 1')).getByRole('button', { name: 'Edit post' })).toBeOnTheScreen();
   });
 
   test('without posts.edit_own, own posts cannot be edited either', async () => {
-    await openFeed({ permissions: { [C]: ['posts.view', 'posts.create', 'posts.delete_own'] } });
+    const { user } = await openFeed({
+      permissions: { [C]: ['posts.view', 'posts.create', 'posts.delete_own'] },
+    });
+    await openMenu(user, 'My post 1');
     expect(within(cardOf('My post 1')).queryByRole('button', { name: 'Edit post' })).not.toBeOnTheScreen();
     expect(within(cardOf('My post 1')).getByRole('button', { name: 'Delete post' })).toBeOnTheScreen();
   });
 
   test('the server has the last word: a post hidden meanwhile cannot be edited', async () => {
     const { user, content } = await openFeed();
+    await openMenu(user, 'My post 1');
     await user.press(within(cardOf('My post 1')).getByRole('button', { name: 'Edit post' }));
     const field = await screen.findByLabelText('Your post');
     // A moderator hides the post while the author is editing.
@@ -279,6 +288,7 @@ describe('unauthorized edit', () => {
 describe('delete', () => {
   test('asks first, then soft-deletes through the server and removes the post', async () => {
     const { user, queries } = await openFeed();
+    await openMenu(user, 'My post 1');
     await user.press(within(cardOf('My post 1')).getByRole('button', { name: 'Delete post' }));
     await user.press(screen.getByRole('button', { name: 'Keep it' }));
     expect(post('My post 1')).toBeOnTheScreen();
@@ -294,6 +304,7 @@ describe('delete', () => {
     const permissions = { [C]: ['posts.view', 'posts.create', 'posts.edit_own', 'posts.delete_own'] };
     const { user } = await openFeed({ permissions });
     permissions[C] = ['posts.view'];
+    await openMenu(user, 'My post 1');
     await user.press(within(cardOf('My post 1')).getByRole('button', { name: 'Delete post' }));
     await user.press(screen.getByRole('button', { name: 'Delete post' }));
     expect(await within(cardOf('My post 1')).findByRole('alert')).toBeOnTheScreen();
@@ -337,7 +348,6 @@ describe('moderation state', () => {
         },
       },
     });
-    await user.press(await screen.findByRole('button', { name: 'Feed' }));
     await user.press(await screen.findByRole('tab', { name: 'Deleted' }));
     expect(await screen.findByText('Deleted one')).toBeOnTheScreen();
     await user.press(screen.getByRole('tab', { name: 'Hidden' }));
@@ -363,14 +373,13 @@ describe('community isolation', () => {
       content: { [M]: { posts: [makePost(M, 1, { body: 'Maple news' })] }, [C]: { posts: [theirs(1)] } },
     });
     await user.press(await screen.findByTestId(`community-card-${C}`));
-    await user.press(await screen.findByRole('button', { name: 'Feed' }));
     expect(await screen.findByText('Their post 1')).toBeOnTheScreen();
 
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
-    await user.press(await screen.findByTestId('community-switcher'));
+    // The feed header names the community and switches it.
+    await user.press(screen.getByTestId('feed-community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${M}`));
-    await user.press(await screen.findByRole('button', { name: 'Feed' }));
     expect(await screen.findByText('Maple news')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Switch community. Current community: Maple Grove HOA')).toBeOnTheScreen();
     expect(screen.queryByText('Their post 1')).not.toBeOnTheScreen();
     const last = listCalls(fake.rpc).at(-1)!;
     expect(last.p_community_id).toBe(M);

@@ -20,6 +20,12 @@ to RN-18; members see alerts in the app (home, Alerts list, detail).
   - `apps/mobile/src/theme/contrast.test.ts` (10: WCAG AA for every severity colour)
   - `tests/services/alerts-ui.test.ts` (5, real Supabase)
 
+## Where alerts appear
+
+- **The Alerts tab** (feed redesign): the community's alerts, as described below.
+- **Above the Home feed:** urgent and emergency alerts in force are pinned at the top of the feed (see [`feed-images.md`](feed-images.md)).
+- **The community hub** (Communities tab): its Alerts section.
+
 ## Severity
 
 Severity is never told by colour alone. Each level has its own icon, an

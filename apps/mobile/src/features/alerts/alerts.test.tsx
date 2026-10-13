@@ -13,7 +13,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 import { lightTheme } from '@/theme';
 
 afterEach(() => jest.restoreAllMocks());
@@ -114,7 +114,7 @@ async function openAlerts(community: 'member' | 'manager', options: FakeOptions 
     content: { [M]: { alerts: alertsFor(M) }, [C]: { alerts: alertsFor(C) } },
     ...options,
   });
-  await screen.findByTestId('community-home-screen');
+  await openHub();
   await user.press(screen.getByRole('button', { name: 'See all alerts' }));
   const list = await screen.findByTestId('alerts-screen');
   await waitFor(() => expect(within(list).queryByText('Loading alerts…')).not.toBeOnTheScreen());
@@ -136,7 +136,7 @@ const styleOf = (node: { props: { style?: unknown } }) =>
 
 /** Back to the home (tab press pops the stack) and into the list again: a fresh read. */
 async function reopenList(user: User) {
-  await user.press(screen.getByRole('button', { name: /^Home/ }));
+  await user.press(screen.getByRole('button', { name: /^Communities/ }));
   await user.press(await screen.findByRole('button', { name: 'See all alerts' }));
   const list = await screen.findByTestId('alerts-screen');
   await waitFor(() => expect(within(list).queryByText('Loading alerts…')).not.toBeOnTheScreen());
@@ -201,6 +201,7 @@ describe('active alerts', () => {
       communities: [choir],
       content: { [C]: { alerts: alertsFor(C) } },
     });
+    await openHub();
     const home = await screen.findByTestId('home-alerts');
     await user.press(within(home).getByLabelText(/^Emergency alert: Gas leak/));
     const detail = await screen.findByTestId('alert-detail-screen');
@@ -492,11 +493,13 @@ describe('community isolation', () => {
       },
     });
     await user.press(await screen.findByTestId(`community-card-${C}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all alerts' }));
     await screen.findByText('Choir fire drill');
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByTestId('community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${M}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all alerts' }));
     expect(await screen.findByText('Maple flood')).toBeOnTheScreen();
     expect(screen.queryByText('Choir fire drill')).not.toBeOnTheScreen();

@@ -6,7 +6,7 @@
 // contain is decided by the database (RLS on posts): published posts for
 // posts.view holders; hidden / deleted ones only for moderators and their
 // own author. Rows of another community are dropped (defence in depth).
-import type { FeedPost } from '@communione/services';
+import type { FeedPost, PostImage } from '@communione/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { countsFromSummary, type ReactionType } from '@/features/reactions/reactions';
 import { useServices } from '@/lib/dependencies';
@@ -36,6 +36,10 @@ export interface FeedState {
   remove(postId: string): void;
   /** Per-type reaction counts by post id (one summary call per page; absent if it failed). */
   reactionCounts: Record<string, Partial<Record<ReactionType, number>>>;
+  /** Photos by post id (one call per page, signed URLs; absent while loading or if it failed). */
+  images: Record<string, PostImage[]>;
+  /** Author profile pictures by user id (one call per page). */
+  avatars: Record<string, string | null>;
 }
 
 export function useFeed(communityId: string, status: FeedStatus = 'published'): FeedState {
@@ -51,6 +55,8 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
   const [reactionCounts, setReactionCounts] = useState<Record<string, Partial<Record<ReactionType, number>>>>(
     {},
   );
+  const [images, setImages] = useState<Record<string, PostImage[]>>({});
+  const [avatars, setAvatars] = useState<Record<string, string | null>>({});
   // Only the latest first-page request (or the page after it) may change the list.
   const generation = useRef(0);
 
@@ -64,13 +70,30 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     [communityId],
   );
 
-  /** Reaction counts for a page of posts in one call; a failure only means totals without types. */
+  /**
+   * For a page of posts, in one call each: reaction counts, photos and author
+   * pictures. A failure only means totals without types, or no picture.
+   */
   const loadCounts = useCallback(
     (rows: FeedPost[], replace: boolean) => {
       const ids = rows.map((row) => row.id);
       if (ids.length === 0) {
-        if (replace) setReactionCounts({});
+        if (replace) {
+          setReactionCounts({});
+          setImages({});
+        }
         return;
+      }
+      posts.images(ids).then(
+        (found) => setImages((current) => (replace ? found : { ...current, ...found })),
+        (error: unknown) => logger.log('warn', 'feed.images_failed', { error: String(error) }),
+      );
+      const authors = [...new Set(rows.map((row) => row.author_user_id).filter((id): id is string => !!id))];
+      if (authors.length > 0) {
+        posts.authorAvatars(authors).then(
+          (found) => setAvatars((current) => ({ ...current, ...found })),
+          () => undefined,
+        );
       }
       posts.reactionSummary({ postIds: ids }).then(
         (summary) => {
@@ -190,5 +213,7 @@ export function useFeed(communityId: string, status: FeedStatus = 'published'): 
     update,
     remove,
     reactionCounts,
+    images,
+    avatars,
   };
 }

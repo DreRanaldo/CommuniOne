@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'communione',
   orientation: 'portrait',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'automatic',
+  userInterfaceStyle: 'light',
   ios: {
     bundleIdentifier: `${BASE_ID}${suffix}`,
     supportsTablet: true,
@@ -60,7 +60,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         imageWidth: 200,
         resizeMode: 'contain',
         backgroundColor: '#FFFFFF',
-        dark: { backgroundColor: '#0F1420' },
       },
     ],
   ],

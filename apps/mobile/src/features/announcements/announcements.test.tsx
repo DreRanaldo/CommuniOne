@@ -11,7 +11,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -81,7 +81,7 @@ async function openAnnouncements(community: 'member' | 'manager', options: FakeO
     content: { [M]: { announcements: announcementsFor(M) }, [C]: { announcements: announcementsFor(C) } },
     ...options,
   });
-  await screen.findByTestId('community-home-screen');
+  await openHub();
   await user.press(screen.getByRole('button', { name: 'See all announcements' }));
   const list = await screen.findByTestId('announcements-screen');
   await within(list).findAllByTestId(/^announcement-[0-9a-f-]+$/);
@@ -129,7 +129,7 @@ describe('published announcements', () => {
       communities: [choir],
       content: { [C]: { announcements: announcementsFor(C) } },
     });
-    await screen.findByTestId('community-home-screen');
+    await openHub();
     await user.press(
       within(screen.getByTestId('home-announcements')).getByRole('button', { name: /Water off/ }),
     );
@@ -333,11 +333,13 @@ describe('community isolation', () => {
       },
     });
     await user.press(await screen.findByTestId(`community-card-${C}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all announcements' }));
     await screen.findByText('Choir concert');
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByTestId('community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${M}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all announcements' }));
     expect(await screen.findByText('Maple meeting')).toBeOnTheScreen();
     expect(screen.queryByText('Choir concert')).not.toBeOnTheScreen();

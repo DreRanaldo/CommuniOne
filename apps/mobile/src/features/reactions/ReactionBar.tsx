@@ -39,12 +39,12 @@ export function ReactionBar({ target, initial, enabled, onRejected }: ReactionBa
           hitSlop={6}
         >
           <Icon
-            name={mineInfo ? mineInfo.icon : 'thumbs-up-outline'}
-            size={18}
+            name={mineInfo ? mineInfo.icon : 'heart-outline'}
+            size={22}
             color={mine ? 'primary' : 'textMuted'}
           />
-          <Text variant="caption" tone={mine ? 'primary' : 'muted'}>
-            {mineInfo ? mineInfo.label : 'React'}
+          <Text variant="label" tone={mine ? 'primary' : 'default'}>
+            {mineInfo ? mineInfo.label : 'Like'}
           </Text>
         </Pressable>
         {enabled ? (
