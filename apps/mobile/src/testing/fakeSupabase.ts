@@ -66,6 +66,10 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** Other members per community (see makeMember); the signed-in user is added from `communities`. */
+  members?: Record<string, FakeMember[]>;
+  /** Someone else can also manage roles (so an Owner may leave). */
+  otherRoleManagers?: boolean;
   /** community_stats() overrides per community (unset counts are computed from content). */
   communityStats?: Record<string, Record<string, number | null>>;
   /** my_profile_stats() overrides. */
@@ -135,8 +139,14 @@ export interface ProfileRow {
 
 type DbError = { code: string; message: string; status?: number };
 
+/** A co-member as the database stores them (profile, private phone, membership). */
+export type FakeMember = ReturnType<typeof makeMember>;
+
 /** Default role permissions for posts (seed role templates). */
 const MEMBER_PERMISSIONS = [
+  'community.view',
+  'members.view',
+  'roles.view',
   'alerts.view',
   'announcements.view',
   'documents.view',
@@ -161,8 +171,9 @@ const MANAGEMENT = [
   'events.manage',
 ];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
-  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT],
+  // Seed templates: Owners hold everything; Admins everything except roles.manage.
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update', 'roles.manage'],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update'],
   Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
   Member: MEMBER_PERMISSIONS,
 };
@@ -943,6 +954,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: single ? (rows[0] ?? null) : rows, error: null };
       }
       if (op === 'update') {
+        // Column grants: slug and status are never client-writable.
+        if (values && ('slug' in values || 'status' in values))
+          return { data: null, error: { code: '42501', message: 'permission denied for table communities' } };
+        // private.validate_community_timezone()
+        if (typeof values?.timezone === 'string') {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: values.timezone }).format(0);
+          } catch {
+            return { data: null, error: { code: '22023', message: `unknown time zone: ${values.timezone}` } };
+          }
+        }
         const writable = visible.filter((row) => manages(row.id));
         for (const key of ['logo_path', 'cover_image_path'] as const) {
           const path = values?.[key];
@@ -961,6 +983,47 @@ export function fakeSupabase(options: FakeOptions = {}) {
         }
         writable.forEach((row) => Object.assign(row, values));
         return { data: writable.map((row) => pick(row, columns)), error: null };
+      }
+    }
+    if (table === 'memberships') {
+      // The caller's own memberships (my_communities rows); leaving is the only self-change.
+      const own = communities
+        .map(
+          (c) =>
+            c as {
+              community_id: string;
+              membership_id: string;
+              membership_status: string;
+              role_names: string[];
+            },
+        )
+        .map((c) => ({
+          id: c.membership_id,
+          community_id: c.community_id,
+          user_id: user,
+          status: c.membership_status,
+          roles: c.role_names,
+        }))
+        .filter((row) => matches(row));
+      if (op === 'select') {
+        const rows = own.map((row) => pick(row, columns));
+        return { data: single ? (rows[0] ?? null) : rows, error: null };
+      }
+      if (op === 'update' && values?.status === 'left') {
+        for (const row of own) {
+          // private.is_sole_role_manager: the last member able to manage roles cannot leave.
+          if (permissionsIn(row.community_id).includes('roles.manage') && !options.otherRoleManagers)
+            return {
+              data: null,
+              error: {
+                code: '42501',
+                message: 'the last member able to manage roles cannot leave the community',
+              },
+            };
+        }
+        const ids = new Set(own.map((row) => row.id));
+        communities = communities.filter((c) => !ids.has((c as { membership_id: string }).membership_id));
+        return { data: own.map((row) => pick({ ...row, status: 'left' }, columns)), error: null };
       }
     }
     if (table === 'profile_private') {
@@ -1200,13 +1263,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
   };
   // ---- Storage: the public community-media bucket (community managers only) ----
   const mediaFiles = new Set<string>();
-  const manages = (communityId: string) =>
-    communities.some(
-      (c) =>
-        (c as { community_id: string }).community_id === communityId &&
-        (c as { membership_status: string }).membership_status === 'active' &&
-        (c as { role_names: string[] }).role_names.some((r) => r === 'Owner' || r === 'Admin'),
-    );
+  /** community.update (RLS on communities and the community-media storage policies). */
+  const manages = (communityId: string) => permissionsIn(communityId).includes('community.update');
   const mediaBucket = {
     upload: jest.fn(async (path: string, _body: unknown, _options?: unknown) => {
       if (offline) return { data: null, error: { message: 'Network request failed' } };
@@ -1299,6 +1357,39 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const canReadNotification = (row: NotificationRow) =>
     row.user_id === me() &&
     (row.community_id === null || !MEMBERSHIP_TYPES.has(row.type) || isActiveMember(row.community_id));
+  // ---- Per-community notification preferences (migration 29) ----
+  const notificationSettings = new Map<
+    string,
+    { announcements: boolean; events: boolean; comments: boolean; alerts: boolean }
+  >();
+  // ---- Member directory (migration 28): other members + the signed-in user ----
+  const memberRows = options.members ?? {};
+  for (const list of Object.values(memberRows))
+    for (const m of list) if (m.phone) phones.set(m.user_id, m.phone);
+  const membersOf = (communityId: string): FakeMember[] => {
+    const mine = communities.find((c) => (c as { community_id: string }).community_id === communityId) as
+      | { membership_id: string; membership_status: string; role_names: string[]; joined_at: string }
+      | undefined;
+    const profile = profiles.get(me() ?? '');
+    const self =
+      mine && profile
+        ? [
+            makeMember(0, {
+              membership_id: mine.membership_id,
+              user_id: me()!,
+              display_name: profile.display_name,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              bio: profile.bio,
+              avatar_path: null,
+              role_names: mine.role_names,
+              joined_at: mine.joined_at,
+              status: mine.membership_status,
+            }),
+          ]
+        : [];
+    return [...self, ...(memberRows[communityId] ?? [])];
+  };
   // ---- Stories (migration 27 rules) ----
   const allStories = () => Object.values(content).flatMap((c) => c.stories ?? []) as StoryRow[];
   const storyFiles = new Set<string>(); // uploaded story pictures
@@ -1705,6 +1796,85 @@ export function fakeSupabase(options: FakeOptions = {}) {
         ],
         error: null,
       };
+    }
+    if (name === 'my_community_notification_settings' || name === 'set_community_notification_settings') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      if (!me() || !permissionsIn(communityId).includes('community.view'))
+        return { data: null, error: { code: '42501', message: 'not a member of this community' } };
+      const current = notificationSettings.get(communityId) ?? {
+        announcements: true,
+        events: true,
+        comments: true,
+        alerts: true,
+      };
+      if (name === 'set_community_notification_settings') {
+        for (const key of ['announcements', 'events', 'comments', 'alerts'] as const) {
+          const value = args[`p_${key}`];
+          if (typeof value === 'boolean') current[key] = value;
+        }
+        notificationSettings.set(communityId, current);
+      }
+      return { data: [{ ...current }], error: null };
+    }
+    if (name === 'list_community_members' || name === 'get_community_member') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      const perms = permissionsIn(communityId);
+      if (!me() || !perms.includes('members.view'))
+        return {
+          data: null,
+          error: { code: '42501', message: 'members.view is required in this community' },
+        };
+      const roles = perms.includes('roles.view');
+      // Community-profile fields only: like the database, never the phone, e-mail or account status.
+      const shape = (m: FakeMember) => {
+        const name =
+          m.display_name?.trim() || [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || null;
+        return {
+          membership_id: m.membership_id,
+          user_id: m.user_id,
+          display_name: name,
+          avatar_path: m.avatar_path,
+          avatar_url: m.avatar_url,
+          role_names: roles ? [...m.role_names].sort() : null,
+          joined_at: m.joined_at,
+          is_me: m.user_id === me(),
+          first_name: m.first_name,
+          last_name: m.last_name,
+          bio: m.bio,
+        };
+      };
+      const active = membersOf(communityId).filter(
+        (m) => m.status === 'active' && m.profile_status === 'active',
+      );
+      if (name === 'get_community_member') {
+        const m = active.find((x) => x.user_id === args.p_user_id);
+        return { data: m ? [shape(m)] : [], error: null };
+      }
+      const query = (args.p_query as string | undefined)?.trim().toLowerCase();
+      if (query && query.length > 100)
+        return { data: null, error: { code: '22023', message: 'search text can be at most 100 characters' } };
+      const rows = active
+        .map(shape)
+        .filter(
+          (r) =>
+            !query ||
+            [r.display_name, r.first_name, r.last_name].some((v) => v?.toLowerCase().includes(query)),
+        )
+        .map(({ first_name: _f, last_name: _l, bio: _b, ...r }) => ({
+          ...r,
+          sort_unnamed: r.display_name === null,
+          sort_name: (r.display_name ?? '').toLowerCase(),
+        }))
+        .sort(
+          (a, b) =>
+            Number(a.sort_unnamed) - Number(b.sort_unnamed) ||
+            a.sort_name.localeCompare(b.sort_name) ||
+            a.user_id.localeCompare(b.user_id),
+        );
+      const after = args.p_cursor_id ? rows.findIndex((r) => r.user_id === args.p_cursor_id) + 1 : 0;
+      return { data: rows.slice(after, after + Number(args.p_limit ?? 30)), error: null };
     }
     if (name === 'create_document_upload') {
       if (offline) return { data: null, error: OFFLINE };
@@ -2334,6 +2504,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     storage: storageBucket,
     /** The user's notifications on the "server" (change them to simulate new ones). */
     notifications: notificationRows,
+    /** Notification preferences per community (as stored on the "server"). */
+    notificationSettings,
     /** Pictures in the private stories bucket, and who saw which story. */
     storyFiles,
     storyViews,
@@ -2644,6 +2816,24 @@ export const makeNotification = (n: number, overrides: Record<string, unknown> =
   read_at: null as string | null,
   archived_at: null as string | null,
   created_at: new Date(Date.now() - n * 60_000).toISOString(),
+  ...overrides,
+});
+
+/** A co-member: profile, membership and a PRIVATE phone number (never returned to others). */
+export const makeMember = (n: number, overrides: Record<string, unknown> = {}) => ({
+  membership_id: `dddddddd-1111-4000-8000-${String(n).padStart(12, '0')}`,
+  user_id: `bbbbbbbb-1111-4000-8000-${String(n).padStart(12, '0')}` as string,
+  display_name: `Member ${n}` as string | null,
+  first_name: null as string | null,
+  last_name: null as string | null,
+  bio: null as string | null,
+  avatar_path: null as string | null,
+  avatar_url: null as string | null,
+  role_names: ['Member'] as string[],
+  joined_at: '2025-06-01T12:00:00Z' as string | null,
+  status: 'active',
+  profile_status: 'active',
+  phone: `+1 555 01${String(n).padStart(2, '0')}` as string | null,
   ...overrides,
 });
 

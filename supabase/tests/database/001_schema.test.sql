@@ -58,6 +58,8 @@ select results_eq(
      ('comments',                  'comments_parent_fk',                             'comments',                  'n'),
      ('comments',                  'comments_post_fk',                               'posts',                     'c'),
      ('communities',               'communities_created_by_fkey',                    'auth.users',                'n'),
+     ('community_notification_settings', 'community_notification_settings_community_id_fkey', 'communities', 'c'),
+     ('community_notification_settings', 'community_notification_settings_user_id_fkey', 'profiles', 'c'),
      ('document_folders',          'document_folders_community_id_fkey',             'communities',               'r'),
      ('document_folders',          'document_folders_created_by_fkey',               'profiles',                  'n'),
      ('document_folders',          'document_folders_parent_fk',                     'document_folders',          'n'),

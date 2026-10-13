@@ -9,6 +9,7 @@ import { ErrorCode, ServiceError } from '../core/errors.ts';
 import { mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import { decodeCursor, pageSize, toPage, type Page, type PageRequest } from '../core/pagination.ts';
 import * as v from '../core/validate.ts';
+import { AVATAR_BUCKET } from '../auth/index.ts';
 
 export const MEMBERSHIP_STATUSES = ['pending', 'active', 'suspended', 'rejected', 'left'] as const;
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
@@ -23,6 +24,32 @@ export interface Member {
   avatarUrl: string | null;
   roles: { id: string; name: string }[];
 }
+
+/**
+ * A directory entry (RN-14): community-profile fields only. The database
+ * returns nothing else (no phone, e-mail or account status), so the app
+ * cannot receive what it must not show.
+ */
+export interface DirectoryMember {
+  membershipId: string;
+  userId: string;
+  displayName: string | null;
+  /** Short-lived signed URL (uploaded avatar) or external URL, or null. */
+  avatarUrl: string | null;
+  /** Role names; null when the caller may not see roles (no roles.view). */
+  roles: string[] | null;
+  joinedAt: string | null;
+  isMe: boolean;
+}
+
+/** A member's community profile (RN-14). */
+export interface MemberProfile extends DirectoryMember {
+  firstName: string | null;
+  lastName: string | null;
+  bio: string | null;
+}
+
+export const MEMBER_SEARCH_MAX = 100;
 
 const MEMBER_COLUMNS = 'id, user_id, status, joined_at, created_at, profiles(display_name, avatar_url), membership_roles(roles(id, name))';
 
@@ -65,7 +92,85 @@ export function membershipsService(ctx: ServiceContext) {
       return toMember((fresh ?? updated) as unknown as MemberRow);
     });
 
+  /** Signed avatar URLs (avatars bucket: readable where the profile is). */
+  const avatars = async (rows: { avatar_path: string | null; avatar_url: string | null }[], seconds = 3600) => {
+    const paths = [...new Set(rows.map((r) => r.avatar_path).filter((p): p is string => !!p))];
+    const urls = new Map<string, string>();
+    if (paths.length > 0) {
+      const signed = await db.storage.from(AVATAR_BUCKET).createSignedUrls(paths, seconds);
+      for (const item of signed.data ?? []) if (item.path && item.signedUrl && !item.error) urls.set(item.path, item.signedUrl);
+    }
+    return (row: { avatar_path: string | null; avatar_url: string | null }) =>
+      (row.avatar_path ? urls.get(row.avatar_path) : row.avatar_url) ?? null;
+  };
+
   return {
+    /**
+     * The member directory of one community (RN-14): active members by name,
+     * optionally searched by name. Requires members.view there; roles only
+     * with roles.view. Community-profile fields only (see DirectoryMember).
+     */
+    directory(input: { communityId: string; query?: string } & PageRequest): Promise<Page<DirectoryMember>> {
+      return ctx.run('memberships.directory', async () => {
+        await ctx.requireUserId();
+        v.only<typeof input>(input, 'input', ['communityId', 'query', 'limit', 'cursor']);
+        const communityId = v.uuid(input.communityId, 'communityId');
+        const query = input.query === undefined || input.query.trim() === ''
+          ? undefined
+          : v.text(input.query, 'query', { max: MEMBER_SEARCH_MAX });
+        const limit = pageSize(input.limit);
+        const c = decodeCursor(input.cursor, ['int', 'arg', 'uuid']);
+        const rows = unwrap(await db.rpc('list_community_members', {
+          p_community_id: communityId,
+          p_query: query,
+          p_limit: limit,
+          p_cursor_unnamed: c ? c[0] === 1 : undefined,
+          p_cursor_name: (c?.[1] as string | undefined) ?? undefined,
+          p_cursor_id: (c?.[2] as string | undefined) ?? undefined,
+        })) ?? [];
+        const avatarOf = await avatars(rows);
+        const page = toPage(rows, limit, (last) => [last.sort_unnamed ? 1 : 0, last.sort_name, last.user_id]);
+        return {
+          ...page,
+          items: page.items.map((r) => ({
+            membershipId: r.membership_id,
+            userId: r.user_id,
+            displayName: r.display_name,
+            avatarUrl: avatarOf(r),
+            roles: r.role_names,
+            joinedAt: r.joined_at,
+            isMe: r.is_me,
+          })),
+        };
+      });
+    },
+
+    /** One active member's community profile (RN-14). NOT_FOUND unless they are an active member of this community. */
+    member(communityId: string, userId: string): Promise<MemberProfile> {
+      return ctx.run('memberships.member', async () => {
+        await ctx.requireUserId();
+        const rows = unwrap(await db.rpc('get_community_member', {
+          p_community_id: v.uuid(communityId, 'communityId'),
+          p_user_id: v.uuid(userId, 'userId'),
+        })) ?? [];
+        const r = rows[0];
+        if (!r) throw new ServiceError(ErrorCode.NotFound, 'Member not found.');
+        const avatarOf = await avatars([r]);
+        return {
+          membershipId: r.membership_id,
+          userId: r.user_id,
+          displayName: r.display_name,
+          avatarUrl: avatarOf(r),
+          roles: r.role_names,
+          joinedAt: r.joined_at,
+          isMe: r.is_me,
+          firstName: r.first_name,
+          lastName: r.last_name,
+          bio: r.bio,
+        };
+      });
+    },
+
     /**
      * Members of a community, oldest first. Active members need members.view;
      * other statuses need members.approve / suspend / remove (RLS).

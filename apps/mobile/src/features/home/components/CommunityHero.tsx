@@ -1,5 +1,5 @@
 import type { Community, MyCommunity } from '@communione/services';
-import { ImageBackground, View } from 'react-native';
+import { ImageBackground, Pressable, View } from 'react-native';
 import { Text } from '@/components';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles } from '@/theme';
@@ -17,11 +17,14 @@ export function CommunityHero({
   details,
   firstName,
   memberCount,
+  onManage,
 }: {
   community: MyCommunity;
   details: Community | null;
   firstName: string | null;
   memberCount: number | null;
+  /** Shown with community.update (the database checks again). */
+  onManage?: () => void;
 }) {
   const styles = useStyles();
   const { communities } = useServices();
@@ -49,6 +52,19 @@ export function CommunityHero({
         <Text variant="caption" style={styles.dim}>
           {`You are ${/^[AEIOU]/i.test(role) ? 'an' : 'a'} ${role}`}
         </Text>
+      ) : null}
+      {onManage ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Manage community"
+          onPress={onManage}
+          style={({ pressed }) => [styles.manage, pressed && styles.managePressed]}
+          testID="hub-manage"
+        >
+          <Text variant="label" style={styles.light}>
+            Manage community
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -94,4 +110,16 @@ const useStyles = makeStyles((t) => ({
   eyebrow: { color: t.colors.media.dim, fontWeight: '700', letterSpacing: 1.2 },
   light: { color: t.colors.media.text },
   dim: { color: t.colors.media.dim },
+  manage: {
+    alignSelf: 'flex-start',
+    marginTop: t.spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: t.spacing.lg,
+    borderRadius: t.radius.md,
+    borderWidth: 1,
+    borderColor: t.colors.media.dim,
+    backgroundColor: t.colors.media.shade,
+  },
+  managePressed: { opacity: 0.8 },
 }));

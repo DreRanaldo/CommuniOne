@@ -72,7 +72,7 @@ export type { Database } from './database.types.ts';
 export { parseInvitationToken, type InvitationPreview } from './invitations/index.ts';
 export {
   COMMUNITY_COVER_MAX_BYTES, COMMUNITY_LOGO_MAX_BYTES, COMMUNITY_MEDIA_BUCKET, COMMUNITY_TYPES,
-  type Community, type CommunityImageKind, type CommunityImages, type CommunityStats, type CommunityType, type MyCommunity,
+  type Community, type CommunityImageKind, type CommunityImages, type CommunityNotificationSettings, type CommunityStats, type CommunityType, type MyCommunity,
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
 export {
@@ -98,3 +98,6 @@ export { BUCKET as DOCUMENTS_BUCKET, MAX_LINK_SECONDS } from './documents/index.
 export {
   STORIES_BUCKET, STORY_CAPTION_MAX, STORY_IMAGE_MAX_BYTES, type Story, type StoryRow,
 } from './stories/index.ts';
+export {
+  MEMBER_SEARCH_MAX, MEMBERSHIP_STATUSES, type DirectoryMember, type Member, type MemberProfile, type MembershipStatus,
+} from './memberships/index.ts';

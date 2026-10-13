@@ -33,7 +33,12 @@ export function pageSize(limit: unknown, max = MAX_PAGE_SIZE): number {
 }
 
 type CursorValue = string | number | null;
-export type CursorKind = 'timestamp' | 'uuid' | 'int' | 'text';
+/**
+ * `text` values may be interpolated into PostgREST filters, so they are
+ * identifier-like only. `arg` values are only ever passed as RPC arguments
+ * (bound parameters), so any short text without control characters is safe.
+ */
+export type CursorKind = 'timestamp' | 'uuid' | 'int' | 'text' | 'arg';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Strict ISO 8601 as PostgREST returns it; no commas, spaces or parentheses can
@@ -74,6 +79,9 @@ const checkValue = (value: unknown, kind: CursorKind): CursorValue => {
       return value as number;
     case 'text':
       if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) badCursor();
+      return value as string;
+    case 'arg':
+      if (typeof value !== 'string' || value.length > 300 || /[\u0000-\u001F\u007F]/.test(value)) badCursor();
       return value as string;
   }
 };

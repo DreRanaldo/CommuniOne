@@ -76,14 +76,14 @@ describe('community hub', () => {
     expect(tileCount('events')).not.toBeOnTheScreen();
   });
 
-  test('tiles open their sections: Documents, Members (coming soon)', async () => {
+  test('tiles open their sections: Documents, Members', async () => {
     const { user } = await signedIn();
     await openHub();
     await user.press(screen.getByRole('button', { name: 'Documents' }));
     expect(await screen.findByTestId('documents-screen')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByRole('button', { name: 'Members' }));
-    expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
+    expect(await screen.findByTestId('members-screen')).toBeOnTheScreen();
   });
 });
 

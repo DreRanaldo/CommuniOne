@@ -163,7 +163,7 @@ describe('switching communities', () => {
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
     await openHub();
     await user.press(await screen.findByRole('button', { name: 'Members' }));
-    expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
+    expect(await screen.findByTestId('members-screen')).toBeOnTheScreen();
 
     // Back to the hub, switch: the new community opens on its hub, not on Maple Grove's section.
     await user.press(screen.getByRole('button', { name: /^Communities/ }));
@@ -171,7 +171,7 @@ describe('switching communities', () => {
     await user.press(card(choir));
     const hub = await openHub();
     expect(within(hub).getByText('St. Mark Choir')).toBeOnTheScreen();
-    expect(screen.queryByText('Coming soon')).not.toBeOnTheScreen();
+    expect(screen.queryByTestId('members-screen')).not.toBeOnTheScreen();
   });
 
   test('tapping the current community just closes the switcher', async () => {

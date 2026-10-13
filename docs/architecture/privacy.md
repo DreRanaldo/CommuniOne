@@ -100,3 +100,12 @@ other `user_id`.
 - No per-field visibility settings (e.g. "show my phone to my building").
 - Platform admins have no UI or API to read phone numbers; support access needs
   the service role, which must be used only by audited backend code.
+
+## Member directory (RN-14)
+
+The directory and member profiles use `list_community_members()` and
+`get_community_member()` (migration 28). They return community-profile fields
+only (name, avatar, roles with `roles.view`, join date, bio), for active
+members of one community, to callers with `members.view` there. They never read
+`profile_private` or `auth.users`, so phone numbers and e-mail addresses cannot
+reach the app through them. See [`../features/members-app.md`](../features/members-app.md).

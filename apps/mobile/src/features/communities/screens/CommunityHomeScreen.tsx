@@ -21,6 +21,7 @@ import { errorMessage, isNetworkError } from '@/utils/errors';
 import { formatTime } from '@/utils/format';
 import { CommunityNoticeBanner } from '../components/CommunityNoticeBanner';
 import { useCommunity } from '../CurrentCommunityProvider';
+import { useCommunityPermissions } from '../useCommunityPermissions';
 
 /**
  * The community's landing page, in priority order:
@@ -41,6 +42,7 @@ export function CommunityHomeScreen({
   const rootNavigation = useNavigation();
   const home = useCommunityHome(community.community_id);
   const { communities } = useServices();
+  const permissions = useCommunityPermissions();
   const loadStats = useCallback(
     () => communities.stats(community.community_id),
     [communities, community.community_id],
@@ -60,7 +62,7 @@ export function CommunityHomeScreen({
     else if (section === 'alerts') navigation.navigate('Alerts');
     else if (section === 'events') navigation.navigate('Events');
     else if (section === 'documents') navigation.navigate('Documents');
-    else navigation.navigate('CommunitySection', { section });
+    else navigation.navigate('Members');
   };
 
   // Coming back to the home (e.g. from a section) refreshes it, keeping what is shown.
@@ -152,6 +154,16 @@ export function CommunityHomeScreen({
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Community settings"
+          onPress={() => navigation.navigate('CommunitySettings')}
+          style={styles.settings}
+          hitSlop={6}
+          testID="hub-settings"
+        >
+          <Icon name="settings-outline" size={24} color="text" />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Create"
           onPress={() => rootNavigation.navigate('Create')}
           style={styles.create}
@@ -169,6 +181,9 @@ export function CommunityHomeScreen({
         details={data.details}
         firstName={firstName}
         memberCount={stats.status === 'success' ? stats.data.member_count : null}
+        onManage={
+          permissions.can('community.update') ? () => navigation.navigate('EditCommunity') : undefined
+        }
       />
 
       <SectionTiles stats={stats.status === 'success' ? stats.data : null} onOpen={open} />
@@ -255,6 +270,14 @@ const useStyles = makeStyles((t) => ({
   flexShrink: { flexShrink: 1 },
   eyebrow: { color: t.colors.primary, fontWeight: '700', letterSpacing: 1.2 },
   switcher: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: t.touchTarget },
+  settings: {
+    width: 52,
+    height: 52,
+    borderRadius: t.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.colors.surfaceMuted,
+  },
   create: {
     width: 52,
     height: 52,

@@ -44,6 +44,8 @@ export interface PostCardProps extends PostCardActions {
   error?: string | null;
   /** The community's name, shown under the author. */
   communityName?: string | null;
+  /** Opens the author's member profile (RN-14). */
+  onOpenAuthor?: () => void;
 }
 
 /**
@@ -57,6 +59,7 @@ export function PostCard({
   images = [],
   avatarUrl = null,
   communityName = null,
+  onOpenAuthor,
   galleryWidth,
   reactionCounts,
   compact,
@@ -116,25 +119,40 @@ export function PostCard({
   return (
     <View style={styles.post} testID={`post-${post.id}`}>
       <View style={styles.header}>
-        <Avatar uri={avatarUrl} name={author} size={44} label={`${author}'s picture`} testID="post-author" />
-        <View style={styles.flex}>
-          <Text variant="bodyStrong" numberOfLines={1}>
-            {author}
-          </Text>
-          <View style={styles.meta}>
-            <Text
-              variant="caption"
-              tone="muted"
-              numberOfLines={1}
-              accessibilityLabel={`Posted ${formatDateTime(post.created_at)}${communityName ? ` in ${communityName}` : ''}`}
-            >
-              {[communityName, formatRelative(post.created_at), post.edited_at ? 'Edited' : null]
-                .filter(Boolean)
-                .join(' · ')}
+        <Pressable
+          accessibilityRole={onOpenAuthor ? 'button' : undefined}
+          accessibilityHint={onOpenAuthor ? `Opens ${author}'s profile` : undefined}
+          disabled={!onOpenAuthor}
+          onPress={onOpenAuthor}
+          style={styles.author}
+          testID="post-author-link"
+        >
+          <Avatar
+            uri={avatarUrl}
+            name={author}
+            size={44}
+            label={`${author}'s picture`}
+            testID="post-author"
+          />
+          <View style={styles.flex}>
+            <Text variant="bodyStrong" numberOfLines={1}>
+              {author}
             </Text>
-            <Icon name="people-outline" size={13} color="textMuted" />
+            <View style={styles.meta}>
+              <Text
+                variant="caption"
+                tone="muted"
+                numberOfLines={1}
+                accessibilityLabel={`Posted ${formatDateTime(post.created_at)}${communityName ? ` in ${communityName}` : ''}`}
+              >
+                {[communityName, formatRelative(post.created_at), post.edited_at ? 'Edited' : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+              <Icon name="people-outline" size={13} color="textMuted" />
+            </View>
           </View>
-        </View>
+        </Pressable>
         {hasActions ? (
           <Pressable
             accessibilityRole="button"
@@ -269,6 +287,7 @@ const useStyles = makeStyles((t) => ({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingHorizontal: t.spacing.lg },
   meta: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  author: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, flexWrap: 'wrap' },
   menuButton: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
