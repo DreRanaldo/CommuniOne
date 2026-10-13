@@ -785,6 +785,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"stories": {
+                  Row: {
+                    "author_user_id": string,"caption": string | null,"client_request_id": string | null,"community_id": string,"created_at": string,"deleted_at": string | null,"deleted_by": string | null,"expires_at": string,"height": number,"id": string,"storage_path": string,"width": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_user_id": string,"caption"?: string | null,"client_request_id"?: string | null,"community_id": string,"created_at"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_at"?: string,"height": number,"id"?: string,"storage_path": string,"width": number
+                  }
+                  Update: {
+                    "author_user_id"?: string,"caption"?: string | null,"client_request_id"?: string | null,"community_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_at"?: string,"height"?: number,"id"?: string,"storage_path"?: string,"width"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stories_author_user_id_fkey"
+      columns: ["author_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stories_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stories_deleted_by_fkey"
+      columns: ["deleted_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"story_views": {
+                  Row: {
+                    "story_id": string,"viewed_at": string,"viewer_user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "story_id": string,"viewed_at"?: string,"viewer_user_id": string
+                  }
+                  Update: {
+                    "story_id"?: string,"viewed_at"?: string,"viewer_user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "story_views_story_id_fkey"
+      columns: ["story_id"]
+isOneToOne: false
+      referencedRelation: "stories"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "story_views_viewer_user_id_fkey"
+      columns: ["viewer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -815,6 +873,11 @@ isOneToOne: false
                            },
 "cancel_rsvp":
 { Args: { "p_event_id": string }; Returns: boolean
+                           },
+"community_stats":
+{ Args: { "p_community_id": string }; Returns: {
+              "active_alerts": number,"current_announcements": number,"document_count": number,"member_count": number,"posts_today": number,"upcoming_events": number
+            }[]
                            },
 "complete_document_upload":
 { Args: { "p_document_id": string }; Returns: {
@@ -902,8 +965,32 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"create_story":
+{ Args: { "p_caption"?: string,"p_client_request_id"?: string,"p_community_id": string,"p_height": number,"p_path": string,"p_width": number }; Returns: {
+              "author_user_id": string,
+"caption": string | null,
+"client_request_id": string | null,
+"community_id": string,
+"created_at": string,
+"deleted_at": string | null,
+"deleted_by": string | null,
+"expires_at": string,
+"height": number,
+"id": string,
+"storage_path": string,
+"width": number
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "stories"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "delete_my_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"delete_story":
+{ Args: { "p_story_id": string }; Returns: boolean
                            },
 "expire_due_alerts":
 { Args: Record<PropertyKey, never>; Returns: number
@@ -969,6 +1056,11 @@ isOneToOne: false
 "list_community_posts":
 { Args: { "p_community_id": string,"p_cursor_created_at"?: string,"p_cursor_id"?: string,"p_limit"?: number,"p_status"?: string }; Returns: {
               "author_avatar_url": string,"author_display_name": string,"author_user_id": string,"body": string,"comment_count": number,"community_id": string,"created_at": string,"edited_at": string,"id": string,"moderation_reason": string,"my_reaction_type": string,"reaction_count": number,"status": string,"updated_at": string,"visibility": string
+            }[]
+                           },
+"list_community_stories":
+{ Args: { "p_community_id": string }; Returns: {
+              "author_display_name": string,"author_user_id": string,"caption": string,"community_id": string,"created_at": string,"expires_at": string,"height": number,"id": string,"storage_path": string,"view_count": number,"viewed_by_me": boolean,"width": number
             }[]
                            },
 "list_current_announcements":
@@ -1108,6 +1200,11 @@ isOneToOne: false
               "name": string
             }[]
                            },
+"list_story_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
+            }[]
+                           },
 "list_upcoming_events":
 { Args: { "p_community_id": string,"p_cursor_id"?: string,"p_cursor_starts_at"?: string,"p_limit"?: number }; Returns: {
               "cancellation_reason": string | null,
@@ -1147,6 +1244,9 @@ isOneToOne: false
 "mark_notification_unread":
 { Args: { "p_notification_id": string }; Returns: boolean
                            },
+"mark_story_viewed":
+{ Args: { "p_story_id": string }; Returns: boolean
+                           },
 "my_communities":
 { Args: Record<PropertyKey, never>; Returns: {
               "community_id": string,"community_status": string,"community_type": string,"joined_at": string,"logo_path": string,"logo_url": string,"membership_id": string,"membership_status": string,"name": string,"role_names": (string)[],"slug": string
@@ -1155,6 +1255,11 @@ isOneToOne: false
 "my_community_permissions":
 { Args: { "p_community_id": string }; Returns: string[]
                            },
+"my_profile_stats":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "communities": number,"events_going": number,"member_since": string,"posts": number
+            }[]
+                           },
 "preview_invitation":
 { Args: { "p_token": string }; Returns: {
               "community_id": string,"community_type": string,"cover_image_path": string,"cover_image_url": string,"description": string,"expires_at": string,"logo_path": string,"logo_url": string,"member_count": number,"membership_status": string,"name": string
@@ -1162,6 +1267,9 @@ isOneToOne: false
                            },
 "purge_audit_logs":
 { Args: { "p_older_than": string }; Returns: number
+                           },
+"purge_expired_stories":
+{ Args: { "p_grace"?: string }; Returns: number
                            },
 "purge_rate_limit_counters":
 { Args: Record<PropertyKey, never>; Returns: number

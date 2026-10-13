@@ -7,6 +7,7 @@ import { isReactionType, type ReactionType } from '@/features/reactions/reaction
 import { makeStyles } from '@/theme';
 import { formatDateTime, formatRelative } from '@/utils/format';
 import { ModerationControls } from './ModerationControls';
+import { PostBody } from './PostBody';
 import { PostImageGallery } from './PostImageGallery';
 
 /** A deleted account's posts stay without a name (account-deletion policy). */
@@ -41,18 +42,21 @@ export interface PostCardProps extends PostCardActions {
   compact?: boolean;
   /** An action failed: shown on the post. */
   error?: string | null;
+  /** The community's name, shown under the author. */
+  communityName?: string | null;
 }
 
 /**
- * One post in the feed, photo first: the author with their picture and the
- * time, a "…" menu with only the actions the viewer may take, the photos,
- * Like and Comment, then the caption and a link to the comments. Hidden or
- * deleted posts (sent only to moderators and their author) say so.
+ * One post in the feed: the author with their picture, community and time, a
+ * "…" menu with only the actions the viewer may take, the text (hashtags
+ * highlighted), the photos, Like and Comment, and a link to the comments.
+ * Hidden or deleted posts (sent only to moderators and their author) say so.
  */
 export function PostCard({
   post,
   images = [],
   avatarUrl = null,
+  communityName = null,
   galleryWidth,
   reactionCounts,
   compact,
@@ -112,19 +116,24 @@ export function PostCard({
   return (
     <View style={styles.post} testID={`post-${post.id}`}>
       <View style={styles.header}>
-        <Avatar uri={avatarUrl} name={author} size={36} label={`${author}'s picture`} testID="post-author" />
+        <Avatar uri={avatarUrl} name={author} size={44} label={`${author}'s picture`} testID="post-author" />
         <View style={styles.flex}>
           <Text variant="bodyStrong" numberOfLines={1}>
             {author}
           </Text>
-          <Text
-            variant="caption"
-            tone="muted"
-            accessibilityLabel={`Posted ${formatDateTime(post.created_at)}`}
-          >
-            {formatRelative(post.created_at)}
-            {post.edited_at ? ' · Edited' : ''}
-          </Text>
+          <View style={styles.meta}>
+            <Text
+              variant="caption"
+              tone="muted"
+              numberOfLines={1}
+              accessibilityLabel={`Posted ${formatDateTime(post.created_at)}${communityName ? ` in ${communityName}` : ''}`}
+            >
+              {[communityName, formatRelative(post.created_at), post.edited_at ? 'Edited' : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+            <Icon name="people-outline" size={13} color="textMuted" />
+          </View>
         </View>
         {hasActions ? (
           <Pressable
@@ -201,6 +210,7 @@ export function PostCard({
         </View>
       ) : null}
 
+      <PostBody body={post.body} style={styles.caption} />
       {images.length > 0 ? <PostImageGallery images={images} author={author} width={galleryWidth} /> : null}
 
       <View style={styles.actions}>
@@ -228,7 +238,6 @@ export function PostCard({
         </Pressable>
       </View>
 
-      <Text style={styles.caption}>{post.body}</Text>
       {onOpenComments ? (
         <Pressable accessibilityRole="link" onPress={onOpenComments} hitSlop={6} style={styles.textLink}>
           <Text variant="caption" tone="muted">
@@ -258,7 +267,8 @@ const useStyles = makeStyles((t) => ({
     borderBottomWidth: 1,
     borderBottomColor: t.colors.border,
   },
-  header: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingHorizontal: t.spacing.lg },
+  header: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingHorizontal: t.spacing.lg },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, flexWrap: 'wrap' },
   menuButton: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
@@ -285,7 +295,7 @@ const useStyles = makeStyles((t) => ({
     flexWrap: 'wrap',
   },
   commentButton: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: 36 },
-  caption: { paddingHorizontal: t.spacing.lg },
+  caption: { paddingHorizontal: t.spacing.lg, fontSize: 16, lineHeight: 24 },
   textLink: { paddingHorizontal: t.spacing.lg, minHeight: 24, justifyContent: 'center' },
   confirm: { gap: t.spacing.sm },
   padded: { paddingHorizontal: t.spacing.lg },

@@ -36,6 +36,14 @@ describe.each([
     }
   });
 
+  test('tint pairs (tiles, initials, alert banner) are readable', () => {
+    for (const tint of Object.values(colors.tints)) {
+      expect(contrast(tint.fg, tint.bg)).toBeGreaterThanOrEqual(4.5);
+      // The same text colour sits on the plain surface too (tile titles nearby).
+      expect(contrast(colors.text, tint.bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   test('the emergency banner text is readable', () => {
     expect(contrast(colors.textInverse, colors.severity.emergency)).toBeGreaterThanOrEqual(4.5);
   });

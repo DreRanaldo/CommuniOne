@@ -78,7 +78,26 @@ export interface ColorTokens {
   scrim: string;
   /** Alert severities (Stage 7): info, warning, urgent, emergency. */
   severity: { info: string; warning: string; urgent: string; emergency: string };
+  /**
+   * Soft colour pairs (design pass): hub tiles, initials avatars, the alert
+   * banner. `fg` is readable as text on `bg` (WCAG AA, see contrast.test).
+   */
+  tints: Record<TintName, { bg: string; fg: string }>;
+  /** The story ring of an unseen story. */
+  storyRing: string;
+  /** Full-screen photo viewers (stories): a black backdrop with white text in either theme. */
+  media: { backdrop: string; text: string; dim: string; track: string; shade: string };
 }
+
+export type TintName = 'blue' | 'amber' | 'red' | 'purple' | 'green' | 'teal';
+
+const MEDIA = {
+  backdrop: '#000000',
+  text: '#FFFFFF',
+  dim: 'rgba(255, 255, 255, 0.8)',
+  track: 'rgba(255, 255, 255, 0.35)',
+  shade: 'rgba(0, 0, 0, 0.45)',
+};
 
 export const lightColors: ColorTokens = {
   background: palette.gray0,
@@ -102,6 +121,16 @@ export const lightColors: ColorTokens = {
     urgent: palette.orange600,
     emergency: palette.red600,
   },
+  tints: {
+    blue: { bg: '#E8F2FC', fg: '#0057B0' },
+    amber: { bg: '#FDF3DC', fg: '#8A5300' },
+    red: { bg: '#FDECEC', fg: '#B3261E' },
+    purple: { bg: '#F1ECFD', fg: '#5B33B8' },
+    green: { bg: '#E6F6EE', fg: '#0B6B3A' },
+    teal: { bg: '#E3F5F2', fg: '#0B6E61' },
+  },
+  storyRing: brand.teal,
+  media: MEDIA,
 };
 
 export const darkColors: ColorTokens = {
@@ -126,6 +155,16 @@ export const darkColors: ColorTokens = {
     urgent: palette.orange300,
     emergency: palette.red300,
   },
+  tints: {
+    blue: { bg: '#16263F', fg: '#9CC8F5' },
+    amber: { bg: '#2E2412', fg: '#F6C26B' },
+    red: { bg: '#331A1C', fg: '#F5A49C' },
+    purple: { bg: '#261F3D', fg: '#C7B5F7' },
+    green: { bg: '#132B20', fg: '#7FDCAA' },
+    teal: { bg: '#11292A', fg: '#7FD8C8' },
+  },
+  storyRing: brand.teal,
+  media: MEDIA,
 };
 
 /** 4-point spacing scale. */

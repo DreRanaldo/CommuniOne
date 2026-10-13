@@ -9,6 +9,9 @@ import { CreateCommunityScreen } from '@/features/communities/create/CreateCommu
 import { JoinCommunityScreen } from '@/features/communities/join/JoinCommunityScreen';
 import { NotificationDetailScreen } from '@/features/notifications/screens/NotificationDetailScreen';
 import { NotificationsScreen } from '@/features/notifications/screens/NotificationsScreen';
+import { CreateScreen } from '@/features/create/CreateScreen';
+import { StoryComposerScreen } from '@/features/stories/screens/StoryComposerScreen';
+import { StoryViewerScreen } from '@/features/stories/screens/StoryViewerScreen';
 import type { RootStackParamList } from '@/types/navigation';
 import { AppTabs } from './AppTabs';
 import { AuthNavigator } from './AuthNavigator';
@@ -68,6 +71,21 @@ export function RootNavigator() {
             name="CreateCommunity"
             component={CreateCommunityScreen}
             options={{ presentation: 'modal', headerShown: true, title: 'Create a community' }}
+          />
+          <Stack.Screen
+            name="Create"
+            component={CreateScreen}
+            options={{ presentation: 'modal', headerShown: true, title: 'Create' }}
+          />
+          <Stack.Screen
+            name="StoryComposer"
+            component={StoryComposerScreen}
+            options={{ presentation: 'modal', headerShown: true, title: 'New story' }}
+          />
+          <Stack.Screen
+            name="StoryViewer"
+            component={StoryViewerScreen}
+            options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'fade' }}
           />
           <Stack.Screen
             name="JoinCommunity"

@@ -1,7 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MyCommunity } from '@communione/services';
 import { ErrorState, LoadingState } from '@/components';
-import { CommunitySwitcherButton } from '@/features/communities/components/CommunitySwitcherButton';
 import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { ChooseCommunityScreen } from '@/features/communities/screens/ChooseCommunityScreen';
 import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHomeScreen';
@@ -36,7 +35,7 @@ const SECTION_TITLES = {
   members: 'Members',
 } as const;
 
-type StackRoot = 'Feed' | 'CommunityHome' | 'Alerts';
+type StackRoot = 'Feed' | 'CommunityHome';
 
 /**
  * A tab that shows the current community (from CurrentCommunityProvider,
@@ -64,8 +63,6 @@ function CommunityTab({ root }: { root: StackRoot }) {
 export const HomeNavigator = () => <CommunityTab root="Feed" />;
 /** Communities tab: the current community's hub (sections, announcements, events). */
 export const CommunityHubNavigator = () => <CommunityTab root="CommunityHome" />;
-/** Alerts tab: the current community's alerts. */
-export const AlertsNavigator = () => <CommunityTab root="Alerts" />;
 
 function CommunityStack({ community, root }: { community: MyCommunity; root: StackRoot }) {
   const screenOptions = useStackOptions();
@@ -74,10 +71,7 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
       <Stack.Screen
         name="CommunityHome"
         component={CommunityHomeScreen}
-        options={{
-          title: community.name,
-          headerTitle: () => <CommunitySwitcherButton community={community} />,
-        }}
+        options={{ title: community.name, headerShown: false }}
       />
       <Stack.Screen name="Feed" component={FeedScreen} options={{ headerShown: false, title: 'Home' }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />

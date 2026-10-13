@@ -8,7 +8,7 @@ export interface IconProps {
   name: IconName;
   size?: number;
   /** A theme colour key, or an explicit colour from the theme. */
-  color?: keyof Omit<ColorTokens, 'severity'> | (string & {});
+  color?: keyof Omit<ColorTokens, 'severity' | 'tints'> | (string & {});
   accessibilityLabel?: string;
 }
 

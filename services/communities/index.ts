@@ -3,7 +3,7 @@
 // default roles); reads and updates are authorized by RLS and column grants.
 
 import { ErrorCode, ServiceError } from '../core/errors.ts';
-import { mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
+import { firstRow, mutateOne, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import { checkImage, randomId, uploadBody, type ImageMimeType, type UploadBody } from '../core/files.ts';
 import * as v from '../core/validate.ts';
 import type { Database, Json, Tables } from '../database.types.ts';
@@ -11,6 +11,8 @@ import type { Database, Json, Tables } from '../database.types.ts';
 export type Community = Tables<'communities'>;
 /** One of the caller's memberships, as listed by my_communities() (community switcher). */
 export type MyCommunity = Database['public']['Functions']['my_communities']['Returns'][number];
+/** community_stats(): null = the caller may not see that kind of content. */
+export type CommunityStats = Database['public']['Functions']['community_stats']['Returns'][number];
 
 export const COMMUNITY_MEDIA_BUCKET = 'community-media';
 export const COMMUNITY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -184,6 +186,18 @@ export function communitiesService(ctx: ServiceContext) {
       return ctx.run('communities.listMine', async () => {
         await ctx.requireUserId();
         return unwrap(await db.rpc('my_communities')) ?? [];
+      });
+    },
+
+    /**
+     * Counts for the community hub (members, posts today, current
+     * announcements, active alerts, upcoming events, documents). Members
+     * only; a count the caller may not see is null.
+     */
+    stats(communityId: string): Promise<CommunityStats> {
+      return ctx.run('communities.stats', async () => {
+        await ctx.requireUserId();
+        return firstRow(unwrap(await db.rpc('community_stats', { p_community_id: v.uuid(communityId, 'communityId') })));
       });
     },
 

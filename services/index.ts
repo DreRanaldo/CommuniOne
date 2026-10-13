@@ -27,6 +27,7 @@ import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
 import { rolesService } from './roles/index.ts';
+import { storiesService } from './stories/index.ts';
 
 export interface ServicesOptions {
   logger?: Logger;
@@ -51,6 +52,7 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     events: eventsService(ctx),
     notifications: notificationsService(ctx),
     documents: documentsService(ctx, options.uploadFile),
+    stories: storiesService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -62,7 +64,7 @@ export type { ErrorListener } from './core/context.ts';
 export { UploadError, type FileUploader, type FileUploadRequest } from './core/files.ts';
 export {
   AUTH_LINK_KINDS, AVATAR_BUCKET, AVATAR_MAX_BYTES,
-  type AccountInfo, type AuthLinkKind, type AvatarMimeType, type Profile, type ProfilePatch,
+  type AccountInfo, type AuthLinkKind, type AvatarMimeType, type Profile, type ProfilePatch, type ProfileStats,
 } from './auth/index.ts';
 export { consoleLogger, silentLogger, redact, type Logger, type LogLevel } from './core/logger.ts';
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type Page, type PageRequest } from './core/pagination.ts';
@@ -70,7 +72,7 @@ export type { Database } from './database.types.ts';
 export { parseInvitationToken, type InvitationPreview } from './invitations/index.ts';
 export {
   COMMUNITY_COVER_MAX_BYTES, COMMUNITY_LOGO_MAX_BYTES, COMMUNITY_MEDIA_BUCKET, COMMUNITY_TYPES,
-  type Community, type CommunityImageKind, type CommunityImages, type CommunityType, type MyCommunity,
+  type Community, type CommunityImageKind, type CommunityImages, type CommunityStats, type CommunityType, type MyCommunity,
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
 export {
@@ -93,3 +95,6 @@ export type { Comment, ThreadComment } from './comments/index.ts';
 export type { Notification } from './notifications/index.ts';
 export type { Document, Folder, PendingUpload, SendOptions, UploadRules } from './documents/index.ts';
 export { BUCKET as DOCUMENTS_BUCKET, MAX_LINK_SECONDS } from './documents/index.ts';
+export {
+  STORIES_BUCKET, STORY_CAPTION_MAX, STORY_IMAGE_MAX_BYTES, type Story, type StoryRow,
+} from './stories/index.ts';

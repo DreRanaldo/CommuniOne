@@ -102,7 +102,12 @@ select results_eq(
      ('role_permissions',          'role_permissions_role_id_fkey',                  'roles',                     'c'),
      ('role_template_permissions', 'role_template_permissions_permission_id_fkey',   'permissions',               'r'),
      ('role_template_permissions', 'role_template_permissions_template_id_fkey',     'role_templates',            'c'),
-     ('roles',                     'roles_community_id_fkey',                        'communities',               'r') $$,
+     ('roles',                     'roles_community_id_fkey',                        'communities',               'r'),
+     ('stories',                   'stories_author_user_id_fkey',                    'profiles',                  'c'),
+     ('stories',                   'stories_community_id_fkey',                      'communities',               'c'),
+     ('stories',                   'stories_deleted_by_fkey',                        'profiles',                  'n'),
+     ('story_views',               'story_views_story_id_fkey',                      'stories',                   'c'),
+     ('story_views',               'story_views_viewer_user_id_fkey',                'profiles',                  'c') $$,
   'foreign keys exist with the intended ON DELETE behaviour'
 );
 

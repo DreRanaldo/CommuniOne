@@ -59,7 +59,7 @@ describe('destinationOf', () => {
       destinationOf({ kind, id: ID, communityId: COMMUNITY });
     expect(at('post')).toEqual({ tab: 'Home', screen: 'PostDetail', params: { postId: ID } });
     expect(at('announcement')).toMatchObject({ tab: 'CommunitiesTab', screen: 'AnnouncementDetail' });
-    expect(at('alert')).toMatchObject({ tab: 'AlertsTab', screen: 'AlertDetail' });
+    expect(at('alert')).toMatchObject({ tab: 'CommunitiesTab', screen: 'AlertDetail' });
     expect(at('event')).toMatchObject({ tab: 'CommunitiesTab', screen: 'EventDetail' });
     expect(at('document')).toMatchObject({ tab: 'CommunitiesTab', screen: 'DocumentDetail' });
     expect(at('community')).toMatchObject({ tab: 'CommunitiesTab', screen: 'CommunityHome' });

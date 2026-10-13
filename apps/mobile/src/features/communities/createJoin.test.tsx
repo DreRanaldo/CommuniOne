@@ -73,7 +73,7 @@ describe('create community', () => {
     expect(
       await screen.findByLabelText('Switch community. Current community: Riverside Commons'),
     ).toBeOnTheScreen();
-    expect(within(await openHub()).getByText('School · Owner')).toBeOnTheScreen();
+    expect(within(await openHub()).getByText('You are an Owner')).toBeOnTheScreen();
 
     const [, args] = rpc.mock.calls.find(([name]) => name === 'create_community')!;
     expect(args).toEqual({
@@ -91,7 +91,9 @@ describe('create community', () => {
           !n.startsWith('list_') &&
           n !== 'my_communities' &&
           n !== 'my_community_permissions' &&
-          n !== 'unread_notification_count',
+          n !== 'unread_notification_count' &&
+          // Read-only counts and stories of the design pass.
+          !['community_stats', 'list_community_stories', 'my_profile_stats'].includes(n),
       ),
     ).toEqual(['create_community']);
   });
@@ -228,14 +230,15 @@ describe('join with an invitation', () => {
     expect(
       await screen.findByLabelText('Switch community. Current community: Harbor Sailing Club'),
     ).toBeOnTheScreen();
-    expect(within(await openHub()).getByText('Club · Member')).toBeOnTheScreen();
+    expect(within(await openHub()).getByText('You are a Member')).toBeOnTheScreen();
     expect(redemptions).toHaveLength(1);
     const names = rpcNames(rpc).filter(
       (n) =>
         !n.startsWith('list_') &&
         n !== 'my_communities' &&
         n !== 'my_community_permissions' &&
-        n !== 'unread_notification_count',
+        n !== 'unread_notification_count' &&
+        !['community_stats', 'list_community_stories', 'my_profile_stats'].includes(n),
     );
     expect(names).toEqual(['preview_invitation', 'redeem_invitation']);
     expect(rpc.mock.calls.find(([n]) => n === 'redeem_invitation')![1]).toEqual({ p_token: VALID });

@@ -14,7 +14,11 @@ export function ProfileNavigator() {
   const screenOptions = useStackOptions();
   return (
     <Stack.Navigator screenOptions={screenOptions}>
-      <Stack.Screen name="ProfileHome" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Stack.Screen
+        name="ProfileHome"
+        component={ProfileScreen}
+        options={{ title: 'Profile', headerShown: false }}
+      />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit profile' }} />
       <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account & security' }} />
       <Stack.Screen

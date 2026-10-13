@@ -97,9 +97,10 @@ const pullToRefresh = async () => {
 describe('correct community', () => {
   test("shows the current community's identity and content, in priority order", async () => {
     const { rpc } = await home();
+    expect(screen.getByTestId('community-switcher')).toHaveTextContent(/Maple Grove HOA/);
     const header = screen.getByTestId('community-header');
-    expect(within(header).getByText('Maple Grove HOA')).toBeOnTheScreen();
-    expect(within(header).getByText('Residential · Owner')).toBeOnTheScreen();
+    expect(within(header).getByText('RESIDENTIAL · PRIVATE COMMUNITY')).toBeOnTheScreen();
+    expect(within(header).getByText('You are an Owner')).toBeOnTheScreen();
 
     expect(within(screen.getByTestId('home-alerts')).getByText('Water main break')).toBeOnTheScreen();
     expect(screen.getByLabelText(/^Emergency alert: Water main break/)).toBeOnTheScreen();
@@ -113,7 +114,7 @@ describe('correct community', () => {
 
     // Urgent information first, community activity last (not a feed).
     const headings = screen.getAllByRole('header').map((h) => h.props.children as string);
-    const order = ['Alerts', 'Announcements', 'Upcoming events', 'Recent activity', 'Explore'];
+    const order = ['Alerts', 'Announcements', 'Upcoming events', 'Recent activity'];
     expect(headings.filter((h) => order.includes(h))).toEqual(order);
 
     // Every request was for the current community.
@@ -156,7 +157,7 @@ describe('community switching', () => {
     await user.press(screen.getByTestId('community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${C}`));
     expect(await screen.findByText('Rehearsal moved to Thursday')).toBeOnTheScreen();
-    expect(within(screen.getByTestId('community-header')).getByText('St. Mark Choir')).toBeOnTheScreen();
+    expect(screen.getByTestId('community-switcher')).toHaveTextContent(/St\. Mark Choir/);
     expect(screen.queryByText('Water main break')).not.toBeOnTheScreen();
     expect(screen.queryByText('Annual meeting')).not.toBeOnTheScreen();
     const calls = contentCalls(rpc);
