@@ -66,7 +66,7 @@ for an element of the mockups, the element was **left out rather than faked**
   | Alerts | active |
   | Events | upcoming |
   | Documents | files the user can see |
-  | Members | people |
+  | Members | people (opens the member directory, RN-14) |
 
   A count the user may not see is null and **not shown**. The count is also
   exposed as the tile's accessibility value.

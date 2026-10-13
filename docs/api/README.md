@@ -136,6 +136,8 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
+| `directory({ communityId, query?, limit?, cursor? })` | Member directory (RN-14): active members by name, name search | `members.view` in that community | → `Page<DirectoryMember>` (`displayName`, signed `avatarUrl`, `roles` or `null` without `roles.view`, `joinedAt`, `isMe`; **no phone, e-mail or status**) | `FORBIDDEN`, `VALIDATION` (query > 100) | – |
+| `member(communityId, userId)` | One member's community profile (RN-14) | `members.view` | → `MemberProfile` (adds `firstName`, `lastName`, `bio`) | `FORBIDDEN`, `NOT_FOUND` (not an active member of this community) | – |
 | `list(input)` | Members with profile and roles, oldest first | `members.view` (active); `members.approve/suspend/remove` (other statuses) | `{ communityId, status? = 'active', limit?, cursor? }` → `Page<Member>` | – (invisible rows are simply absent) | – |
 | `getMine(communityId)` | My membership | – | → `{ id, status } \| null` | – | – |
 | `approve(membershipId)` | Admit pending / rejected / left member | `members.approve` + covers target | → `Member` | `FORBIDDEN`, `NOT_FOUND` | Default role assigned; member notified; audited |

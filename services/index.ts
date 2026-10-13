@@ -98,3 +98,6 @@ export { BUCKET as DOCUMENTS_BUCKET, MAX_LINK_SECONDS } from './documents/index.
 export {
   STORIES_BUCKET, STORY_CAPTION_MAX, STORY_IMAGE_MAX_BYTES, type Story, type StoryRow,
 } from './stories/index.ts';
+export {
+  MEMBER_SEARCH_MAX, MEMBERSHIP_STATUSES, type DirectoryMember, type Member, type MemberProfile, type MembershipStatus,
+} from './memberships/index.ts';

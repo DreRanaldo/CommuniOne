@@ -142,6 +142,7 @@ export function FeedScreen({ navigation }: Props) {
         onCompose={() => navigation.navigate('PostEditor')}
         onEdit={(postId) => navigation.navigate('PostEditor', { postId })}
         onOpen={(post) => navigation.navigate('PostDetail', { postId: post.id, post })}
+        onOpenAuthor={(userId) => navigation.navigate('MemberProfile', { userId })}
       />
     </SafeAreaView>
   );
@@ -155,6 +156,7 @@ function FeedList({
   onCompose,
   onEdit,
   onOpen,
+  onOpenAuthor,
 }: {
   status: FeedStatus;
   header: ReactElement;
@@ -163,6 +165,7 @@ function FeedList({
   onCompose(): void;
   onEdit(postId: string): void;
   onOpen(post: FeedPost): void;
+  onOpenAuthor(userId: string): void;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -278,6 +281,7 @@ function FeedList({
           avatarUrl={item.author_user_id ? (feed.avatars[item.author_user_id] ?? null) : null}
           galleryWidth={width}
           communityName={community.name}
+          onOpenAuthor={item.author_user_id ? () => onOpenAuthor(item.author_user_id!) : undefined}
           reactionCounts={feed.reactionCounts[item.id] ?? null}
           error={errors[item.id]}
           {...actionsFor(item)}

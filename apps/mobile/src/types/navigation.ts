@@ -44,7 +44,10 @@ export type CommunitySection = 'feed' | 'announcements' | 'alerts' | 'events' | 
 
 export type CommunityStackParamList = {
   CommunityHome: undefined;
-  CommunitySection: { section: CommunitySection };
+  /** The current community's member directory (RN-14). */
+  Members: undefined;
+  /** One member's community profile (RN-14), read from the server. */
+  MemberProfile: { userId: string };
   /** The current community's feed. */
   Feed: undefined;
   /**

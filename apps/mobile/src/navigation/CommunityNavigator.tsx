@@ -19,21 +19,13 @@ import { AnnouncementsScreen } from '@/features/announcements/AnnouncementsScree
 import { PostDetailScreen } from '@/features/comments/PostDetailScreen';
 import { FeedScreen } from '@/features/feed/screens/FeedScreen';
 import { PostEditorScreen } from '@/features/feed/screens/PostEditorScreen';
-import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
+import { MemberProfileScreen } from '@/features/members/screens/MemberProfileScreen';
+import { MembersScreen } from '@/features/members/screens/MembersScreen';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
 import { useStackOptions } from './options';
 
 const Stack = createNativeStackNavigator<CommunityStackParamList>();
-
-const SECTION_TITLES = {
-  feed: 'Feed',
-  announcements: 'Announcements',
-  alerts: 'Alerts',
-  events: 'Events',
-  documents: 'Documents',
-  members: 'Members',
-} as const;
 
 type StackRoot = 'Feed' | 'CommunityHome';
 
@@ -116,11 +108,8 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         component={PostEditorScreen}
         options={{ title: 'New post', presentation: 'modal' }}
       />
-      <Stack.Screen
-        name="CommunitySection"
-        component={PlaceholderScreen}
-        options={({ route }) => ({ title: SECTION_TITLES[route.params.section] })}
-      />
+      <Stack.Screen name="Members" component={MembersScreen} options={{ title: 'Members' }} />
+      <Stack.Screen name="MemberProfile" component={MemberProfileScreen} options={{ title: 'Member' }} />
     </Stack.Navigator>
   );
 }

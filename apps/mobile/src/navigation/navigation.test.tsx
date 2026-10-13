@@ -58,7 +58,7 @@ describe('navigation', () => {
     await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
     expect(await openHub()).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Members' }));
-    expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
+    expect(await screen.findByTestId('members-screen')).toBeOnTheScreen();
   });
 
   test('signed in: a restored session opens the app and the Join modal', async () => {

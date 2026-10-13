@@ -60,7 +60,7 @@ export function CommunityHomeScreen({
     else if (section === 'alerts') navigation.navigate('Alerts');
     else if (section === 'events') navigation.navigate('Events');
     else if (section === 'documents') navigation.navigate('Documents');
-    else navigation.navigate('CommunitySection', { section });
+    else navigation.navigate('Members');
   };
 
   // Coming back to the home (e.g. from a section) refreshes it, keeping what is shown.

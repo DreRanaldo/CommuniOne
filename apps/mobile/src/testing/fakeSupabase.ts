@@ -66,6 +66,8 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** Other members per community (see makeMember); the signed-in user is added from `communities`. */
+  members?: Record<string, FakeMember[]>;
   /** community_stats() overrides per community (unset counts are computed from content). */
   communityStats?: Record<string, Record<string, number | null>>;
   /** my_profile_stats() overrides. */
@@ -135,8 +137,14 @@ export interface ProfileRow {
 
 type DbError = { code: string; message: string; status?: number };
 
+/** A co-member as the database stores them (profile, private phone, membership). */
+export type FakeMember = ReturnType<typeof makeMember>;
+
 /** Default role permissions for posts (seed role templates). */
 const MEMBER_PERMISSIONS = [
+  'community.view',
+  'members.view',
+  'roles.view',
   'alerts.view',
   'announcements.view',
   'documents.view',
@@ -1299,6 +1307,34 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const canReadNotification = (row: NotificationRow) =>
     row.user_id === me() &&
     (row.community_id === null || !MEMBERSHIP_TYPES.has(row.type) || isActiveMember(row.community_id));
+  // ---- Member directory (migration 28): other members + the signed-in user ----
+  const memberRows = options.members ?? {};
+  for (const list of Object.values(memberRows))
+    for (const m of list) if (m.phone) phones.set(m.user_id, m.phone);
+  const membersOf = (communityId: string): FakeMember[] => {
+    const mine = communities.find((c) => (c as { community_id: string }).community_id === communityId) as
+      | { membership_id: string; membership_status: string; role_names: string[]; joined_at: string }
+      | undefined;
+    const profile = profiles.get(me() ?? '');
+    const self =
+      mine && profile
+        ? [
+            makeMember(0, {
+              membership_id: mine.membership_id,
+              user_id: me()!,
+              display_name: profile.display_name,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              bio: profile.bio,
+              avatar_path: null,
+              role_names: mine.role_names,
+              joined_at: mine.joined_at,
+              status: mine.membership_status,
+            }),
+          ]
+        : [];
+    return [...self, ...(memberRows[communityId] ?? [])];
+  };
   // ---- Stories (migration 27 rules) ----
   const allStories = () => Object.values(content).flatMap((c) => c.stories ?? []) as StoryRow[];
   const storyFiles = new Set<string>(); // uploaded story pictures
@@ -1705,6 +1741,65 @@ export function fakeSupabase(options: FakeOptions = {}) {
         ],
         error: null,
       };
+    }
+    if (name === 'list_community_members' || name === 'get_community_member') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      const perms = permissionsIn(communityId);
+      if (!me() || !perms.includes('members.view'))
+        return {
+          data: null,
+          error: { code: '42501', message: 'members.view is required in this community' },
+        };
+      const roles = perms.includes('roles.view');
+      // Community-profile fields only: like the database, never the phone, e-mail or account status.
+      const shape = (m: FakeMember) => {
+        const name =
+          m.display_name?.trim() || [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || null;
+        return {
+          membership_id: m.membership_id,
+          user_id: m.user_id,
+          display_name: name,
+          avatar_path: m.avatar_path,
+          avatar_url: m.avatar_url,
+          role_names: roles ? [...m.role_names].sort() : null,
+          joined_at: m.joined_at,
+          is_me: m.user_id === me(),
+          first_name: m.first_name,
+          last_name: m.last_name,
+          bio: m.bio,
+        };
+      };
+      const active = membersOf(communityId).filter(
+        (m) => m.status === 'active' && m.profile_status === 'active',
+      );
+      if (name === 'get_community_member') {
+        const m = active.find((x) => x.user_id === args.p_user_id);
+        return { data: m ? [shape(m)] : [], error: null };
+      }
+      const query = (args.p_query as string | undefined)?.trim().toLowerCase();
+      if (query && query.length > 100)
+        return { data: null, error: { code: '22023', message: 'search text can be at most 100 characters' } };
+      const rows = active
+        .map(shape)
+        .filter(
+          (r) =>
+            !query ||
+            [r.display_name, r.first_name, r.last_name].some((v) => v?.toLowerCase().includes(query)),
+        )
+        .map(({ first_name: _f, last_name: _l, bio: _b, ...r }) => ({
+          ...r,
+          sort_unnamed: r.display_name === null,
+          sort_name: (r.display_name ?? '').toLowerCase(),
+        }))
+        .sort(
+          (a, b) =>
+            Number(a.sort_unnamed) - Number(b.sort_unnamed) ||
+            a.sort_name.localeCompare(b.sort_name) ||
+            a.user_id.localeCompare(b.user_id),
+        );
+      const after = args.p_cursor_id ? rows.findIndex((r) => r.user_id === args.p_cursor_id) + 1 : 0;
+      return { data: rows.slice(after, after + Number(args.p_limit ?? 30)), error: null };
     }
     if (name === 'create_document_upload') {
       if (offline) return { data: null, error: OFFLINE };
@@ -2644,6 +2739,24 @@ export const makeNotification = (n: number, overrides: Record<string, unknown> =
   read_at: null as string | null,
   archived_at: null as string | null,
   created_at: new Date(Date.now() - n * 60_000).toISOString(),
+  ...overrides,
+});
+
+/** A co-member: profile, membership and a PRIVATE phone number (never returned to others). */
+export const makeMember = (n: number, overrides: Record<string, unknown> = {}) => ({
+  membership_id: `dddddddd-1111-4000-8000-${String(n).padStart(12, '0')}`,
+  user_id: `bbbbbbbb-1111-4000-8000-${String(n).padStart(12, '0')}` as string,
+  display_name: `Member ${n}` as string | null,
+  first_name: null as string | null,
+  last_name: null as string | null,
+  bio: null as string | null,
+  avatar_path: null as string | null,
+  avatar_url: null as string | null,
+  role_names: ['Member'] as string[],
+  joined_at: '2025-06-01T12:00:00Z' as string | null,
+  status: 'active',
+  profile_status: 'active',
+  phone: `+1 555 01${String(n).padStart(2, '0')}` as string | null,
   ...overrides,
 });
 

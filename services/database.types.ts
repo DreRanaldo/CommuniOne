@@ -998,6 +998,11 @@ isOneToOne: false
 "expire_invitations":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
+"get_community_member":
+{ Args: { "p_community_id": string,"p_user_id": string }; Returns: {
+              "avatar_path": string,"avatar_url": string,"bio": string,"display_name": string,"first_name": string,"is_me": boolean,"joined_at": string,"last_name": string,"membership_id": string,"role_names": (string)[],"user_id": string
+            }[]
+                           },
 "get_event_attendance":
 { Args: { "p_event_id": string }; Returns: {
               "capacity": number,"event_id": string,"going_count": number,"maybe_count": number,"my_status": string,"my_waitlist_position": number,"not_going_count": number,"spots_left": number,"waitlisted_count": number
@@ -1051,6 +1056,11 @@ isOneToOne: false
 "list_community_media_to_purge":
 { Args: { "p_grace"?: string }; Returns: {
               "name": string
+            }[]
+                           },
+"list_community_members":
+{ Args: { "p_community_id": string,"p_cursor_id"?: string,"p_cursor_name"?: string,"p_cursor_unnamed"?: boolean,"p_limit"?: number,"p_query"?: string }; Returns: {
+              "avatar_path": string,"avatar_url": string,"display_name": string,"is_me": boolean,"joined_at": string,"membership_id": string,"role_names": (string)[],"sort_name": string,"sort_unnamed": boolean,"user_id": string
             }[]
                            },
 "list_community_posts":
