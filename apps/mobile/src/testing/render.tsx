@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { render, screen, userEvent } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { AppProviders } from '@/AppProviders';
 import { createDependencies } from '@/lib/dependencies';
@@ -26,4 +26,14 @@ export async function renderApp(options: FakeOptions & { initialURL?: string } =
 /** Renders a component inside the theme only (design-system tests). */
 export function renderThemed(element: ReactElement, scheme: 'light' | 'dark' = 'light') {
   return render(<ThemeProvider scheme={scheme}>{element}</ThemeProvider>);
+}
+
+/**
+ * Opens the Communities tab (the current community's hub) and returns its
+ * screen. Home is the feed since the feed redesign.
+ */
+export async function openHub() {
+  const user = userEvent.setup();
+  await user.press(await screen.findByRole('button', { name: /^Communities/ }));
+  return screen.findByTestId('community-home-screen');
 }

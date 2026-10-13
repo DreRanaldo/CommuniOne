@@ -8,3 +8,4 @@ export { LoadingState, ErrorState, EmptyState, type ErrorStateProps, type EmptyS
 export { Banner, type BannerProps, type BannerTone } from './Banner';
 export { Avatar, type AvatarProps } from './Avatar';
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
+export { BrandLogo, type BrandLogoProps } from './BrandLogo';

@@ -2,18 +2,39 @@
 // Components read these through useTheme(); no screen hard-codes a colour,
 // font size or spacing value.
 //
-// Direction: calm, trustworthy and neutral enough for any community (a
-// residents' association, a church, a school). One confident blue for
-// actions, warm neutrals, generous spacing, and a severity scale reserved for
-// safety alerts.
+// Direction (feed redesign): a clean, predominantly white interface, close to
+// the photo-first feeds people already know, neutral enough for any community
+// (a residents' association, a church, a school). Pure white surfaces,
+// near-black text, light-gray hairlines and secondary text, the CommuniOne
+// logo's blue as the one accent for actions, and a severity scale reserved for
+// safety alerts. Light is the app's appearance; the dark tokens are kept for a
+// later dark mode but are not used by default.
+
+/** Logo colours (assets/brand). The bright green and orange are decorative only: they fail AA as text. */
+export const brand = {
+  blue: '#0069CE',
+  teal: '#0AA589',
+  green: '#04B46B',
+  orange: '#F29724',
+  navy: '#162B46',
+  /** The logo's background (the mark's inner disc is this white). */
+  paper: '#FFFFFF',
+} as const;
 
 const palette = {
-  blue50: '#EEF2FF',
-  blue100: '#E0E7FF',
-  blue500: '#3B5BDB',
-  blue600: '#2F4AC2',
-  blue300: '#8DA2FB',
+  // Brand blue scale (logo blue #0069CE = blue500: 5.4:1 with white text).
+  blue50: '#E8F2FC',
+  blue100: '#CFE4F9',
+  blue500: brand.blue,
+  blue600: '#00559F',
+  blue300: '#6FB1F2',
+  navy900: brand.navy,
   gray0: '#FFFFFF',
+  // Feed redesign neutrals: near-black text, quiet grays.
+  ink: '#121417',
+  gray25: '#F7F8FA',
+  gray150: '#E7E9ED',
+  gray550: '#5E6470',
   gray50: '#F6F7FB',
   gray100: '#EEF0F5',
   gray200: '#E1E4EC',
@@ -33,8 +54,9 @@ const palette = {
   amber300: '#F6C26B',
   orange600: '#C2410C',
   orange300: '#FDBA74',
-  green600: '#1E7D4F',
-  green300: '#7DD3A8',
+  // Text-safe greens related to the logo's (the logo green itself is 2.7:1 on white).
+  green600: '#06753F',
+  green300: '#4CD38E',
 } as const;
 
 export interface ColorTokens {
@@ -52,17 +74,19 @@ export interface ColorTokens {
   danger: string;
   success: string;
   focus: string;
+  /** Translucent dark backdrop for text over photos (counters, badges). */
+  scrim: string;
   /** Alert severities (Stage 7): info, warning, urgent, emergency. */
   severity: { info: string; warning: string; urgent: string; emergency: string };
 }
 
 export const lightColors: ColorTokens = {
-  background: palette.gray50,
+  background: palette.gray0,
   surface: palette.gray0,
-  surfaceMuted: palette.gray100,
-  border: palette.gray200,
-  text: palette.gray900,
-  textMuted: palette.gray600,
+  surfaceMuted: palette.gray25,
+  border: palette.gray150,
+  text: palette.ink,
+  textMuted: palette.gray550,
   textInverse: palette.gray0,
   primary: palette.blue500,
   primaryPressed: palette.blue600,
@@ -71,6 +95,7 @@ export const lightColors: ColorTokens = {
   danger: palette.red500,
   success: palette.green600,
   focus: palette.blue300,
+  scrim: 'rgba(18, 20, 23, 0.72)',
   severity: {
     info: palette.blue500,
     warning: palette.amber700,
@@ -94,6 +119,7 @@ export const darkColors: ColorTokens = {
   danger: palette.red300,
   success: palette.green300,
   focus: palette.blue100,
+  scrim: 'rgba(0, 0, 0, 0.72)',
   severity: {
     info: palette.blue300,
     warning: palette.amber300,

@@ -1,5 +1,6 @@
 export const APP_NAME = 'CommuniOne';
-export const TAGLINE = 'One Platform. Every Community.';
+/** As written in the logo (assets/brand). */
+export const TAGLINE = 'One platform. Every community.';
 
 /** Custom URL scheme (app.config.ts `scheme`) used for deep links. */
 export const URL_SCHEME = 'communione';

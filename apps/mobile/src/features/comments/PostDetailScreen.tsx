@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ErrorCode, isServiceError, type FeedPost } from '@communione/services';
 import { useCallback, useMemo, useState } from 'react';
+import { useWindowDimensions, View } from 'react-native';
 import { ErrorState, LoadingState, Screen, SectionHeader, Text } from '@/components';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useCommunity } from '@/features/communities/CurrentCommunityProvider';
@@ -9,6 +10,7 @@ import { PostCard } from '@/features/feed/components/PostCard';
 import { countsFromSummary } from '@/features/reactions/reactions';
 import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
+import { makeStyles } from '@/theme';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
 import { CommentComposer } from './CommentComposer';
@@ -79,6 +81,22 @@ function PostDetail({ post, verified, onReload }: { post: FeedPost; verified: bo
   const summary = useAsync(loadCounts);
   const reactionCounts =
     summary.status === 'success' ? (countsFromSummary(summary.data, 'post_id')[post.id] ?? {}) : null;
+  // The post's photos and the author's picture (signed URLs; RLS decides).
+  const loadMedia = useCallback(async () => {
+    const [images, avatars] = await Promise.all([
+      posts.images([post.id]),
+      post.author_user_id ? posts.authorAvatars([post.author_user_id]) : Promise.resolve({}),
+    ]);
+    return {
+      images: images[post.id] ?? [],
+      avatar: post.author_user_id
+        ? ((avatars as Record<string, string | null>)[post.author_user_id] ?? null)
+        : null,
+    };
+  }, [posts, post.id, post.author_user_id]);
+  const mediaState = useAsync(loadMedia);
+  const styles = useStyles();
+  const { width } = useWindowDimensions();
   const [countDelta, setCountDelta] = useState(0);
   const [postError, setPostError] = useState<string | null>(null);
   const postPublished = post.status === 'published';
@@ -108,18 +126,23 @@ function PostDetail({ post, verified, onReload }: { post: FeedPost; verified: bo
   return (
     <ThreadContext.Provider value={context}>
       <Screen testID="post-detail-screen">
-        <PostCard
-          post={{ ...post, comment_count: post.comment_count + countDelta }}
-          error={postError}
-          reactionCounts={reactionCounts}
-          onReactionRejected={onReload}
-          onHide={
-            canModerate
-              ? (reason) => moderate(() => posts.hide(post.id, reason.trim() || undefined))
-              : undefined
-          }
-          onRestore={canModerate ? () => moderate(() => posts.restore(post.id)) : undefined}
-        />
+        <View style={styles.bleed}>
+          <PostCard
+            post={{ ...post, comment_count: post.comment_count + countDelta }}
+            images={mediaState.status === 'success' ? mediaState.data.images : []}
+            avatarUrl={mediaState.status === 'success' ? mediaState.data.avatar : null}
+            galleryWidth={width}
+            error={postError}
+            reactionCounts={reactionCounts}
+            onReactionRejected={onReload}
+            onHide={
+              canModerate
+                ? (reason) => moderate(() => posts.hide(post.id, reason.trim() || undefined))
+                : undefined
+            }
+            onRestore={canModerate ? () => moderate(() => posts.restore(post.id)) : undefined}
+          />
+        </View>
         <SectionHeader title="Comments" icon="chatbubbles-outline" />
         {!verified ? (
           <LoadingState label="Loading comments…" />
@@ -153,3 +176,8 @@ function PostDetail({ post, verified, onReload }: { post: FeedPost; verified: bo
     </ThreadContext.Provider>
   );
 }
+
+// The post runs edge to edge, like in the feed (the screen pads everything else).
+const useStyles = makeStyles((t) => ({
+  bleed: { marginHorizontal: -t.spacing.lg, marginTop: -t.spacing.lg },
+}));

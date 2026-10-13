@@ -165,7 +165,11 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 
 | Operation | Purpose | Perm | Input → Output | Errors | Side effects |
 |---|---|---|---|---|---|
-| `create(input)` | New post | `posts.create` | `{ communityId, body (≤10 000) }` → `Post` | `FORBIDDEN`, `RATE_LIMITED` | – |
+| `create(input)` | New post, with pictures (`create_post`, atomic) | `posts.create` | `{ communityId, body (≤10 000), images?: { path, width, height }[] (≤ 10, uploaded first), clientRequestId? (uuid: a retry returns the same post) }` → `Post` | `FORBIDDEN`, `VALIDATION`, `RATE_LIMITED` | – |
+| `uploadImage(input)` | Upload one picture to your own folder of the community (private `post-images`) | `posts.create` | `{ communityId, file, mimeType (jpeg/png/webp, ≤ 10 MB) }` → `{ path }` | `FORBIDDEN`, `VALIDATION`, `SERVER_ERROR` | – |
+| `discardImage(path)` | Remove your unattached upload | uploader | → `void` | – | Best effort |
+| `images(postIds)` | Pictures of up to 100 posts, in order, with 1-hour signed URLs | post visibility | → `Record<postId, PostImage[]>` | – | One query + one signing call |
+| `authorAvatars(userIds)` | Profile pictures of up to 100 authors (signed URLs) | profile visibility | → `Record<userId, string \| null>` | – | – |
 | `get(postId)` | One post | `posts.view` (hidden/deleted: author or `posts.moderate`) | → `Post` | `NOT_FOUND` | – |
 | `list(input)` | Feed, newest first, with author, counts, my reaction | `posts.view`; `status` hidden/deleted: moderators | `{ communityId, status?, limit?, cursor? }` → `Page<FeedPost>` | – | – |
 | `edit(postId, body)` | Edit own published post | `posts.edit_own` | → `Post` | `FORBIDDEN`, `NOT_FOUND` | Stamps `edited_at` |

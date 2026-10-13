@@ -4,7 +4,7 @@
 import type { IconName } from '@/components';
 
 export const REACTIONS = [
-  { type: 'like', label: 'Like', icon: 'thumbs-up' },
+  { type: 'like', label: 'Like', icon: 'heart' },
   { type: 'love', label: 'Love', icon: 'heart' },
   { type: 'celebrate', label: 'Celebrate', icon: 'sparkles' },
   { type: 'support', label: 'Support', icon: 'hand-left' },

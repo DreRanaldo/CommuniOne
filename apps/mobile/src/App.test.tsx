@@ -21,7 +21,7 @@ describe('App launch', () => {
         }}
       />,
     );
-    expect(await screen.findByText('One Platform. Every Community.')).toBeOnTheScreen();
+    expect(await screen.findByText('One platform. Every community.')).toBeOnTheScreen();
     expect(create).toHaveBeenCalledTimes(1);
   });
 

@@ -12,7 +12,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -92,7 +92,7 @@ async function openEvents(community: 'member' | 'manager', options: FakeOptions 
     content: { [M]: contentFor(M), [C]: contentFor(C) },
     ...options,
   });
-  await screen.findByTestId('community-home-screen');
+  await openHub();
   await user.press(screen.getByRole('button', { name: 'See all upcoming events' }));
   await screen.findByTestId('events-screen');
   await settle();
@@ -124,7 +124,7 @@ async function openDetail(user: User, title: string) {
 
 /** Back to the home (tab press pops the stack) and into the list again: a fresh read. */
 async function reopenList(user: User) {
-  await user.press(screen.getByRole('button', { name: /^Home/ }));
+  await user.press(screen.getByRole('button', { name: /^Communities/ }));
   await user.press(await screen.findByRole('button', { name: 'See all upcoming events' }));
   await screen.findByTestId('events-screen');
   await settle();
@@ -159,6 +159,7 @@ describe('event lists', () => {
   test('the community home shows upcoming events and opens their detail', async () => {
     const user = userEvent.setup();
     await renderApp({ session: makeSession(), communities: [choir], content: { [C]: contentFor(C) } });
+    await openHub();
     const home = await screen.findByTestId('home-events');
     await user.press(within(home).getByRole('button', { name: /^Event: Book club\./ }));
     expect(await screen.findByTestId('event-detail-screen')).toBeOnTheScreen();
@@ -492,11 +493,13 @@ describe('community isolation', () => {
       },
     });
     await user.press(await screen.findByTestId(`community-card-${C}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all upcoming events' }));
     await screen.findByText('Choir rehearsal');
-    await user.press(screen.getByRole('button', { name: /^Home/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByTestId('community-switcher'));
     await user.press(await screen.findByTestId(`community-card-${M}`));
+    await openHub();
     await user.press(await screen.findByRole('button', { name: 'See all upcoming events' }));
     expect(await screen.findByText('Maple picnic')).toBeOnTheScreen();
     expect(screen.queryByText('Choir rehearsal')).not.toBeOnTheScreen();

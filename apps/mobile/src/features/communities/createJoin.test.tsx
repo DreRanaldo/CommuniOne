@@ -12,7 +12,7 @@ import {
   type FakeInvitation,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -73,7 +73,7 @@ describe('create community', () => {
     expect(
       await screen.findByLabelText('Switch community. Current community: Riverside Commons'),
     ).toBeOnTheScreen();
-    expect(within(screen.getByTestId('community-home-screen')).getByText('School · Owner')).toBeOnTheScreen();
+    expect(within(await openHub()).getByText('School · Owner')).toBeOnTheScreen();
 
     const [, args] = rpc.mock.calls.find(([name]) => name === 'create_community')!;
     expect(args).toEqual({
@@ -85,9 +85,11 @@ describe('create community', () => {
     });
     // Ownership, membership and roles come from the database function only.
     expect(writes(queries)).toEqual([]);
-    expect(rpcNames(rpc).filter((n) => !n.startsWith('list_') && n !== 'my_communities')).toEqual([
-      'create_community',
-    ]);
+    expect(
+      rpcNames(rpc).filter(
+        (n) => !n.startsWith('list_') && n !== 'my_communities' && n !== 'my_community_permissions',
+      ),
+    ).toEqual(['create_community']);
   });
 
   test("the time zone defaults to the device's", async () => {
@@ -113,7 +115,7 @@ describe('create community', () => {
 
     await fillCreate(user);
     await user.press(screen.getByRole('button', { name: 'Create community' }));
-    await screen.findByTestId('community-home-screen');
+    await openHub();
 
     const created = rpc.mock.results.find((_r, i) => rpc.mock.calls[i]![0] === 'create_community')!;
     const { data } = (await created.value) as { data: { id: string } };
@@ -222,9 +224,11 @@ describe('join with an invitation', () => {
     expect(
       await screen.findByLabelText('Switch community. Current community: Harbor Sailing Club'),
     ).toBeOnTheScreen();
-    expect(within(screen.getByTestId('community-home-screen')).getByText('Club · Member')).toBeOnTheScreen();
+    expect(within(await openHub()).getByText('Club · Member')).toBeOnTheScreen();
     expect(redemptions).toHaveLength(1);
-    const names = rpcNames(rpc).filter((n) => !n.startsWith('list_') && n !== 'my_communities');
+    const names = rpcNames(rpc).filter(
+      (n) => !n.startsWith('list_') && n !== 'my_communities' && n !== 'my_community_permissions',
+    );
     expect(names).toEqual(['preview_invitation', 'redeem_invitation']);
     expect(rpc.mock.calls.find(([n]) => n === 'redeem_invitation')![1]).toEqual({ p_token: VALID });
     expect(writes(queries)).toEqual([]);

@@ -45,6 +45,8 @@ export interface FakeOptions {
   neverRestore?: boolean;
   /** The first RPC fails with an internal error. */
   failFirstRpc?: boolean;
+  /** The first call of this RPC fails with an internal error (e.g. the feed's first load). */
+  failFirstRpcNamed?: string;
   /** The stored session was revoked on the server (Auth answers 403 session_not_found). */
   revoked?: boolean;
   /** Every network request fails (airplane mode). */
@@ -73,6 +75,8 @@ export interface FakeContent {
   events?: Record<string, unknown>[];
   /** Event RSVPs (see makeRsvp). */
   rsvps?: Record<string, unknown>[];
+  /** Post pictures (see makePostImage); their files exist in the post-images bucket. */
+  postImages?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
   comments?: Record<string, unknown>[];
 }
@@ -148,11 +152,18 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 type PostRow = ReturnType<typeof makePost>;
 type CommentRow = ReturnType<typeof makeComment>;
 type AnnouncementRow = ReturnType<typeof makeAnnouncement>;
+type PostImageRow = ReturnType<typeof makePostImage>;
 type AlertRow = ReturnType<typeof makeAlert>;
 type EventRow = ReturnType<typeof makeEvent>;
 type RsvpRow = ReturnType<typeof makeRsvp>;
 const SEVERITY_RANK: Record<string, number> = { info: 1, warning: 2, urgent: 3, emergency: 4 };
 type Filter = [column: string, value: unknown];
+/** A `.in(column, values)` filter. */
+class InList {
+  constructor(readonly values: unknown[]) {}
+}
+const filterMatches = (value: unknown, expected: unknown) =>
+  expected instanceof InList ? expected.values.includes(value) : value === expected;
 
 const profileRow = (id: string, values: Partial<ProfileRow> = {}): ProfileRow => ({
   id,
@@ -319,7 +330,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (injected) return { data: null, error: injected };
     const user = me();
     if (!user) return { data: single ? null : [], error: null };
-    const matches = (row: Record<string, unknown>) => filters.every(([c, v]) => row[c] === v);
+    const matches = (row: Record<string, unknown>) => filters.every(([c, v]) => filterMatches(row[c], v));
     if (table === 'profiles') {
       // RLS: the user's own profile and co-members' profiles are readable; only their own is writable.
       const visible = [...profiles.values()].filter((row) => matches({ ...row }));
@@ -339,6 +350,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
         own.forEach((row) => Object.assign(row, values, { updated_at: new Date().toISOString() }));
         return { data: own.map((row) => pick(row, columns)), error: null };
       }
+    }
+    if (table === 'post_images' && op === 'select') {
+      // RLS: pictures of posts the caller can see.
+      const rows = allPostImages()
+        .filter((row) => {
+          const post = allPosts().find((p) => p.id === row.post_id);
+          return post && canViewPost(post) && matches(row as unknown as Record<string, unknown>);
+        })
+        .sort((a, b) => a.position - b.position)
+        .map((row) => pick(row, columns));
+      return { data: rows, error: null };
     }
     if (table === 'posts') {
       const all = Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
@@ -902,6 +924,13 @@ export function fakeSupabase(options: FakeOptions = {}) {
         filters.push([column, value]);
         return builder;
       },
+      in(column: string, list: unknown[]) {
+        filters.push([column, new InList(list)]);
+        return builder;
+      },
+      order(_column: string) {
+        return builder;
+      },
       maybeSingle() {
         single = true;
         return builder;
@@ -936,6 +965,58 @@ export function fakeSupabase(options: FakeOptions = {}) {
         ? { data: { signedUrl: `https://storage.test/avatars/${path}?expires=${seconds}` }, error: null }
         : { data: null, error: { message: 'Object not found' } },
     ),
+    createSignedUrls: jest.fn(async (paths: string[], seconds: number) => ({
+      data: paths.map((path) =>
+        files.has(path) && me()
+          ? { path, signedUrl: `https://storage.test/avatars/${path}?expires=${seconds}`, error: null }
+          : { path, signedUrl: '', error: 'Object not found' },
+      ),
+      error: null,
+    })),
+  };
+  // ---- Storage: the private post-images bucket ({community}/{user}/{file}; migration 26) ----
+  const postImageFiles = new Map<string, string>(); // path → uploader
+  let uploadFailures = 0;
+  const canReadPostImage = (path: string) =>
+    postImageFiles.get(path) === me() ||
+    allPostImages().some((row) => {
+      if (row.storage_path !== path) return false;
+      const post = allPosts().find((p) => p.id === row.post_id);
+      return !!post && canViewPost(post);
+    });
+  const postImagesBucket = {
+    upload: jest.fn(async (path: string, _body: unknown, _options?: unknown) => {
+      if (offline || uploadFailures > 0) {
+        if (uploadFailures > 0) uploadFailures -= 1;
+        return { data: null, error: { message: 'Network request failed' } };
+      }
+      const user = me();
+      const [communityId, owner] = path.split('/');
+      if (!user || owner !== user || !permissionsIn(communityId ?? '').includes('posts.create')) {
+        return {
+          data: null,
+          error: { message: 'new row violates row-level security policy', statusCode: '403' },
+        };
+      }
+      postImageFiles.set(path, user);
+      return { data: { path }, error: null };
+    }),
+    remove: jest.fn(async (paths: string[]) => {
+      // Policy: your own files, only while no post uses them.
+      for (const path of paths) {
+        if (postImageFiles.get(path) === me() && !allPostImages().some((row) => row.storage_path === path))
+          postImageFiles.delete(path);
+      }
+      return { data: [], error: null };
+    }),
+    createSignedUrls: jest.fn(async (paths: string[], seconds: number) => ({
+      data: paths.map((path) =>
+        postImageFiles.has(path) && canReadPostImage(path)
+          ? { path, signedUrl: `https://storage.test/post-images/${path}?expires=${seconds}`, error: null }
+          : { path, signedUrl: '', error: 'Object not found' },
+      ),
+      error: null,
+    })),
   };
   // ---- Storage: the public community-media bucket (community managers only) ----
   const mediaFiles = new Set<string>();
@@ -968,7 +1049,13 @@ export function fakeSupabase(options: FakeOptions = {}) {
     })),
   };
   const storage = {
-    from: jest.fn((bucket: string) => (bucket === 'community-media' ? mediaBucket : storageBucket)),
+    from: jest.fn((bucket: string) =>
+      bucket === 'community-media'
+        ? mediaBucket
+        : bucket === 'post-images'
+          ? postImagesBucket
+          : storageBucket,
+    ),
   };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
 
@@ -977,7 +1064,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const invitations = new Map(Object.entries(options.invitations ?? {}));
   const redemptions: { token: string; userId: string }[] = [];
   const content: Record<string, FakeContent> = { ...options.content };
+  const allPostImages = () => Object.values(content).flatMap((c) => c.postImages ?? []) as PostImageRow[];
+  // Seeded pictures' files exist, unless a row says its file is missing (`file_missing: true`).
+  for (const row of allPostImages())
+    if (!(row as { file_missing?: boolean }).file_missing)
+      postImageFiles.set(row.storage_path, row.uploaded_by ?? 'seed');
   const rpcFailures = new Map<string, DbError>();
+  if (options.failFirstRpcNamed)
+    rpcFailures.set(options.failFirstRpcNamed, {
+      code: 'XX000',
+      message: 'internal error at /var/lib/postgresql',
+    });
   const reactions: { id: string; targetId: string; userId: string; type: string }[] = [];
   let commentCount = 100;
   const allPosts = () => Object.values(content).flatMap((c) => c.posts ?? []) as PostRow[];
@@ -995,6 +1092,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
     return counts;
   };
   let postCount = 100;
+  let postImageCount = 500;
   /** The user's permission keys in a community (active membership only), like my_community_permissions(). */
   const permissionsIn = (communityId: string): string[] => {
     const membership = communities.find(
@@ -1130,6 +1228,66 @@ export function fakeSupabase(options: FakeOptions = {}) {
       return { data: null, error: failure };
     }
     const CONTENT_RPCS: Record<string, keyof FakeContent> = {};
+    if (name === 'create_post') {
+      // public.create_post(): post + pictures atomically; idempotent per (author, request id).
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      const communityId = String(args.p_community_id);
+      const requestId = (args.p_client_request_id as string | undefined) ?? null;
+      const images = (args.p_images as { path: string; width: number; height: number }[] | undefined) ?? [];
+      if (requestId) {
+        const existing = allPosts().find(
+          (p) =>
+            p.author_user_id === user &&
+            (p as { client_request_id?: string }).client_request_id === requestId,
+        );
+        if (existing) return { data: [{ ...existing }], error: null };
+      }
+      if (images.length > 10)
+        return { data: null, error: { code: '22023', message: 'a post can have at most 10 pictures' } };
+      if (!permissionsIn(communityId).includes('posts.create'))
+        return {
+          data: null,
+          error: { code: '42501', message: 'new row violates row-level security policy for table "posts"' },
+        };
+      const body = String(args.p_body ?? '');
+      if (!body.trim()) return { data: null, error: { code: '23514', message: 'posts_body_check' } };
+      for (const image of images) {
+        const [folderCommunity, owner] = image.path.split('/');
+        if (folderCommunity !== communityId || owner !== user)
+          return {
+            data: null,
+            error: {
+              code: '42501',
+              message: 'a picture must be uploaded to your own folder of this community',
+            },
+          };
+        if (!postImageFiles.has(image.path))
+          return {
+            data: null,
+            error: { code: '22023', message: 'picture upload not found; upload the picture first' },
+          };
+      }
+      const inserted = await runQuery('posts', 'insert', [], '*', { community_id: communityId, body }, true);
+      if (inserted.error) return inserted;
+      const post = allPosts().find((p) => p.id === (inserted.data as { id: string }).id)!;
+      Object.assign(post, { client_request_id: requestId });
+      const bucket = content[communityId]!;
+      bucket.postImages = [
+        ...(bucket.postImages ?? []),
+        ...images.map((image, position) =>
+          makePostImage(communityId, post.id, ++postImageCount, {
+            storage_path: image.path,
+            position,
+            width: image.width,
+            height: image.height,
+            uploaded_by: user,
+          }),
+        ),
+      ];
+      return { data: [{ ...post }], error: null };
+    }
     if (['list_upcoming_events', 'list_events', 'list_past_events'].includes(name)) {
       if (offline) return { data: null, error: OFFLINE };
       if (!me()) return { data: null, error: AUTH_REQUIRED };
@@ -1548,6 +1706,13 @@ export function fakeSupabase(options: FakeOptions = {}) {
     rpc,
     from,
     storage: storageBucket,
+    /** The private post-images bucket (path → uploader). */
+    postImagesStorage: postImagesBucket,
+    postImageFiles,
+    /** The next n picture uploads fail as if the network dropped. */
+    failUploads: (n = 1) => {
+      uploadFailures = n;
+    },
     profiles,
     phones,
     files,
@@ -1600,11 +1765,17 @@ export function fakeSupabase(options: FakeOptions = {}) {
 /** A scripted photo library: returns the next queued image (null = the user cancelled). */
 export function fakeMedia() {
   const queue: (PickedImage | null | Error)[] = [];
+  const photoQueue: (PickedImage[] | Error)[] = [];
   const picker: MediaPicker = {
     pickImage: jest.fn(async (_kind: string) => {
       const next = queue.length ? queue.shift() : null;
       if (next instanceof Error) throw next;
       return next ?? null;
+    }),
+    pickPhotos: jest.fn(async (limit: number) => {
+      const next = photoQueue.length ? photoQueue.shift()! : [];
+      if (next instanceof Error) throw next;
+      return next.slice(0, limit);
     }),
   };
   return {
@@ -1612,8 +1783,21 @@ export function fakeMedia() {
     next(image: PickedImage | null | Error) {
       queue.push(image);
     },
+    /** The next "add photos" selection ([] = cancelled). */
+    nextPhotos(photos: PickedImage[] | Error) {
+      photoQueue.push(photos);
+    },
   };
 }
+
+/** A picked photo as the picker returns it (re-encoded JPEG). */
+export const makePhoto = (n: number, width = 1080, height = 1350): PickedImage => ({
+  bytes: new Uint8Array([0xff, 0xd8, 0xff, n % 256, 0xff, 0xd9]),
+  mimeType: 'image/jpeg',
+  uri: `file:///photos/photo-${n}.jpg`,
+  width,
+  height,
+});
 
 export const pickedImage = (size = 2048): PickedImage => ({
   bytes: new Uint8Array(size).fill(0xff),
@@ -1785,6 +1969,24 @@ export const makePost = (communityId: string, n: number, overrides: Record<strin
   created_at: at(-30 * n),
   updated_at: at(-30 * n),
   edited_at: null as string | null,
+  ...overrides,
+});
+
+/** A post picture; its file is seeded into the post-images bucket. */
+export const makePostImage = (
+  communityId: string,
+  postId: string,
+  n: number,
+  overrides: Record<string, unknown> = {},
+) => ({
+  id: `e7e7e7e7-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  post_id: postId,
+  community_id: communityId,
+  storage_path: `${communityId}/${OTHER_USER_ID}/e7e7e7e7-0000-4000-8000-${String(n).padStart(12, '0')}.jpg`,
+  position: 0,
+  width: 1080,
+  height: 1350,
+  uploaded_by: OTHER_USER_ID as string | null,
   ...overrides,
 });
 

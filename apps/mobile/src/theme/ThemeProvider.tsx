@@ -1,13 +1,15 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { StyleSheet, useColorScheme } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { darkTheme, lightTheme, type Theme } from './tokens';
 
 const ThemeContext = createContext<Theme>(lightTheme);
 
-/** Follows the system light/dark setting unless a scheme is forced (tests, previews). */
+/**
+ * The app is light (white) by design (feed redesign); a scheme can still be
+ * forced for tests and previews of the kept dark tokens.
+ */
 export function ThemeProvider({ children, scheme }: { children: ReactNode; scheme?: 'light' | 'dark' }) {
-  const system = useColorScheme();
-  const theme = (scheme ?? system) === 'dark' ? darkTheme : lightTheme;
+  const theme = scheme === 'dark' ? darkTheme : lightTheme;
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
 }
 

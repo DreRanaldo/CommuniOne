@@ -1,3 +1,6 @@
+// PKCE needs WebCrypto (S256): installed before anything else is imported.
+import './src/lib/polyfills';
+
 import { registerRootComponent } from 'expo';
 
 import App from './src/App';

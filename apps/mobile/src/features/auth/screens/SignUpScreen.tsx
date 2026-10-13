@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Banner, Button, EmptyState, Screen, Text, TextField } from '@/components';
+import { Banner, BrandLogo, Button, EmptyState, Screen, Text, TextField } from '@/components';
 import { AUTH_CALLBACK_URL } from '@/constants/app';
 import { useServices } from '@/lib/dependencies';
 import type { AuthStackParamList } from '@/types/navigation';
@@ -73,6 +73,7 @@ export function SignUpScreen({ navigation }: NativeStackScreenProps<AuthStackPar
 
   return (
     <Screen testID="sign-up-screen">
+      <BrandLogo variant="mark" size={56} />
       <Text tone="muted">
         Create your CommuniOne account. You can join communities once you are signed in.
       </Text>

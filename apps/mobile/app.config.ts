@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'communione',
   orientation: 'portrait',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'automatic',
+  userInterfaceStyle: 'light',
   ios: {
     bundleIdentifier: `${BASE_ID}${suffix}`,
     supportsTablet: true,
@@ -36,7 +36,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: `${BASE_ID}${suffix}`,
     adaptiveIcon: {
-      backgroundColor: '#E8EDFF',
+      backgroundColor: '#FFFFFF',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',
@@ -57,10 +57,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-splash-screen',
       {
         image: './assets/splash-icon.png',
-        imageWidth: 160,
+        imageWidth: 200,
         resizeMode: 'contain',
-        backgroundColor: '#F6F7FB',
-        dark: { backgroundColor: '#0F1420' },
+        backgroundColor: '#FFFFFF',
       },
     ],
   ],

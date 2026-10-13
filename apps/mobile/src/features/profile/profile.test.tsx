@@ -337,7 +337,7 @@ describe('account', () => {
     expect(auth.signOut).not.toHaveBeenCalled();
     await user.press(screen.getByRole('button', { name: 'Sign out of all devices' }));
     await user.press(screen.getByRole('button', { name: 'Sign out everywhere' }));
-    expect(await screen.findByText('One Platform. Every Community.')).toBeOnTheScreen();
+    expect(await screen.findByText('One platform. Every community.')).toBeOnTheScreen();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'global' });
     expect(screen.queryByText('Your session has expired')).not.toBeOnTheScreen();
   });
@@ -405,7 +405,7 @@ describe('account deletion', () => {
 describe('unauthorized profile access', () => {
   test('signed out, a profile link shows the sign-in flow and requests nothing', async () => {
     const { from, storage } = await renderApp({ initialURL: 'communione://profile' });
-    expect(await screen.findByText('One Platform. Every Community.')).toBeOnTheScreen();
+    expect(await screen.findByText('One platform. Every community.')).toBeOnTheScreen();
     expect(screen.queryByTestId('profile-screen')).not.toBeOnTheScreen();
     expect(from).not.toHaveBeenCalled();
     expect(storage.createSignedUrl).not.toHaveBeenCalled();

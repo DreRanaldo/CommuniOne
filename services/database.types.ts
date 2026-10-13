@@ -581,16 +581,36 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"posts": {
+                },"post_images": {
                   Row: {
-                    "author_user_id": string | null,"body": string,"community_id": string,"created_at": string,"edited_at": string | null,"id": string,"moderated_at": string | null,"moderated_by_user_id": string | null,"moderation_reason": string | null,"status": string,"updated_at": string,"visibility": string
+                    "community_id": string,"created_at": string,"height": number,"id": string,"position": number,"post_id": string,"storage_path": string,"width": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "author_user_id"?: string | null,"body": string,"community_id": string,"created_at"?: string,"edited_at"?: string | null,"id"?: string,"moderated_at"?: string | null,"moderated_by_user_id"?: string | null,"moderation_reason"?: string | null,"status"?: string,"updated_at"?: string,"visibility"?: string
+                    "community_id": string,"created_at"?: string,"height": number,"id"?: string,"position": number,"post_id": string,"storage_path": string,"width": number
                   }
                   Update: {
-                    "author_user_id"?: string | null,"body"?: string,"community_id"?: string,"created_at"?: string,"edited_at"?: string | null,"id"?: string,"moderated_at"?: string | null,"moderated_by_user_id"?: string | null,"moderation_reason"?: string | null,"status"?: string,"updated_at"?: string,"visibility"?: string
+                    "community_id"?: string,"created_at"?: string,"height"?: number,"id"?: string,"position"?: number,"post_id"?: string,"storage_path"?: string,"width"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "post_images_post_fkey"
+      columns: ["post_id","community_id"]
+isOneToOne: false
+      referencedRelation: "posts"
+      referencedColumns: ["id","community_id"]
+    }
+                  ]
+                },"posts": {
+                  Row: {
+                    "author_user_id": string | null,"body": string,"client_request_id": string | null,"community_id": string,"created_at": string,"edited_at": string | null,"id": string,"moderated_at": string | null,"moderated_by_user_id": string | null,"moderation_reason": string | null,"status": string,"updated_at": string,"visibility": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_user_id"?: string | null,"body": string,"client_request_id"?: string | null,"community_id": string,"created_at"?: string,"edited_at"?: string | null,"id"?: string,"moderated_at"?: string | null,"moderated_by_user_id"?: string | null,"moderation_reason"?: string | null,"status"?: string,"updated_at"?: string,"visibility"?: string
+                  }
+                  Update: {
+                    "author_user_id"?: string | null,"body"?: string,"client_request_id"?: string | null,"community_id"?: string,"created_at"?: string,"edited_at"?: string | null,"id"?: string,"moderated_at"?: string | null,"moderated_by_user_id"?: string | null,"moderation_reason"?: string | null,"status"?: string,"updated_at"?: string,"visibility"?: string
                   }
                   Relationships: [
                     {
@@ -860,6 +880,28 @@ isOneToOne: false
 "create_notification":
 { Args: { "p_body"?: string,"p_community_id": string,"p_data"?: Json,"p_dedupe_key"?: string,"p_title": string,"p_type": string,"p_user_id": string }; Returns: string
                            },
+"create_post":
+{ Args: { "p_body": string,"p_client_request_id"?: string,"p_community_id": string,"p_images"?: Json }; Returns: {
+              "author_user_id": string | null,
+"body": string,
+"client_request_id": string | null,
+"community_id": string,
+"created_at": string,
+"edited_at": string | null,
+"id": string,
+"moderated_at": string | null,
+"moderated_by_user_id": string | null,
+"moderation_reason": string | null,
+"status": string,
+"updated_at": string,
+"visibility": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "posts"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "delete_my_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -1059,6 +1101,11 @@ isOneToOne: false
 "list_post_comments":
 { Args: { "p_cursor_created_at"?: string,"p_cursor_id"?: string,"p_limit"?: number,"p_parent_comment_id"?: string,"p_post_id": string }; Returns: {
               "author_avatar_url": string,"author_display_name": string,"author_user_id": string,"body": string,"created_at": string,"depth": number,"edited_at": string,"id": string,"my_reaction_type": string,"parent_comment_id": string,"post_id": string,"reaction_count": number,"reply_count": number,"status": string
+            }[]
+                           },
+"list_post_image_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
             }[]
                            },
 "list_upcoming_events":

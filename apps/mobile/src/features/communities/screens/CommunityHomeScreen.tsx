@@ -36,7 +36,8 @@ export function CommunityHomeScreen({
   const community = useCommunity();
   const home = useCommunityHome(community.community_id);
   const open = (section: CommunitySection) => {
-    if (section === 'feed') navigation.navigate('Feed');
+    // The feed is the Home tab.
+    if (section === 'feed') navigation.getParent()?.navigate('Home', { screen: 'Feed' });
     else if (section === 'announcements') navigation.navigate('Announcements');
     else if (section === 'alerts') navigation.navigate('Alerts');
     else if (section === 'events') navigation.navigate('Events');

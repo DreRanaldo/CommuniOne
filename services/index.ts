@@ -81,5 +81,8 @@ export {
   EVENT_STATUSES, RSVP_STATUSES,
   type Attendance, type CommunityEvent, type EventInput, type EventPatch,
 } from './events/index.ts';
-export type { FeedPost, Post } from './posts/index.ts';
+export {
+  POST_IMAGE_MAX_BYTES, POST_IMAGES_BUCKET, POST_MAX_IMAGES,
+  type FeedPost, type Post, type PostImage, type PostImageInput,
+} from './posts/index.ts';
 export type { Comment, ThreadComment } from './comments/index.ts';

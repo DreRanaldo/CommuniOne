@@ -89,6 +89,7 @@ select results_eq(
      ('notifications',             'notifications_user_id_fkey',                     'profiles',                  'c'),
      ('platform_admins',           'platform_admins_granted_by_fkey',                'auth.users',                'n'),
      ('platform_admins',           'platform_admins_user_id_fkey',                   'auth.users',                'c'),
+     ('post_images',               'post_images_post_fkey',                          'posts',                     'c'),
      ('posts',                     'posts_author_user_id_fkey',                      'profiles',                  'n'),
      ('posts',                     'posts_community_id_fkey',                        'communities',               'r'),
      ('posts',                     'posts_moderated_by_user_id_fkey',                'profiles',                  'n'),

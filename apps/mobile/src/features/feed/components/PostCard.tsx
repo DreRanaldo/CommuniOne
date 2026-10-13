@@ -1,12 +1,13 @@
-import type { FeedPost } from '@communione/services';
+import type { FeedPost, PostImage } from '@communione/services';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Avatar, Button, Card, Icon, Text } from '@/components';
 import { ReactionBar } from '@/features/reactions/ReactionBar';
 import { isReactionType, type ReactionType } from '@/features/reactions/reactions';
 import { makeStyles } from '@/theme';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatRelative } from '@/utils/format';
 import { ModerationControls } from './ModerationControls';
+import { PostImageGallery } from './PostImageGallery';
 
 /** A deleted account's posts stay without a name (account-deletion policy). */
 export const postAuthorName = (post: Pick<FeedPost, 'author_user_id' | 'author_display_name'>): string =>
@@ -28,21 +29,31 @@ export interface PostCardActions {
 
 export interface PostCardProps extends PostCardActions {
   post: FeedPost;
+  /** The post's photos, in order (signed URLs). */
+  images?: PostImage[];
+  /** The author's profile picture (signed URL), if any. */
+  avatarUrl?: string | null;
+  /** Width of the photo gallery (defaults to the screen width). */
+  galleryWidth?: number;
   /** Per-type reaction counts (reaction summary), when loaded. */
   reactionCounts?: Partial<Record<ReactionType, number>> | null;
-  /** A short summary (community home): fewer lines, no actions. */
+  /** A short summary (community hub): fewer lines, no actions. */
   compact?: boolean;
-  /** An action failed: shown on the card. */
+  /** An action failed: shown on the post. */
   error?: string | null;
 }
 
 /**
- * One post: author, time, body, reactions, comment count, and its moderation
- * state when the server returned a hidden or deleted post (only moderators
- * and the author receive those, with the moderator's reason).
+ * One post in the feed, photo first: the author with their picture and the
+ * time, a "…" menu with only the actions the viewer may take, the photos,
+ * Like and Comment, then the caption and a link to the comments. Hidden or
+ * deleted posts (sent only to moderators and their author) say so.
  */
 export function PostCard({
   post,
+  images = [],
+  avatarUrl = null,
+  galleryWidth,
   reactionCounts,
   compact,
   error,
@@ -54,10 +65,13 @@ export function PostCard({
   onReactionRejected,
 }: PostCardProps) {
   const styles = useStyles();
+  const [menu, setMenu] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const author = postAuthorName(post);
   const mine = isReactionType(post.my_reaction_type) ? post.my_reaction_type : null;
+  const hasActions = !!(onEdit || onDelete || onHide || onRestore);
+  const comments = `${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`;
 
   const remove = async () => {
     if (!onDelete) return;
@@ -70,24 +84,108 @@ export function PostCard({
     }
   };
 
-  const comments = `${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`;
+  if (compact) {
+    return (
+      <Card testID={`post-${post.id}`}>
+        <Text variant="label" numberOfLines={1}>
+          {author}
+        </Text>
+        <Text variant="caption" tone="muted">
+          {formatDateTime(post.created_at)}
+          {post.edited_at ? ' · Edited' : ''}
+        </Text>
+        <Text numberOfLines={3}>{post.body}</Text>
+        <View style={styles.row}>
+          <Icon name="heart-outline" color="textMuted" size={16} />
+          <Text variant="caption" tone="muted" accessibilityLabel={`${post.reaction_count} reactions`}>
+            {post.reaction_count}
+          </Text>
+          <Icon name="chatbubble-outline" color="textMuted" size={16} />
+          <Text variant="caption" tone="muted" accessibilityLabel={comments}>
+            {post.comment_count}
+          </Text>
+        </View>
+      </Card>
+    );
+  }
 
   return (
-    <Card testID={`post-${post.id}`}>
-      <View style={styles.row}>
-        {compact ? null : (
-          <Avatar uri={null} name={author} size={36} label={`${author}'s picture`} testID="post-author" />
-        )}
+    <View style={styles.post} testID={`post-${post.id}`}>
+      <View style={styles.header}>
+        <Avatar uri={avatarUrl} name={author} size={36} label={`${author}'s picture`} testID="post-author" />
         <View style={styles.flex}>
-          <Text variant="label" numberOfLines={1}>
+          <Text variant="bodyStrong" numberOfLines={1}>
             {author}
           </Text>
-          <Text variant="caption" tone="muted">
-            {formatDateTime(post.created_at)}
+          <Text
+            variant="caption"
+            tone="muted"
+            accessibilityLabel={`Posted ${formatDateTime(post.created_at)}`}
+          >
+            {formatRelative(post.created_at)}
             {post.edited_at ? ' · Edited' : ''}
           </Text>
         </View>
+        {hasActions ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Post options"
+            accessibilityState={{ expanded: menu }}
+            onPress={() => {
+              setMenu((open) => !open);
+              setConfirming(false);
+            }}
+            hitSlop={10}
+            style={styles.menuButton}
+          >
+            <Icon name="ellipsis-horizontal" size={22} color="text" />
+          </Pressable>
+        ) : null}
       </View>
+
+      {menu ? (
+        <View style={styles.menu} testID="post-menu">
+          {onEdit && !confirming ? (
+            <Button
+              title="Edit"
+              variant="ghost"
+              fullWidth={false}
+              onPress={onEdit}
+              accessibilityLabel="Edit post"
+            />
+          ) : null}
+          {onDelete && !confirming ? (
+            <Button
+              title="Delete"
+              variant="ghost"
+              fullWidth={false}
+              onPress={() => setConfirming(true)}
+              accessibilityLabel="Delete post"
+            />
+          ) : null}
+          <ModerationControls kind="post" status={post.status} onHide={onHide} onRestore={onRestore} />
+          {confirming ? (
+            <View style={styles.confirm} testID="confirm-delete">
+              <Text>Delete this post? It will no longer be visible to the community.</Text>
+              <View style={styles.row}>
+                <Button
+                  title="Delete post"
+                  variant="danger"
+                  fullWidth={false}
+                  loading={deleting}
+                  onPress={() => void remove()}
+                />
+                <Button
+                  title="Keep it"
+                  variant="ghost"
+                  fullWidth={false}
+                  onPress={() => setConfirming(false)}
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {post.status !== 'published' ? (
         <View style={styles.moderation} testID="post-moderation">
@@ -103,93 +201,92 @@ export function PostCard({
         </View>
       ) : null}
 
-      <Text numberOfLines={compact ? 3 : undefined}>{post.body}</Text>
+      {images.length > 0 ? <PostImageGallery images={images} author={author} width={galleryWidth} /> : null}
 
-      {compact ? (
-        <View style={styles.row}>
-          <Icon name="heart-outline" color="textMuted" size={16} />
-          <Text variant="caption" tone="muted" accessibilityLabel={`${post.reaction_count} reactions`}>
-            {post.reaction_count}
-          </Text>
-          <Icon name="chatbubble-outline" color="textMuted" size={16} />
-          <Text variant="caption" tone="muted" accessibilityLabel={comments}>
-            {post.comment_count}
-          </Text>
-        </View>
-      ) : (
-        <>
-          <ReactionBar
-            target={{ postId: post.id }}
-            initial={{ mine, total: post.reaction_count, counts: reactionCounts ?? null }}
-            enabled={post.status === 'published'}
-            onRejected={onReactionRejected}
-          />
-          <View style={styles.row}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={onOpenComments ? `${comments}. Open comments` : comments}
-              disabled={!onOpenComments}
-              onPress={onOpenComments}
-              style={styles.counter}
-              hitSlop={8}
-            >
-              <Icon name="chatbubble-outline" color="textMuted" size={18} />
-              <Text variant="caption" tone="muted">
-                {post.comment_count}
-              </Text>
-            </Pressable>
-            <View style={styles.flex} />
-            {onEdit && !confirming ? (
-              <Button
-                title="Edit"
-                variant="ghost"
-                fullWidth={false}
-                onPress={onEdit}
-                accessibilityLabel="Edit post"
-              />
-            ) : null}
-            {onDelete && !confirming ? (
-              <Button
-                title="Delete"
-                variant="ghost"
-                fullWidth={false}
-                onPress={() => setConfirming(true)}
-                accessibilityLabel="Delete post"
-              />
-            ) : null}
-            <ModerationControls kind="post" status={post.status} onHide={onHide} onRestore={onRestore} />
-          </View>
-        </>
-      )}
+      <View style={styles.actions}>
+        <ReactionBar
+          target={{ postId: post.id }}
+          initial={{ mine, total: post.reaction_count, counts: reactionCounts ?? null }}
+          enabled={post.status === 'published'}
+          onRejected={onReactionRejected}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={onOpenComments ? `${comments}. Open comments` : comments}
+          disabled={!onOpenComments}
+          onPress={onOpenComments}
+          style={styles.commentButton}
+          hitSlop={8}
+        >
+          <Icon name="chatbubble-outline" color="text" size={21} />
+          <Text variant="label">Comment</Text>
+          {post.comment_count > 0 ? (
+            <Text variant="caption" tone="muted">
+              {post.comment_count}
+            </Text>
+          ) : null}
+        </Pressable>
+      </View>
 
-      {confirming ? (
-        <View style={styles.confirm} testID="confirm-delete">
-          <Text>Delete this post? It will no longer be visible to the community.</Text>
-          <View style={styles.row}>
-            <Button
-              title="Delete post"
-              variant="danger"
-              fullWidth={false}
-              loading={deleting}
-              onPress={() => void remove()}
-            />
-            <Button title="Keep it" variant="ghost" fullWidth={false} onPress={() => setConfirming(false)} />
-          </View>
-        </View>
+      <Text style={styles.caption}>{post.body}</Text>
+      {onOpenComments ? (
+        <Pressable accessibilityRole="link" onPress={onOpenComments} hitSlop={6} style={styles.textLink}>
+          <Text variant="caption" tone="muted">
+            {post.comment_count === 0
+              ? 'Add a comment'
+              : post.comment_count === 1
+                ? 'View 1 comment'
+                : `View all ${post.comment_count} comments`}
+          </Text>
+        </Pressable>
       ) : null}
+
       {error ? (
-        <Text variant="caption" tone="danger" accessibilityRole="alert">
+        <Text variant="caption" tone="danger" accessibilityRole="alert" style={styles.padded}>
           {error}
         </Text>
       ) : null}
-    </Card>
+    </View>
   );
 }
 
 const useStyles = makeStyles((t) => ({
-  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, flexWrap: 'wrap' },
+  post: {
+    gap: t.spacing.sm,
+    paddingVertical: t.spacing.md,
+    backgroundColor: t.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: t.colors.border,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingHorizontal: t.spacing.lg },
   flex: { flex: 1 },
-  counter: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xxs, minHeight: 32 },
-  moderation: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, flexWrap: 'wrap' },
+  menuButton: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  menu: {
+    marginHorizontal: t.spacing.lg,
+    padding: t.spacing.sm,
+    gap: t.spacing.xs,
+    borderRadius: t.radius.md,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surfaceMuted,
+  },
+  moderation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xs,
+    paddingHorizontal: t.spacing.lg,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    flexWrap: 'wrap',
+  },
+  commentButton: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: 36 },
+  caption: { paddingHorizontal: t.spacing.lg },
+  textLink: { paddingHorizontal: t.spacing.lg, minHeight: 24, justifyContent: 'center' },
   confirm: { gap: t.spacing.sm },
+  padded: { paddingHorizontal: t.spacing.lg },
 }));

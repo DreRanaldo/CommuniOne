@@ -59,6 +59,15 @@ are covered by `tests/services/auth.test.ts`.
   `communione://auth/callback?code=…` (confirmation) or
   `communione://auth/reset-password?code=…` (recovery). Tokens never appear in
   a URL.
+- **S256 challenge.** React Native (Hermes) has no WebCrypto, so supabase-js
+  would fall back to a `plain` challenge (the verifier itself) and to
+  `Math.random()` for the verifier ("WebCrypto API is not supported…").
+  `src/lib/webCrypto.ts` installs `crypto.getRandomValues` and
+  `crypto.subtle.digest('SHA-256')` backed by the platform's native crypto
+  (`expo-crypto`), and `index.ts` loads it first, before the Supabase client
+  exists. It only fills what is missing and only offers SHA-256.
+  `webCrypto.test.ts` checks that Supabase then sends an S256 challenge with a
+  random verifier, and fails without the polyfill.
 - Navigation ignores these links (`linking.filter`); the AuthProvider
   completes them with `services.auth.handleAuthRedirect`, which validates the
   route, rejects error links, and exchanges the code.

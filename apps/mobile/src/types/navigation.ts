@@ -19,10 +19,20 @@ export type ProfileStackParamList = {
   DeleteAccount: undefined;
 };
 
-/** Main tabs once signed in. Home is the current community (see CurrentCommunityProvider). */
+/**
+ * Main tabs once signed in (feed redesign). Home, Communities and Alerts are
+ * the current community (see CurrentCommunityProvider), each its own stack:
+ *   Home        the community feed
+ *   Communities the community hub (announcements, events, sections, switching)
+ *   Marketplace placeholder (a later module)
+ *   Alerts      the community's alerts
+ *   Profile     the user's own profile and account
+ */
 export type AppTabParamList = {
   Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
-  Notifications: undefined;
+  CommunitiesTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
+  Marketplace: undefined;
+  AlertsTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
@@ -58,7 +68,7 @@ export type CommunityStackParamList = {
   /** New alert, or edit one (`alertId`, loaded from the server). */
   AlertEditor: { alertId?: string } | undefined;
   /** Write a post, or edit one (`postId`, loaded from the server). */
-  PostEditor: { postId?: string } | undefined;
+  PostEditor: { postId?: string; addPhotos?: boolean } | undefined;
 };
 
 /** Top level: exactly one of the Auth / App branches exists at a time. */

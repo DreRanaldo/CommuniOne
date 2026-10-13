@@ -1,7 +1,7 @@
 import { getStateFromPath } from '@react-navigation/native';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 import { makeSession, sampleCommunities, TEST_PASSWORD } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 import { linking } from './linking';
 
 describe('navigation', () => {
@@ -13,7 +13,7 @@ describe('navigation', () => {
   test('signed out: only the authentication flow is reachable', async () => {
     const user = userEvent.setup();
     await renderApp();
-    expect(await screen.findByText('One Platform. Every Community.')).toBeOnTheScreen();
+    expect(await screen.findByText('One platform. Every community.')).toBeOnTheScreen();
     expect(screen.queryByText('Communities')).not.toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Create an account' }));
     expect(await screen.findByTestId('sign-up-screen')).toBeOnTheScreen();
@@ -56,7 +56,7 @@ describe('navigation', () => {
 
     // Community navigation.
     await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
-    expect(await screen.findByTestId('community-home-screen')).toBeOnTheScreen();
+    expect(await openHub()).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Documents' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
   });
@@ -77,7 +77,7 @@ describe('navigation', () => {
     expect(await screen.findByText('ada@example.test')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
-    expect(await screen.findByText('One Platform. Every Community.')).toBeOnTheScreen();
+    expect(await screen.findByText('One platform. Every community.')).toBeOnTheScreen();
   });
 
   test('a backend failure shows a safe error state, and retry recovers', async () => {
