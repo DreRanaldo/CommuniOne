@@ -14,6 +14,9 @@ export interface FeedHeaderProps {
   /** Active urgent and emergency alerts of this community (never hidden by the feed). */
   alerts: ActiveAlert[];
   onOpenAlert(alertId: string): void;
+  /** Unread notifications (from the server), shown on the bell. */
+  unread: number;
+  onOpenNotifications(): void;
 }
 
 /**
@@ -21,7 +24,15 @@ export interface FeedHeaderProps {
  * switch), a create button, the "Share with your community" prompt, and any
  * urgent or emergency alert in force, which always stays above the posts.
  */
-export function FeedHeader({ canCreate, onCompose, onAddPhotos, alerts, onOpenAlert }: FeedHeaderProps) {
+export function FeedHeader({
+  canCreate,
+  onCompose,
+  onAddPhotos,
+  alerts,
+  onOpenAlert,
+  unread,
+  onOpenNotifications,
+}: FeedHeaderProps) {
   const styles = useStyles();
   const navigation = useNavigation();
   const community = useCommunity();
@@ -46,6 +57,23 @@ export function FeedHeader({ canCreate, onCompose, onAddPhotos, alerts, onOpenAl
             </Text>
           </View>
           <Icon name="chevron-down" size={20} color="textMuted" />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+          onPress={onOpenNotifications}
+          hitSlop={8}
+          style={styles.iconButton}
+          testID="feed-notifications"
+        >
+          <Icon name="notifications-outline" size={26} color="text" />
+          {unread > 0 ? (
+            <View style={styles.badge} testID="unread-badge">
+              <Text variant="caption" style={styles.badgeText}>
+                {unread > 99 ? '99+' : unread}
+              </Text>
+            </View>
+          ) : null}
         </Pressable>
         {canCreate ? (
           <Pressable
@@ -119,6 +147,19 @@ const useStyles = makeStyles((t) => ({
   },
   flex: { flex: 1 },
   iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.colors.danger,
+  },
+  badgeText: { color: t.colors.textInverse, fontWeight: '700', fontSize: 11, lineHeight: 14 },
   alerts: {
     gap: t.spacing.sm,
     padding: t.spacing.lg,

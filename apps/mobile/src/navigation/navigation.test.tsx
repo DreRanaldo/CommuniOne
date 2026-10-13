@@ -57,7 +57,7 @@ describe('navigation', () => {
     // Community navigation.
     await user.press(screen.getByRole('button', { name: /^Maple Grove HOA/ }));
     expect(await openHub()).toBeOnTheScreen();
-    await user.press(screen.getByRole('button', { name: 'Documents' }));
+    await user.press(screen.getByRole('button', { name: 'Members' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
   });
 

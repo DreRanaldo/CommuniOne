@@ -41,6 +41,7 @@ export function CommunityHomeScreen({
     else if (section === 'announcements') navigation.navigate('Announcements');
     else if (section === 'alerts') navigation.navigate('Alerts');
     else if (section === 'events') navigation.navigate('Events');
+    else if (section === 'documents') navigation.navigate('Documents');
     else navigation.navigate('CommunitySection', { section });
   };
 

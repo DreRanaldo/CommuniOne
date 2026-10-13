@@ -11,7 +11,7 @@ export async function renderApp(options: FakeOptions & { initialURL?: string } =
   const fake = fakeSupabase(options);
   const links = fakeLinks(options.initialURL ?? null);
   const media = fakeMedia();
-  const dependencies = createDependencies(fake.client, links.source, media.picker);
+  const dependencies = createDependencies(fake.client, links.source, media.picker, fake.uploadFile);
   const view = await render(
     <AppProviders
       dependencies={dependencies}

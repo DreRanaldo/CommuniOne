@@ -161,7 +161,7 @@ describe('switching communities', () => {
     const { user } = await signedIn({ communities: [maple, choir] });
     await user.press(await screen.findByRole('button', { name: /^Maple Grove HOA/ }));
     await openHub();
-    await user.press(await screen.findByRole('button', { name: 'Documents' }));
+    await user.press(await screen.findByRole('button', { name: 'Members' }));
     expect(await screen.findByText('Coming soon')).toBeOnTheScreen();
 
     // Back to the hub, switch: the new community opens on its hub, not on Maple Grove's section.

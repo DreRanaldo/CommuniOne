@@ -87,7 +87,11 @@ describe('create community', () => {
     expect(writes(queries)).toEqual([]);
     expect(
       rpcNames(rpc).filter(
-        (n) => !n.startsWith('list_') && n !== 'my_communities' && n !== 'my_community_permissions',
+        (n) =>
+          !n.startsWith('list_') &&
+          n !== 'my_communities' &&
+          n !== 'my_community_permissions' &&
+          n !== 'unread_notification_count',
       ),
     ).toEqual(['create_community']);
   });
@@ -227,7 +231,11 @@ describe('join with an invitation', () => {
     expect(within(await openHub()).getByText('Club · Member')).toBeOnTheScreen();
     expect(redemptions).toHaveLength(1);
     const names = rpcNames(rpc).filter(
-      (n) => !n.startsWith('list_') && n !== 'my_communities' && n !== 'my_community_permissions',
+      (n) =>
+        !n.startsWith('list_') &&
+        n !== 'my_communities' &&
+        n !== 'my_community_permissions' &&
+        n !== 'unread_notification_count',
     );
     expect(names).toEqual(['preview_invitation', 'redeem_invitation']);
     expect(rpc.mock.calls.find(([n]) => n === 'redeem_invitation')![1]).toEqual({ p_token: VALID });

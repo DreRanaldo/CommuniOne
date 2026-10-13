@@ -24,6 +24,8 @@ export interface ErrorDetails {
   retryAfterSeconds?: number;
   /** The server could not be reached (offline, DNS, timeout): safe to retry. */
   network?: boolean;
+  /** The user cancelled the operation (e.g. an upload); nothing to report. */
+  cancelled?: boolean;
 }
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {

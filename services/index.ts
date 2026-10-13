@@ -13,6 +13,7 @@
 
 import { createContext, type Db, type ErrorListener } from './core/context.ts';
 import type { Logger } from './core/logger.ts';
+import type { FileUploader } from './core/files.ts';
 import { alertsService } from './alerts/index.ts';
 import { announcementsService } from './announcements/index.ts';
 import { auditService } from './audit/index.ts';
@@ -31,6 +32,8 @@ export interface ServicesOptions {
   logger?: Logger;
   /** Notified of every failed operation (after translation and logging). */
   onError?: ErrorListener;
+  /** File transport for document uploads (default: supabase-js). See core/files.ts. */
+  uploadFile?: FileUploader;
 }
 
 export function createServices(db: Db, options: ServicesOptions = {}) {
@@ -47,7 +50,7 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     alerts: alertsService(ctx),
     events: eventsService(ctx),
     notifications: notificationsService(ctx),
-    documents: documentsService(ctx),
+    documents: documentsService(ctx, options.uploadFile),
     audit: auditService(ctx),
   };
 }
@@ -56,6 +59,7 @@ export type Services = ReturnType<typeof createServices>;
 
 export { ErrorCode, ServiceError, isServiceError, type ErrorDetails } from './core/errors.ts';
 export type { ErrorListener } from './core/context.ts';
+export { UploadError, type FileUploader, type FileUploadRequest } from './core/files.ts';
 export {
   AUTH_LINK_KINDS, AVATAR_BUCKET, AVATAR_MAX_BYTES,
   type AccountInfo, type AuthLinkKind, type AvatarMimeType, type Profile, type ProfilePatch,
@@ -86,3 +90,6 @@ export {
   type FeedPost, type Post, type PostImage, type PostImageInput,
 } from './posts/index.ts';
 export type { Comment, ThreadComment } from './comments/index.ts';
+export type { Notification } from './notifications/index.ts';
+export type { Document, Folder, PendingUpload, SendOptions, UploadRules } from './documents/index.ts';
+export { BUCKET as DOCUMENTS_BUCKET, MAX_LINK_SECONDS } from './documents/index.ts';
