@@ -51,13 +51,46 @@ export function AlertCard({ alert: a, onPress, compact, timeZone }: AlertCardPro
   const badge = state === 'active' ? null : statusBadge(a);
   const dates = alertDates(a, timeZone);
   const color = colors.severity[level];
+  const label = [`${info.label} alert: ${a.title}`, badge, dates, a.body].filter(Boolean).join('. ');
+
+  // The feed's pinned banner (design pass): soft red, icon, title and one line.
+  // An emergency in force keeps the solid emergency treatment below.
+  if (compact && !emergency) {
+    const tint = colors.tints.red;
+    return (
+      <Pressable
+        accessibilityRole={onPress ? 'button' : pressing ? 'alert' : undefined}
+        accessibilityLabel={label}
+        accessibilityHint={onPress ? 'Opens the alert' : undefined}
+        onPress={onPress}
+        disabled={!onPress}
+        style={({ pressed }) => [
+          styles.banner,
+          { backgroundColor: tint.bg, borderColor: color },
+          pressed && styles.pressed,
+        ]}
+        testID={`alert-${a.id}`}
+      >
+        <View style={[styles.bannerIcon, { borderColor: color }]}>
+          <Icon name="alert-outline" size={18} color={color} />
+        </View>
+        <View style={styles.bannerText}>
+          <Text variant="bodyStrong" numberOfLines={2}>
+            {a.title}
+          </Text>
+          <Text variant="caption" tone="muted" numberOfLines={2}>
+            {a.body}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : pressing ? 'alert' : undefined}
       accessibilityLiveRegion={emergency ? 'assertive' : undefined}
-      accessibilityLabel={[`${info.label} alert: ${a.title}`, badge, dates, a.body]
-        .filter(Boolean)
-        .join('. ')}
+      accessibilityLabel={label}
       accessibilityHint={onPress ? 'Opens the alert' : undefined}
       onPress={onPress}
       disabled={!onPress}
@@ -106,6 +139,23 @@ const useStyles = makeStyles((t) => ({
     backgroundColor: t.colors.surface,
   },
   pressed: { opacity: 0.85 },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.md,
+    padding: t.spacing.md,
+    borderRadius: t.radius.lg,
+    borderWidth: 1,
+  },
+  bannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: { flex: 1, gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   severity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   severityLabel: { fontWeight: '800', letterSpacing: 1 },

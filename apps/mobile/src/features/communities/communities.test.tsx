@@ -93,7 +93,8 @@ describe('multiple communities', () => {
     await user.press(await screen.findByRole('button', { name: /^St\. Mark Choir/ }));
     const hub = await openHub();
     expect(within(hub).getByText('St. Mark Choir')).toBeOnTheScreen();
-    expect(within(hub).getByText('Church · Member')).toBeOnTheScreen();
+    expect(within(hub).getByText('CHURCH · PRIVATE COMMUNITY')).toBeOnTheScreen();
+    expect(within(hub).getByText('You are a Member')).toBeOnTheScreen();
     expect(screen.getByLabelText('Switch community. Current community: St. Mark Choir')).toBeOnTheScreen();
     expect(await stored()).toEqual({ userId: TEST_USER_ID, communityId: choir.community_id });
   });

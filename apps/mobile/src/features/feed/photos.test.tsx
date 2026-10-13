@@ -77,19 +77,23 @@ async function compose(user: User, caption: string) {
 }
 
 describe('the Home tab is the feed', () => {
-  test('five tabs; Home shows the current community with a switcher, a create button and the prompt', async () => {
+  test('tabs: Home, Communities, Discover, the centre +, Market, Profile; Home has the greeting, switcher and prompt', async () => {
     const { user } = await openHome();
-    for (const name of [/^Home/, /^Communities/, /^Marketplace/, /^Alerts/, /^Profile/]) {
+    for (const name of [/^Home/, /^Communities/, /^Discover/, 'Create', /^Market/, /^Profile/]) {
       expect(screen.getByRole('button', { name })).toBeOnTheScreen();
     }
+    // Alerts left the tab bar: they open from the hub, the feed and notifications.
+    expect(screen.queryByRole('button', { name: /^Alerts, tab/ })).not.toBeOnTheScreen();
     expect(screen.getByLabelText('Switch community. Current community: St. Mark Choir')).toBeOnTheScreen();
-    expect(screen.getByText('Current community')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'New post' })).toBeOnTheScreen();
-    expect(screen.getByText('Share with your community')).toBeOnTheScreen();
+    expect(screen.getByTestId('feed-greeting')).toHaveTextContent(/^Good (morning|afternoon|evening)/);
+    expect(screen.getByRole('button', { name: 'New post' })).toHaveTextContent(
+      /Share something with St\. Mark Choir/,
+    );
 
-    await user.press(screen.getByRole('button', { name: /^Marketplace/ }));
+    await user.press(screen.getByRole('button', { name: /^Market/ }));
     expect(await screen.findByText('Marketplace is coming soon')).toBeOnTheScreen();
-    await user.press(screen.getByRole('button', { name: /^Alerts/ }));
+    await user.press(screen.getByRole('button', { name: /^Communities/ }));
+    await user.press(await screen.findByRole('button', { name: 'Alerts' }));
     expect(await screen.findByTestId('alerts-screen')).toBeOnTheScreen();
   });
 

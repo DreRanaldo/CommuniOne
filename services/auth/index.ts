@@ -3,12 +3,13 @@
 
 import type { AuthError, Session } from '@supabase/supabase-js';
 import { ErrorCode, ServiceError, networkError } from '../core/errors.ts';
-import { unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
+import { firstRow, unwrap, unwrapOne, type ServiceContext } from '../core/context.ts';
 import { checkImage, randomId, uploadBody, type ImageMimeType, type UploadBody } from '../core/files.ts';
 import * as v from '../core/validate.ts';
-import type { Tables } from '../database.types.ts';
+import type { Database, Tables } from '../database.types.ts';
 
 export type Profile = Tables<'profiles'>;
+export type ProfileStats = Database['public']['Functions']['my_profile_stats']['Returns'][number];
 
 export const AVATAR_BUCKET = 'avatars';
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -203,6 +204,14 @@ export function authService(ctx: ServiceContext) {
         await ctx.requireUserId();
         const { error } = await db.auth.updateUser({ password: password(newPassword) });
         if (error) throw fromAuthError(error);
+      });
+    },
+
+    /** The caller's own counts (communities, posts, events going) and account creation date. */
+    getMyStats(): Promise<ProfileStats> {
+      return ctx.run('auth.getMyStats', async () => {
+        await ctx.requireUserId();
+        return firstRow(unwrap(await db.rpc('my_profile_stats')));
       });
     },
 

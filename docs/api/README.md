@@ -108,6 +108,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `handleAuthRedirect(url)` | Complete an email link opened in the app (PKCE code exchange) | – | `communione://auth/callback?code=…` or `…/auth/reset-password?code=…` → `{ kind: 'signedIn' \| 'recovery' }` | `VALIDATION` (invalid / expired link, or opened on another device), network | Creates a session; `recovery` must be followed by `updatePassword` |
 | `updatePassword(newPassword)` | Set a new password (also completes recovery) | signed in | password (8–72, letters and digits) → `void` | `VALIDATION` (rules, same as current password), `FORBIDDEN` (re-authentication needed) | Other sessions are kept unless signed out |
 | `getMyProfile()` | Own profile | – | → `Profile` | `NOT_FOUND` | – |
+| `getMyStats()` | Own counts for the profile header (design pass) | signed in | → `{ communities, posts, events_going, member_since }` | `UNAUTHENTICATED` | – |
 | `updateMyProfile(patch)` | Edit own profile (active account) | – | `{ displayName?, firstName?, lastName?, bio?, avatarUrl? (https) }` → `Profile` | `FORBIDDEN` | – |
 | `getMyPhone()` / `setMyPhone(phone \| null)` | Private phone number (visible to nobody else) | – | → `string \| null` / `void` | – | – |
 | `getMyAccount()` | Account information (RN-03) | signed in | → `{ userId, email, emailConfirmedAt, createdAt, lastSignInAt, status }` | `UNAUTHENTICATED` | Asks Auth (`getUser`), not the cached session |
@@ -129,6 +130,7 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `imageUrl(community, kind)` | Displayable logo / cover URL (RN-05) | – | any row with `logo_path` / `logo_url` (communities, `listMine()`, an invitation preview) → `string \| null` | – | Public URL of the uploaded file, else the external https URL; no network request |
 | `listMine()` | Community switcher: my pending / active / suspended memberships | – | → `MyCommunity[]` (`community_id`, `name`, `slug`, `community_type`, `logo_url`, `community_status`, `membership_id`, `membership_status`, `joined_at`, `role_names`; bounded by membership count) | – | `role_names` are display labels only |
 | `myPermissions(id)` | My permission keys, **for UI gating only** | – | → `string[]` | – | – |
+| `stats(id)` | Hub tile counts (design pass) | active member (`community.view`) | → `{ member_count, posts_today, current_announcements, active_alerts, upcoming_events, document_count }`; a count the caller may not see is `null` | `FORBIDDEN` | – |
 
 ### memberships
 
@@ -223,6 +225,20 @@ codes specific to the operation in addition to `UNAUTHENTICATED`,
 | `listUpcoming(input)` / `list(input)` | Upcoming, or a calendar window | `events.view` | `{ communityId, from?, to?, statuses?, limit?, cursor? }` → `Page<Event>` | – | – |
 | `listPast(input)` | Completed or ended events, newest first (RN-11) | `events.view` | `{ communityId, limit?, cursor? }` → `Page<Event>` | – | – |
 | `organizerName(createdBy)` | The organizer's display name (RN-11) | profile visibility (co-members with `members.view`) | `string \| null` → `string \| null` (null: deleted account, no name, or not visible) | – | – |
+
+### stories
+
+Pictures shared with one community for 24 hours (migration 27, see `docs/features/stories.md`).
+
+| Operation | Purpose | Perm | Input → Output | Errors | Side effects |
+|---|---|---|---|---|---|
+| `list(communityId)` | Active stories (own first, unseen authors next) | `posts.view` | → `Story[]` (`viewed_by_me`; `view_count` only on own stories) | – | – |
+| `imageUrls(paths, seconds?)` | Signed picture URLs (60–3600 s, ≤ 100) | stories the caller can see; own unpublished uploads | → `Record<path, url>` (refused paths are absent) | `VALIDATION` | – |
+| `uploadImage({ communityId, file, mimeType })` | Upload to own folder (JPEG / PNG / WebP, ≤ 10 MB) | `posts.create` | → `{ path }` | `FORBIDDEN`, `VALIDATION` | Storage object |
+| `discardImage(path)` | Remove own unpublished upload | own, unused | → `void` | `VALIDATION` | – |
+| `create({ communityId, path, width, height, caption?, clientRequestId? })` | Publish for 24 hours; same `clientRequestId` → same story | `posts.create`; own folder; uploaded file | → `StoryRow` | `FORBIDDEN`, `VALIDATION`, `CONFLICT`, `RATE_LIMITED` | 30 per hour |
+| `markViewed(id)` | Record "seen" | story visible to the caller | → `boolean` | – | `story_views` row (private to the viewer) |
+| `delete(id)` | Soft delete | author or `posts.moderate` | → `boolean` (false: not visible) | `FORBIDDEN` | Picture unreadable at once; purged later |
 
 ### notifications
 

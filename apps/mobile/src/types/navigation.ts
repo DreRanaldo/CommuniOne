@@ -20,19 +20,22 @@ export type ProfileStackParamList = {
 };
 
 /**
- * Main tabs once signed in (feed redesign). Home, Communities and Alerts are
- * the current community (see CurrentCommunityProvider), each its own stack:
- *   Home        the community feed
- *   Communities the community hub (announcements, events, sections, switching)
+ * Main tabs once signed in (design pass). Home and Communities are the
+ * current community (see CurrentCommunityProvider), each its own stack:
+ *   Home        the community feed, with stories
+ *   Communities the community hub (sections, alerts, announcements, events, documents)
+ *   Discover    finding and joining communities
+ *   CreateTab   the centre "+": opens the Create sheet (never shown as a screen)
  *   Marketplace placeholder (a later module)
- *   Alerts      the community's alerts
  *   Profile     the user's own profile and account
+ * Alerts open from the hub, the feed's pinned alerts and notifications.
  */
 export type AppTabParamList = {
   Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
   CommunitiesTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
+  Discover: undefined;
+  CreateTab: undefined;
   Marketplace: undefined;
-  AlertsTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
@@ -96,6 +99,12 @@ export type RootStackParamList = {
   NotificationDetail: { notificationId: string };
   /** Modal: create a community (the caller becomes its Owner). */
   CreateCommunity: undefined;
+  /** Modal: the centre "+" of the tab bar (what the user may create). */
+  Create: undefined;
+  /** Modal: add a story to the current community. */
+  StoryComposer: undefined;
+  /** Full screen: the current community's stories, starting with one author. */
+  StoryViewer: { communityId: string; authorId: string };
   /** Recovery mode only: choose a new password after a reset link. */
   ResetPassword: undefined;
 };

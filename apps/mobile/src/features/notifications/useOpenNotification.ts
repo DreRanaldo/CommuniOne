@@ -2,17 +2,18 @@
 // on the server), then go to the item. The item's own screen re-reads it from
 // the database and refuses what the user may not see, so a notification can
 // never grant access by itself.
-import { StackActions, useNavigation, type NavigationProp } from '@react-navigation/native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import type { Notification } from '@communione/services';
 import { useCallback } from 'react';
 import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { useServices } from '@/lib/dependencies';
-import type { AppTabParamList, CommunityStackParamList, RootStackParamList } from '@/types/navigation';
+import { openInCommunity, type CommunityTab } from '@/navigation/openInCommunity';
+import type { CommunityStackParamList, RootStackParamList } from '@/types/navigation';
 import { NO_ACCESS, notificationTarget, type NotificationTarget } from './notificationRules';
 
 type Destination = {
   [S in keyof CommunityStackParamList]: {
-    tab: Exclude<keyof AppTabParamList, 'Marketplace' | 'Profile'>;
+    tab: CommunityTab;
     screen: S;
     params: CommunityStackParamList[S];
   };
@@ -25,7 +26,7 @@ export function destinationOf(target: NotificationTarget): Destination {
     case 'announcement':
       return { tab: 'CommunitiesTab', screen: 'AnnouncementDetail', params: { announcementId: target.id } };
     case 'alert':
-      return { tab: 'AlertsTab', screen: 'AlertDetail', params: { alertId: target.id } };
+      return { tab: 'CommunitiesTab', screen: 'AlertDetail', params: { alertId: target.id } };
     case 'event':
       return { tab: 'CommunitiesTab', screen: 'EventDetail', params: { eventId: target.id } };
     case 'document':
@@ -63,12 +64,7 @@ export function useOpenNotification() {
       const to = destinationOf(target);
       // Back to the existing tabs (navigate would stack a second copy of
       // them), then into the destination's tab.
-      navigation.dispatch(
-        StackActions.popTo('App', {
-          screen: to.tab,
-          params: { screen: to.screen, params: to.params, initial: false },
-        } as never),
-      );
+      openInCommunity(navigation, to.tab, to.screen, to.params as never);
       return { opened: true };
     },
     [navigation, notifications, current?.community_id, select],

@@ -15,6 +15,8 @@ import { Button, EmptyState, ErrorState, LoadingState, Text } from '@/components
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { useCommunityPermissions } from '@/features/communities/useCommunityPermissions';
+import { displayNameOf, useMyProfile } from '@/features/profile/hooks/useMyProfile';
+import { useStories } from '@/features/stories/useStories';
 import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles, useTheme } from '@/theme';
@@ -27,7 +29,7 @@ import { useFeed, type FeedStatus } from '../useFeed';
 type Props = NativeStackScreenProps<CommunityStackParamList, 'Feed'>;
 
 const FILTERS: { status: FeedStatus; label: string }[] = [
-  { status: 'published', label: 'Posts' },
+  { status: 'published', label: 'Latest' },
   { status: 'hidden', label: 'Hidden' },
   { status: 'deleted', label: 'Deleted' },
 ];
@@ -49,6 +51,18 @@ export function FeedScreen({ navigation }: Props) {
   const permissions = useCommunityPermissions();
   const canCreate = permissions.can('posts.create');
   const canModerate = permissions.can('posts.moderate');
+  const profile = useMyProfile({ reloadOnFocus: true });
+  const me =
+    profile.status === 'success'
+      ? { name: displayNameOf(profile.data.profile), avatarUri: profile.data.avatarUri }
+      : { name: null, avatarUri: null };
+  const firstName =
+    profile.status === 'success'
+      ? profile.data.profile.first_name?.trim() || me.name?.split(/\s+/)[0] || null
+      : null;
+  const stories = useStories(community.community_id);
+  const reloadStories = stories.reload;
+  const root = () => navigation.getParent()?.getParent();
   const [status, setStatus] = useState<FeedStatus>('published');
 
   // Urgent and emergency alerts in force, refreshed with the feed (never blocks it).
@@ -68,24 +82,34 @@ export function FeedScreen({ navigation }: Props) {
   const loadAlerts = useCallback(async () => {
     reloadPinned();
     reloadUnread();
-  }, [reloadPinned, reloadUnread]);
+    reloadStories();
+  }, [reloadPinned, reloadUnread, reloadStories]);
 
   // Members can see their own hidden posts; only moderators get a "Deleted" view.
   const filters = FILTERS.filter((f) => f.status !== 'deleted' || canModerate);
   const header = (
     <>
       <FeedHeader
+        firstName={firstName}
+        me={me}
         canCreate={canCreate}
+        canCreateEvent={permissions.can('events.create')}
+        canCreateAlert={permissions.can('alerts.create')}
         onCompose={() => navigation.navigate('PostEditor')}
         onAddPhotos={() => navigation.navigate('PostEditor', { addPhotos: true })}
+        onNewEvent={() => navigation.navigate('EventEditor')}
+        onNewAlert={() => navigation.navigate('AlertEditor')}
+        stories={{
+          groups: stories.groups,
+          avatars: stories.avatars,
+          onAdd: () => root()?.navigate('StoryComposer'),
+          onOpen: (authorId) =>
+            root()?.navigate('StoryViewer', { communityId: community.community_id, authorId }),
+        }}
         alerts={pinned}
         unread={unread.status === 'success' ? unread.data : 0}
-        onOpenNotifications={() => navigation.getParent()?.getParent()?.navigate('Notifications')}
-        onOpenAlert={(alertId) =>
-          navigation
-            .getParent()
-            ?.navigate('AlertsTab', { screen: 'AlertDetail', params: { alertId }, initial: false })
-        }
+        onOpenNotifications={() => root()?.navigate('Notifications')}
+        onOpenAlert={(alertId) => navigation.navigate('AlertDetail', { alertId })}
       />
       <View style={styles.filters} accessibilityRole="tablist">
         {filters.map((f) => (
@@ -253,6 +277,7 @@ function FeedList({
           images={feed.images[item.id]}
           avatarUrl={item.author_user_id ? (feed.avatars[item.author_user_id] ?? null) : null}
           galleryWidth={width}
+          communityName={community.name}
           reactionCounts={feed.reactionCounts[item.id] ?? null}
           error={errors[item.id]}
           {...actionsFor(item)}
@@ -326,18 +351,19 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   filters: {
     flexDirection: 'row',
-    gap: t.spacing.lg,
+    gap: t.spacing.xs,
     paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: t.colors.border,
   },
   filter: {
     minHeight: 40,
     justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    paddingHorizontal: t.spacing.md,
+    borderRadius: t.radius.md,
   },
-  filterSelected: { borderBottomColor: t.colors.text },
+  filterSelected: { backgroundColor: t.colors.surfaceMuted },
   list: { flexGrow: 1, paddingBottom: t.spacing.xl },
   footer: { alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.md },
   end: { paddingVertical: t.spacing.md },

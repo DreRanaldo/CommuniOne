@@ -31,9 +31,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
       App: {
         screens: {
           Home: 'home',
-          CommunitiesTab: 'community',
+          // The alerts list lives in the hub; communione://alerts still opens it.
+          CommunitiesTab: { path: 'community', screens: { Alerts: { path: 'alerts', exact: true } } },
+          Discover: 'discover',
           Marketplace: 'marketplace',
-          AlertsTab: 'alerts',
           Profile: { path: 'profile', screens: { ProfileHome: '' } },
         },
       },

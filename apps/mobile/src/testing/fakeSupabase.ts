@@ -66,6 +66,10 @@ export interface FakeOptions {
   slugsTaken?: number;
   /** Community content by community id (alerts, announcements, upcoming events, posts). */
   content?: Record<string, FakeContent>;
+  /** community_stats() overrides per community (unset counts are computed from content). */
+  communityStats?: Record<string, Record<string, number | null>>;
+  /** my_profile_stats() overrides. */
+  profileStats?: Record<string, unknown>;
   /** document_upload_settings.max_file_size_bytes (default 25 MiB). */
   documentMaxBytes?: number;
   /** The signed-in user's notifications (see makeNotification). */
@@ -84,6 +88,8 @@ export interface FakeContent {
   postImages?: Record<string, unknown>[];
   /** Documents (see makeDocument). */
   documents?: Record<string, unknown>[];
+  /** Stories as list_community_stories returns them (see makeStory). */
+  stories?: Record<string, unknown>[];
   /** document_folders rows (see makeFolder). */
   folders?: Record<string, unknown>[];
   posts?: Record<string, unknown>[];
@@ -168,6 +174,7 @@ type PostImageRow = ReturnType<typeof makePostImage>;
 type NotificationRow = ReturnType<typeof makeNotification>;
 type DocumentRow = ReturnType<typeof makeDocument>;
 type FolderRow = ReturnType<typeof makeFolder>;
+type StoryRow = ReturnType<typeof makeStory>;
 /** document_mime_types (seeded allow-list). */
 const DOCUMENT_TYPES: [string, string][] = [
   ['application/pdf', 'pdf'],
@@ -1229,7 +1236,9 @@ export function fakeSupabase(options: FakeOptions = {}) {
           ? postImagesBucket
           : bucket === 'documents'
             ? documentsBucket
-            : storageBucket,
+            : bucket === 'stories'
+              ? storiesBucket
+              : storageBucket,
     ),
   };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
@@ -1290,6 +1299,55 @@ export function fakeSupabase(options: FakeOptions = {}) {
   const canReadNotification = (row: NotificationRow) =>
     row.user_id === me() &&
     (row.community_id === null || !MEMBERSHIP_TYPES.has(row.type) || isActiveMember(row.community_id));
+  // ---- Stories (migration 27 rules) ----
+  const allStories = () => Object.values(content).flatMap((c) => c.stories ?? []) as StoryRow[];
+  const storyFiles = new Set<string>(); // uploaded story pictures
+  const storyViews = new Set<string>(); // `${storyId}:${userId}`
+  /** private.can_view_story_row. */
+  const canViewStory = (row: StoryRow) =>
+    !row.deleted_at &&
+    Date.parse(row.expires_at) > Date.now() &&
+    (permissionsIn(row.community_id).includes('posts.view') ||
+      (row.author_user_id === me() && permissionsIn(row.community_id).includes('posts.create')));
+  const storyFolder = (path: string) => {
+    const m = /^([0-9a-f-]{36})\/([0-9a-f-]{36})\/[0-9a-f-]{36}\.(jpg|png|webp)$/.exec(path);
+    return m ? { communityId: m[1]!, userId: m[2]! } : null;
+  };
+  const storiesBucket = {
+    upload: jest.fn(async (path: string) => {
+      const folder = storyFolder(path);
+      if (!folder || folder.userId !== me() || !permissionsIn(folder.communityId).includes('posts.create'))
+        return {
+          data: null,
+          error: { message: 'new row violates row-level security policy', statusCode: '403' },
+        };
+      if (storyFiles.has(path))
+        return { data: null, error: { message: 'The resource already exists', statusCode: '409' } };
+      storyFiles.add(path);
+      return { data: { path }, error: null };
+    }),
+    createSignedUrls: jest.fn(async (paths: string[], seconds: number) => ({
+      data: paths.map((path) => {
+        const story = allStories().find((st) => st.storage_path === path);
+        const readable =
+          storyFiles.has(path) && (story ? canViewStory(story) : storyFolder(path)?.userId === me());
+        return readable
+          ? { path, signedUrl: `https://storage.test/stories/${path}?expires=${seconds}`, error: null }
+          : { path, signedUrl: '', error: 'Object not found' };
+      }),
+      error: null,
+    })),
+    remove: jest.fn(async (paths: string[]) => {
+      const removed = paths.filter(
+        (path) =>
+          storyFolder(path)?.userId === me() &&
+          !allStories().some((st) => st.storage_path === path) &&
+          storyFiles.delete(path),
+      );
+      return { data: removed.map((name) => ({ name })), error: null };
+    }),
+  };
+  let storyCount = 700;
   // ---- Documents (Stage 10 rules) ----
   const documentMaxBytes = options.documentMaxBytes ?? 25 * 1024 * 1024;
   const allDocuments = () => Object.values(content).flatMap((c) => c.documents ?? []) as DocumentRow[];
@@ -1357,6 +1415,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     return null;
   };
   let documentCount = 900;
+  // Seeded stories have their pictures.
+  for (const story of allStories()) storyFiles.add(story.storage_path);
   // Seeded documents (not pending or deleted) have their files.
   for (const doc of allDocuments())
     if (['active', 'archived'].includes(doc.status) && doc.storage_path)
@@ -1483,6 +1543,168 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (failure) {
       rpcFailures.delete(name);
       return { data: null, error: failure };
+    }
+    if (name === 'list_community_stories') {
+      if (offline) return { data: null, error: OFFLINE };
+      const visible = allStories().filter(
+        (st) => st.community_id === args.p_community_id && canViewStory(st),
+      );
+      const seen = (st: StoryRow) => storyViews.has(`${st.id}:${me()}`) || st.viewed_by_me === true;
+      const byAuthor = new Map<string, StoryRow[]>();
+      for (const st of visible)
+        byAuthor.set(st.author_user_id, [...(byAuthor.get(st.author_user_id) ?? []), st]);
+      const groups = [...byAuthor.entries()].sort(([a, x], [b, y]) => {
+        const mine = Number(b === me()) - Number(a === me());
+        if (mine) return mine;
+        const unseen = Number(x.every(seen)) - Number(y.every(seen));
+        if (unseen) return unseen;
+        const latest = (rows: StoryRow[]) =>
+          rows
+            .map((r) => r.created_at)
+            .sort()
+            .at(-1)!;
+        return latest(y).localeCompare(latest(x));
+      });
+      const rows = groups.flatMap(([, list]) =>
+        [...list]
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .map((st) => ({
+            ...st,
+            viewed_by_me: seen(st),
+            view_count:
+              st.author_user_id === me()
+                ? [...storyViews].filter((v) => v.startsWith(`${st.id}:`) && !v.endsWith(`:${me()}`)).length +
+                  (st.view_count ?? 0)
+                : null,
+          })),
+      );
+      return { data: rows, error: null };
+    }
+    if (name === 'create_story') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      if (!me() || !permissionsIn(communityId).includes('posts.create'))
+        return {
+          data: null,
+          error: { code: '42501', message: 'posts.create is required to add a story in this community' },
+        };
+      const request = args.p_client_request_id as string | undefined;
+      const existing = request
+        ? allStories().find((st) => st.author_user_id === me() && st.client_request_id === request)
+        : undefined;
+      if (existing) return { data: [{ ...existing }], error: null };
+      const path = String(args.p_path);
+      const folder = storyFolder(path);
+      if (folder?.communityId !== communityId || folder.userId !== me())
+        return {
+          data: null,
+          error: {
+            code: '42501',
+            message: 'a story picture must be uploaded to your own folder of this community',
+          },
+        };
+      if (!storyFiles.has(path))
+        return {
+          data: null,
+          error: { code: '22023', message: 'story picture not found; upload the picture first' },
+        };
+      const caption = (args.p_caption as string | undefined)?.trim() || null;
+      if (caption && caption.length > 200)
+        return {
+          data: null,
+          error: { code: '22023', message: 'a story caption can be at most 200 characters' },
+        };
+      storyCount += 1;
+      const profile = profiles.get(me()!);
+      const row = makeStory(communityId, storyCount, {
+        author_user_id: me(),
+        author_display_name: profile?.display_name ?? null,
+        storage_path: path,
+        caption,
+        width: Number(args.p_width),
+        height: Number(args.p_height),
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        client_request_id: request ?? null,
+      });
+      content[communityId] = {
+        ...content[communityId],
+        stories: [...(content[communityId]?.stories ?? []), row],
+      };
+      return { data: [{ ...row }], error: null };
+    }
+    if (name === 'mark_story_viewed') {
+      const story = allStories().find((st) => st.id === args.p_story_id);
+      if (!story || !canViewStory(story)) return { data: false, error: null };
+      storyViews.add(`${story.id}:${me()}`);
+      return { data: true, error: null };
+    }
+    if (name === 'delete_story') {
+      const story = allStories().find((st) => st.id === args.p_story_id);
+      if (!story || !canViewStory(story)) return { data: false, error: null };
+      if (story.author_user_id !== me() && !permissionsIn(story.community_id).includes('posts.moderate'))
+        return {
+          data: null,
+          error: { code: '42501', message: 'only the author or a moderator can delete a story' },
+        };
+      story.deleted_at = new Date().toISOString();
+      return { data: true, error: null };
+    }
+    if (name === 'community_stats') {
+      if (offline) return { data: null, error: OFFLINE };
+      const communityId = String(args.p_community_id);
+      const perms = permissionsIn(communityId);
+      if (!perms.length)
+        return { data: null, error: { code: '42501', message: 'not a member of this community' } };
+      const c = content[communityId] ?? {};
+      const now = Date.now();
+      const count = (
+        perm: string,
+        rows: Record<string, unknown>[] | undefined,
+        keep: (r: Record<string, unknown>) => boolean,
+      ) => (perms.includes(perm) ? (rows ?? []).filter(keep).length : null);
+      const active = (r: Record<string, unknown>) =>
+        r.status === 'published' && (!r.expires_at || Date.parse(String(r.expires_at)) > now);
+      const computed = {
+        member_count: 12,
+        posts_today: count(
+          'posts.view',
+          c.posts,
+          (r) => r.status === 'published' && now - Date.parse(String(r.created_at)) < 86_400_000,
+        ),
+        current_announcements: count('announcements.view', c.announcements, active),
+        active_alerts: count('alerts.view', c.alerts, active),
+        upcoming_events: count(
+          'events.view',
+          c.events,
+          (r) => r.status === 'published' && Date.parse(String(r.ends_at)) > now,
+        ),
+        document_count:
+          perms.includes('documents.view') || perms.includes('documents.manage')
+            ? (c.documents ?? []).filter(
+                (r) =>
+                  r.status === 'active' && (r.visibility === 'members' || perms.includes('documents.manage')),
+              ).length
+            : null,
+      };
+      return { data: [{ ...computed, ...options.communityStats?.[communityId] }], error: null };
+    }
+    if (name === 'my_profile_stats') {
+      if (offline) return { data: null, error: OFFLINE };
+      return {
+        data: [
+          {
+            communities: communities.filter(
+              (c) => (c as { membership_status: string }).membership_status === 'active',
+            ).length,
+            posts: allPosts().filter((p) => p.author_user_id === me() && p.status === 'published').length,
+            events_going: 0,
+            member_since: '2024-03-05T12:00:00Z',
+            ...options.profileStats,
+          },
+        ],
+        error: null,
+      };
     }
     if (name === 'create_document_upload') {
       if (offline) return { data: null, error: OFFLINE };
@@ -2112,6 +2334,10 @@ export function fakeSupabase(options: FakeOptions = {}) {
     storage: storageBucket,
     /** The user's notifications on the "server" (change them to simulate new ones). */
     notifications: notificationRows,
+    /** Pictures in the private stories bucket, and who saw which story. */
+    storyFiles,
+    storyViews,
+    storiesStorage: storiesBucket,
     /** Files in the private documents bucket (path → stored size and type). */
     documentFiles,
     documentsStorage: documentsBucket,
@@ -2420,6 +2646,29 @@ export const makeNotification = (n: number, overrides: Record<string, unknown> =
   created_at: new Date(Date.now() - n * 60_000).toISOString(),
   ...overrides,
 });
+
+/** An active story (as list_community_stories returns it), by another member unless overridden. */
+export const makeStory = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => {
+  const id = `e6e6e6e6-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const author = (overrides.author_user_id as string | undefined) ?? OTHER_USER_ID;
+  return {
+    id,
+    community_id: communityId,
+    author_user_id: author,
+    author_display_name: 'Grace Hopper' as string | null,
+    storage_path: `${communityId}/${author}/${id}.jpg`,
+    caption: null as string | null,
+    width: 1080,
+    height: 1920,
+    created_at: new Date(Date.now() - n * 60_000).toISOString(),
+    expires_at: new Date(Date.now() + 86_400_000 - n * 60_000).toISOString(),
+    viewed_by_me: false,
+    view_count: null as number | null,
+    deleted_at: null as string | null,
+    client_request_id: null as string | null,
+    ...overrides,
+  };
+};
 
 /** A document folder. */
 export const makeFolder = (communityId: string, n: number, overrides: Record<string, unknown> = {}) => ({
