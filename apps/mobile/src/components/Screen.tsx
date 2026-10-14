@@ -13,6 +13,8 @@ export interface ScreenProps {
   testID?: string;
   /** Pull to refresh (scrolling screens only). */
   refreshControl?: ReactElement<RefreshControlProps>;
+  /** Standard padding and gaps (default); false for edge-to-edge content such as a photo gallery. */
+  padded?: boolean;
 }
 
 /** Standard screen container: safe areas, background, padding and keyboard handling. */
@@ -23,18 +25,21 @@ export function Screen({
   centered,
   testID,
   refreshControl,
+  padded = true,
 }: ScreenProps) {
   const styles = useStyles();
   const content = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.content, centered && styles.centered]}
+      contentContainerStyle={[styles.content, !padded && styles.flush, centered && styles.centered]}
       keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, styles.fill, centered && styles.centered]}>{children}</View>
+    <View style={[styles.content, !padded && styles.flush, styles.fill, centered && styles.centered]}>
+      {children}
+    </View>
   );
   return (
     <SafeAreaView style={styles.safe} edges={edges} testID={testID}>
@@ -49,5 +54,6 @@ const useStyles = makeStyles((t) => ({
   safe: { flex: 1, backgroundColor: t.colors.background },
   fill: { flex: 1 },
   content: { flexGrow: 1, padding: t.spacing.lg, gap: t.spacing.lg },
+  flush: { padding: 0, gap: 0 },
   centered: { justifyContent: 'center', alignItems: 'center' },
 }));

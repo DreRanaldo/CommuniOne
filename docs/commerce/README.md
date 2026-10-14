@@ -27,7 +27,7 @@ It is built in small stages (B to M), each tested and approved before the next.
 | Capability | Status |
 |---|---|
 | Design (this folder) | Done (Stage A) |
-| Listings, categories, seller profiles, inventory | Not yet implemented (B) |
+| Listings, categories, seller profiles, inventory, search, favorites | **Implemented and tested (B)**: see [`stage-b-catalog.md`](stage-b-catalog.md) |
 | Cart and server-side price/stock validation | Not yet implemented (C) |
 | Checkout, addresses, delivery choices, orders | Not yet implemented (D) |
 | Payment provider: adapter and test provider | Not yet implemented (E) |

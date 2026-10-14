@@ -411,6 +411,78 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"favorites": {
+                  Row: {
+                    "community_id": string,"created_at": string,"listing_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"created_at"?: string,"listing_id": string,"user_id": string
+                  }
+                  Update: {
+                    "community_id"?: string,"created_at"?: string,"listing_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "favorites_listing_fkey"
+      columns: ["listing_id","community_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id","community_id"]
+    },{
+      foreignKeyName: "favorites_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"inventory": {
+                  Row: {
+                    "community_id": string,"listing_id": string,"on_hand": number,"reserved": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"listing_id": string,"on_hand"?: number,"reserved"?: number,"updated_at"?: string
+                  }
+                  Update: {
+                    "community_id"?: string,"listing_id"?: string,"on_hand"?: number,"reserved"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "inventory_listing_fkey"
+      columns: ["listing_id","community_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id","community_id"]
+    }
+                  ]
+                },"inventory_movements": {
+                  Row: {
+                    "actor_user_id": string | null,"community_id": string,"created_at": string,"delta": number,"id": string,"listing_id": string,"note": string | null,"on_hand_after": number,"reason": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_user_id"?: string | null,"community_id": string,"created_at"?: string,"delta": number,"id"?: string,"listing_id": string,"note"?: string | null,"on_hand_after": number,"reason": string
+                  }
+                  Update: {
+                    "actor_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"delta"?: number,"id"?: string,"listing_id"?: string,"note"?: string | null,"on_hand_after"?: number,"reason"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "inventory_movements_actor_user_id_fkey"
+      columns: ["actor_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "inventory_movements_listing_id_fkey"
+      columns: ["listing_id"]
+isOneToOne: false
+      referencedRelation: "inventory"
+      referencedColumns: ["listing_id"]
+    }
+                  ]
                 },"invitation_redemptions": {
                   Row: {
                     "community_id": string,"id": string,"invitation_id": string,"membership_id": string | null,"redeemed_at": string,"user_id": string
@@ -478,6 +550,90 @@ isOneToOne: false
       columns: ["revoked_by"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"listing_images": {
+                  Row: {
+                    "community_id": string,"created_at": string,"height": number,"id": string,"listing_id": string,"position": number,"storage_path": string,"width": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"created_at"?: string,"height": number,"id"?: string,"listing_id": string,"position": number,"storage_path": string,"width": number
+                  }
+                  Update: {
+                    "community_id"?: string,"created_at"?: string,"height"?: number,"id"?: string,"listing_id"?: string,"position"?: number,"storage_path"?: string,"width"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "listing_images_listing_fkey"
+      columns: ["listing_id","community_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id","community_id"]
+    }
+                  ]
+                },"listings": {
+                  Row: {
+                    "category_id": string,"community_id": string,"condition": string | null,"created_at": string,"currency": string,"description": string,"fulfillment": (string)[],"id": string,"kind": string,"pickup_area": string | null,"price_minor": number | null,"pricing": string,"published_at": string | null,"removal_reason": string | null,"removed_by": string | null,"search": unknown,"seller_profile_id": string,"seller_user_id": string,"service_area": string | null,"status": string,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "category_id": string,"community_id": string,"condition"?: string | null,"created_at"?: string,"currency"?: string,"description"?: string,"fulfillment"?: (string)[],"id"?: string,"kind": string,"pickup_area"?: string | null,"price_minor"?: number | null,"pricing"?: string,"published_at"?: string | null,"removal_reason"?: string | null,"removed_by"?: string | null,"search"?: never,"seller_profile_id": string,"seller_user_id": string,"service_area"?: string | null,"status"?: string,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "category_id"?: string,"community_id"?: string,"condition"?: string | null,"created_at"?: string,"currency"?: string,"description"?: string,"fulfillment"?: (string)[],"id"?: string,"kind"?: string,"pickup_area"?: string | null,"price_minor"?: number | null,"pricing"?: string,"published_at"?: string | null,"removal_reason"?: string | null,"removed_by"?: string | null,"search"?: never,"seller_profile_id"?: string,"seller_user_id"?: string,"service_area"?: string | null,"status"?: string,"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "listings_category_id_fkey"
+      columns: ["category_id"]
+isOneToOne: false
+      referencedRelation: "market_categories"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "listings_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "listings_removed_by_fkey"
+      columns: ["removed_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "listings_seller_profile_fkey"
+      columns: ["seller_profile_id","community_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id","community_id"]
+    },{
+      foreignKeyName: "listings_seller_user_id_fkey"
+      columns: ["seller_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"market_categories": {
+                  Row: {
+                    "active": boolean,"icon": string | null,"id": string,"kind": string,"name": string,"parent_id": string | null,"slug": string,"sort_order": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"icon"?: string | null,"id"?: string,"kind": string,"name": string,"parent_id"?: string | null,"slug": string,"sort_order"?: number
+                  }
+                  Update: {
+                    "active"?: boolean,"icon"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"parent_id"?: string | null,"slug"?: string,"sort_order"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "market_categories_parent_id_fkey"
+      columns: ["parent_id"]
+isOneToOne: false
+      referencedRelation: "market_categories"
       referencedColumns: ["id"]
     }
                   ]
@@ -808,6 +964,32 @@ isOneToOne: false
       columns: ["community_id"]
 isOneToOne: false
       referencedRelation: "communities"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"seller_profiles": {
+                  Row: {
+                    "bio": string | null,"community_id": string,"created_at": string,"display_name": string,"id": string,"status": string,"updated_at": string,"user_id": string,"verification_status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "bio"?: string | null,"community_id": string,"created_at"?: string,"display_name": string,"id"?: string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_status"?: string
+                  }
+                  Update: {
+                    "bio"?: string | null,"community_id"?: string,"created_at"?: string,"display_name"?: string,"id"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "seller_profiles_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "seller_profiles_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
       referencedColumns: ["id"]
     }
                   ]
@@ -1176,6 +1358,11 @@ isOneToOne: false
               "community_id": string,"created_at": string,"created_by": string,"effective_status": string,"expires_at": string,"id": string,"max_uses": number,"revoked_at": string,"status": string,"use_count": number
             }[]
                            },
+"list_listing_image_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
+            }[]
+                           },
 "list_my_active_alerts":
 { Args: Record<PropertyKey, never>; Returns: {
               "community_id": string,"expires_at": string,"id": string,"is_emergency": boolean,"published_at": string,"severity": string,"severity_rank": number,"title": string
@@ -1336,9 +1523,19 @@ isOneToOne: false
               "event_id": string,"status": string,"waitlisted_at": string
             }[]
                            },
+"search_listings":
+{ Args: { "p_category_id"?: string,"p_community_id": string,"p_condition"?: string,"p_favorites_only"?: boolean,"p_in_stock_only"?: boolean,"p_kind"?: string,"p_limit"?: number,"p_max_price_minor"?: number,"p_min_price_minor"?: number,"p_offset"?: number,"p_query"?: string,"p_seller_profile_id"?: string,"p_sort"?: string }; Returns: {
+              "available": number,"category_id": string,"category_name": string,"community_id": string,"condition": string,"cover_image_path": string,"currency": string,"id": string,"image_count": number,"is_favorite": boolean,"kind": string,"price_minor": number,"pricing": string,"published_at": string,"rank": number,"seller_display_name": string,"seller_profile_id": string,"seller_verified": boolean,"title": string
+            }[]
+                           },
 "set_community_notification_settings":
 { Args: { "p_alerts"?: boolean,"p_announcements"?: boolean,"p_comments"?: boolean,"p_community_id": string,"p_events"?: boolean }; Returns: {
               "alerts": boolean,"announcements": boolean,"comments": boolean,"events": boolean
+            }[]
+                           },
+"set_listing_stock":
+{ Args: { "p_listing_id": string,"p_note"?: string,"p_on_hand": number }; Returns: {
+              "available": number,"listing_id": string,"on_hand": number,"reserved": number
             }[]
                            },
 "unread_notification_count":

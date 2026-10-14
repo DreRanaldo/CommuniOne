@@ -34,7 +34,7 @@ export type AppTabParamList = {
   Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
   CommunitiesTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Discover: undefined;
-  Marketplace: undefined;
+  Marketplace: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
@@ -47,6 +47,18 @@ export type CommunityStackParamList = {
   CommunitySettings: undefined;
   /** Edit the community's profile (RN-15; community.update). */
   EditCommunity: undefined;
+  /** The current community's marketplace (Market tab root; Stage B). */
+  Market: undefined;
+  /** One listing, read from the server. `warning`: shown once (e.g. a picture failed to upload). */
+  Listing: { listingId: string; warning?: string };
+  /** A seller's shop in this community. */
+  Seller: { sellerProfileId: string };
+  /** The user's own shop: profile and listings (marketplace.sell). */
+  Shop: undefined;
+  /** New listing, or edit one of yours. */
+  ListingEditor: { listingId?: string } | undefined;
+  /** Listings the user saved. */
+  SavedListings: undefined;
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

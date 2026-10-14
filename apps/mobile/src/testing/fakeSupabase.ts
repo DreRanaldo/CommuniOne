@@ -7,6 +7,7 @@ import type { Session } from '@supabase/supabase-js';
 import { UploadError, type FileUploader } from '@communione/services';
 import type { LinkSource } from '@/lib/links';
 import type { CurrentPosition, LocationSource } from '@/lib/location';
+import { createFakeMarket, type FakeMarketSeed } from './fakeMarket';
 import type { MediaPicker, PickedFile, PickedImage } from '@/lib/media';
 import type { AppSupabaseClient } from '@/lib/supabase';
 
@@ -81,6 +82,8 @@ export interface FakeOptions {
   notifications?: Record<string, unknown>[];
   /** Permission keys by community id; otherwise derived from the user's roles there. */
   permissions?: Record<string, string[]>;
+  /** Marketplace catalog (see makeSellerProfile / makeListing in fakeMarket.ts). */
+  market?: FakeMarketSeed;
 }
 
 export interface FakeContent {
@@ -161,9 +164,14 @@ const MEMBER_PERMISSIONS = [
   'comments.create',
   'comments.edit_own',
   'comments.delete_own',
+  // Migration 32: members browse, buy and sell in their community's marketplace.
+  'marketplace.view',
+  'marketplace.buy',
+  'marketplace.sell',
 ];
 const MODERATION = ['posts.moderate', 'comments.moderate'];
 const MANAGEMENT = [
+  'marketplace.manage',
   'alerts.manage',
   'announcements.create',
   'announcements.manage',
@@ -1135,6 +1143,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
         return { data: visible ? [{ id: `${membershipId}:${roleId}` }] : [], error: null };
       }
     }
+    const marketResult = market.query(table, op, filters, columns, values, single, matches);
+    if (marketResult) return marketResult;
     if (table === 'profile_private') {
       // RLS: owner only. Other people's rows simply do not exist for this user.
       if (op === 'select') {
@@ -1445,9 +1455,11 @@ export function fakeSupabase(options: FakeOptions = {}) {
             ? documentsBucket
             : bucket === 'alert-images'
               ? alertImagesBucket
-              : bucket === 'stories'
-                ? storiesBucket
-                : storageBucket,
+              : bucket === 'listing-images'
+                ? market.bucket
+                : bucket === 'stories'
+                  ? storiesBucket
+                  : storageBucket,
     ),
   };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
@@ -1497,6 +1509,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     if (options.permissions?.[communityId]) return options.permissions[communityId]!;
     return [...new Set(membership.role_names.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   };
+  // ---- Marketplace catalog (migration 32): see fakeMarket.ts ----
+  const market = createFakeMarket(options.market ?? {}, { me, permissionsIn });
   // ---- Notifications: the user's own inbox (private.can_read_notification) ----
   const notificationRows = (options.notifications ?? []).map((row) => ({ ...row })) as NotificationRow[];
   const isActiveMember = (communityId: string) =>
@@ -1851,6 +1865,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
       rpcFailures.delete(name);
       return { data: null, error: failure };
     }
+    const marketRpc = market.rpc(name, args);
+    if (marketRpc) return offline ? { data: null, error: OFFLINE } : marketRpc;
     if (name === 'list_community_stories') {
       if (offline) return { data: null, error: OFFLINE };
       const visible = allStories().filter(
@@ -2792,6 +2808,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     storyFiles,
     storyViews,
     storiesStorage: storiesBucket,
+    /** The marketplace catalog on the "server" (sellers, listings, stock, pictures, favorites). */
+    market: market.state,
     /** Photos in the private alert-images bucket (path → uploader). */
     alertImageFiles,
     /** Files in the private documents bucket (path → stored size and type). */

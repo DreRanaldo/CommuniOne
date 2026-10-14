@@ -23,6 +23,7 @@ import { communitiesService } from './communities/index.ts';
 import { documentsService } from './documents/index.ts';
 import { eventsService } from './events/index.ts';
 import { invitationsService } from './invitations/index.ts';
+import { marketplaceService } from './marketplace/index.ts';
 import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
@@ -53,6 +54,7 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     notifications: notificationsService(ctx),
     documents: documentsService(ctx, options.uploadFile),
     stories: storiesService(ctx),
+    marketplace: marketplaceService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -104,3 +106,9 @@ export {
 export {
   MEMBER_SEARCH_MAX, MEMBERSHIP_STATUSES, type DirectoryMember, type Member, type MemberProfile, type MembershipStatus,
 } from './memberships/index.ts';
+export {
+  FULFILLMENT_METHODS, LISTING_CONDITIONS, LISTING_IMAGES_BUCKET, LISTING_IMAGE_MAX_BYTES, LISTING_KINDS, LISTING_MAX_IMAGES,
+  LISTING_PRICING, LISTING_SORTS, LISTING_STATUSES, MAX_PRICE_MINOR,
+  type Category, type Listing, type ListingCard, type ListingDetail, type ListingImage, type ListingInput, type ListingKind,
+  type ListingPatch, type SearchInput, type SellerProfile,
+} from './marketplace/index.ts';

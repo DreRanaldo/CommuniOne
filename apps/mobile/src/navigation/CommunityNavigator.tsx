@@ -24,6 +24,12 @@ import { AnnouncementEditorScreen } from '@/features/announcements/AnnouncementE
 import { AnnouncementsScreen } from '@/features/announcements/AnnouncementsScreen';
 import { PostDetailScreen } from '@/features/comments/PostDetailScreen';
 import { FeedScreen } from '@/features/feed/screens/FeedScreen';
+import { ListingDetailScreen } from '@/features/marketplace/screens/ListingDetailScreen';
+import { ListingEditorScreen } from '@/features/marketplace/screens/ListingEditorScreen';
+import { MarketHomeScreen } from '@/features/marketplace/screens/MarketHomeScreen';
+import { SavedListingsScreen } from '@/features/marketplace/screens/SavedListingsScreen';
+import { SellerScreen } from '@/features/marketplace/screens/SellerScreen';
+import { ShopScreen } from '@/features/marketplace/screens/ShopScreen';
 import { PostEditorScreen } from '@/features/feed/screens/PostEditorScreen';
 import { MemberProfileScreen } from '@/features/members/screens/MemberProfileScreen';
 import { MembersScreen } from '@/features/members/screens/MembersScreen';
@@ -35,7 +41,7 @@ import { useStackOptions } from './options';
 
 const Stack = createNativeStackNavigator<CommunityStackParamList>();
 
-type StackRoot = 'Feed' | 'CommunityHome';
+type StackRoot = 'Feed' | 'CommunityHome' | 'Market';
 
 /**
  * A tab that shows the current community (from CurrentCommunityProvider,
@@ -63,6 +69,8 @@ function CommunityTab({ root }: { root: StackRoot }) {
 export const HomeNavigator = () => <CommunityTab root="Feed" />;
 /** Communities tab: the current community's hub (sections, announcements, events). */
 export const CommunityHubNavigator = () => <CommunityTab root="CommunityHome" />;
+/** Market tab: the current community's marketplace (per community, decision D1). */
+export const MarketNavigator = () => <CommunityTab root="Market" />;
 
 function CommunityStack({ community, root }: { community: MyCommunity; root: StackRoot }) {
   const screenOptions = useStackOptions();
@@ -133,6 +141,23 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         options={{ title: 'Edit community', presentation: 'modal' }}
       />
       <Stack.Screen name="MemberProfile" component={MemberProfileScreen} options={{ title: 'Member' }} />
+      <Stack.Screen
+        name="Market"
+        component={MarketHomeScreen}
+        options={{ headerShown: false, title: 'Market' }}
+      />
+      <Stack.Screen name="Listing" component={ListingDetailScreen} options={{ title: '' }} />
+      <Stack.Screen name="Seller" component={SellerScreen} options={{ title: 'Shop' }} />
+      <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Your shop' }} />
+      <Stack.Screen
+        name="ListingEditor"
+        component={ListingEditorScreen}
+        options={({ route }) => ({
+          title: route.params?.listingId ? 'Edit listing' : 'New listing',
+          presentation: 'modal',
+        })}
+      />
+      <Stack.Screen name="SavedListings" component={SavedListingsScreen} options={{ title: 'Saved' }} />
       <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
       <Stack.Screen
         name="AdminMembers"
