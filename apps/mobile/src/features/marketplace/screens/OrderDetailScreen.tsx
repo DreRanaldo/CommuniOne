@@ -1,10 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OrderDetail } from '@communione/services';
-import { useCallback, useRef } from 'react';
+import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import { Button, Card, ErrorState, Icon, LoadingState, Screen, Text } from '@/components';
-import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles } from '@/theme';
 import type { CommunityStackParamList } from '@/types/navigation';
@@ -23,26 +22,37 @@ export function OrderDetailScreen({ navigation, route }: Props) {
   const styles = useStyles();
   const { orders } = useServices();
   const { orderId } = route.params;
-  const load = useCallback(() => orders.order(orderId), [orders, orderId]);
-  const detail = useAsync(load);
-  const { reload } = detail;
-  const firstFocus = useRef(true);
+  // Refreshed in place after every action (the screen keeps showing the
+  // previous state, and any confirmation, until the new one arrives).
+  const [detail, setDetail] = useState<{ data: OrderDetail | null; error: unknown }>({
+    data: null,
+    error: null,
+  });
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((a) => a + 1), []);
   useFocusEffect(
     useCallback(() => {
-      if (firstFocus.current) firstFocus.current = false;
-      else reload();
-    }, [reload]),
+      let current = true;
+      orders.order(orderId).then(
+        (data) => current && setDetail({ data, error: null }),
+        (error: unknown) => current && setDetail((d) => ({ data: d.data, error })),
+      );
+      return () => {
+        current = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- `attempt` deliberately forces a reload
+    }, [orders, orderId, attempt]),
   );
 
-  if (detail.status === 'loading') return <LoadingState label="Loading the order…" />;
-  if (detail.status === 'error')
+  if (detail.error && !detail.data)
     return (
       <ErrorState
         title="This order could not be loaded"
         message={orderError(detail.error)}
-        onRetry={detail.reload}
+        onRetry={reload}
       />
     );
+  if (!detail.data) return <LoadingState label="Loading the order…" />;
   const d: OrderDetail = detail.data;
   const o = d.order;
   const contact = o.contact_snapshot as { name?: string; phone?: string } | null;
@@ -80,9 +90,38 @@ export function OrderDetailScreen({ navigation, route }: Props) {
         >{`Placed ${new Date(o.created_at).toLocaleString()} · ${FULFILLMENT_LABELS[o.fulfillment_method] ?? o.fulfillment_method}`}</Text>
       </Card>
 
+      {d.pickupCode && o.status === 'ready_for_pickup' ? (
+        <Card testID="order-pickup-code">
+          <Text variant="label">Your pickup code</Text>
+          <Text variant="display" accessibilityLabel={`Pickup code ${d.pickupCode.split('').join(' ')}`}>
+            {d.pickupCode}
+          </Text>
+          <Text variant="caption" tone="muted">
+            Tell the seller this code when you collect your order. Do not share it before then.
+          </Text>
+        </Card>
+      ) : null}
+      {d.shipment ? (
+        <Card testID="order-shipment">
+          <Text variant="label">Delivery</Text>
+          {d.shipment.courier_name ? <Text>{`Courier: ${d.shipment.courier_name}`}</Text> : null}
+          {d.shipment.tracking_reference ? (
+            <Text>{`Tracking reference: ${d.shipment.tracking_reference}`}</Text>
+          ) : null}
+          {d.shipment.tracking_url ? (
+            <Text tone="muted" variant="caption">
+              {d.shipment.tracking_url}
+            </Text>
+          ) : null}
+          <Text variant="caption" tone="muted">
+            As recorded by the seller. CommuniOne does not track deliveries live.
+          </Text>
+        </Card>
+      ) : null}
+
       <OrderActions
         detail={d}
-        onChanged={detail.reload}
+        onChanged={reload}
         onPay={(checkoutId) => navigation.navigate('Payment', { checkoutId })}
       />
 

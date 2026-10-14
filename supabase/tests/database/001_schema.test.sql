@@ -119,6 +119,8 @@ select results_eq(
      ('order_events', 'order_events_order_id_fkey', 'orders', 'r'),
      ('order_items', 'order_items_listing_id_fkey', 'listings', 'n'),
      ('order_items', 'order_items_order_id_fkey', 'orders', 'r'),
+     ('order_pickup_codes', 'order_pickup_codes_order_id_fkey', 'orders', 'r'),
+     ('order_shipments', 'order_shipments_order_id_fkey', 'orders', 'r'),
      ('orders', 'orders_buyer_user_id_fkey', 'profiles', 'n'),
      ('orders', 'orders_checkout_fkey', 'checkouts', 'r'),
      ('orders', 'orders_seller_profile_id_fkey', 'seller_profiles', 'n'),

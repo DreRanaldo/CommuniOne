@@ -27,6 +27,7 @@ export type Checkout = Tables<'checkouts'>;
 export type Order = Tables<'orders'>;
 export type OrderItem = Tables<'order_items'>;
 export type OrderEvent = Tables<'order_events'>;
+export type OrderShipment = Tables<'order_shipments'>;
 
 export interface AddressInput {
   label?: string | null;
@@ -98,6 +99,10 @@ export interface OrderDetail {
   checkout: Checkout | null;
   /** The caller's role in this order. */
   role: 'buyer' | 'seller';
+  /** What the seller recorded about the delivery (no invented tracking). */
+  shipment: OrderShipment | null;
+  /** The buyer's pickup code (buyer only, once the order is ready). */
+  pickupCode: string | null;
 }
 
 const PHONE = /^\+?[0-9 ()-]{7,20}$/;
@@ -176,6 +181,14 @@ function addressColumns(input: Partial<AddressInput>) {
 
 export function ordersService(ctx: ServiceContext) {
   const { db } = ctx;
+  type StepFn = 'order_accept' | 'order_reject' | 'order_start_processing' | 'order_ready_for_pickup' | 'order_dispatch'
+    | 'order_mark_delivered' | 'order_mark_delivery_failed' | 'order_seller_cancel' | 'order_buyer_cancel' | 'order_confirm_received';
+  // Arguments are validated inside run(), so a bad input is a rejected promise.
+  const step = (operation: string, fn: StepFn, args: () => Record<string, unknown>) =>
+    ctx.run(operation, async () => {
+      await ctx.requireUserId();
+      unwrap(await db.rpc(fn, args() as never));
+    });
 
   return {
     // ---- Addresses (owner-only) ----
@@ -233,7 +246,8 @@ export function ordersService(ctx: ServiceContext) {
         const sellerProfileId = v.uuid(input.sellerProfileId, 'sellerProfileId');
         const values = {
           fee_minor: v.int(input.feeMinor, 'feeMinor', 0, 100_000_000),
-          parishes: v.enumList(input.parishes, 'parishes', PARISHES),
+          // An empty list means every parish.
+          parishes: Array.isArray(input.parishes) && input.parishes.length === 0 ? [] : v.enumList(input.parishes, 'parishes', PARISHES),
           estimated_days_min: input.estimatedDaysMin == null ? null : v.int(input.estimatedDaysMin, 'estimatedDaysMin', 0, 60),
           estimated_days_max: input.estimatedDaysMax == null ? null : v.int(input.estimatedDaysMax, 'estimatedDaysMax', 0, 60),
           active: v.bool(input.active, 'active'),
@@ -352,19 +366,84 @@ export function ordersService(ctx: ServiceContext) {
         const userId = await ctx.requireUserId();
         const id = v.uuid(orderId, 'orderId');
         const order = unwrapOne(await db.from('orders').select('*').eq('id', id).maybeSingle(), 'Order not found.');
-        const [items, events, checkout] = await Promise.all([
+        const buyer = order.buyer_user_id === userId;
+        const [items, events, checkout, shipment, code] = await Promise.all([
           db.from('order_items').select('*').eq('order_id', id),
           db.from('order_events').select('*').eq('order_id', id).order('created_at'),
           db.from('checkouts').select('*').eq('id', order.checkout_id).maybeSingle(),
+          db.from('order_shipments').select('*').eq('order_id', id).maybeSingle(),
+          buyer
+            ? db.from('order_pickup_codes').select('code, used_at').eq('order_id', id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ]);
+        const pickup = unwrap(code) as { code: string; used_at: string | null } | null;
         return {
           order,
           items: unwrap(items) ?? [],
           events: unwrap(events) ?? [],
           checkout: unwrap(checkout),
-          role: order.buyer_user_id === userId ? 'buyer' : 'seller',
+          role: buyer ? 'buyer' : 'seller',
+          shipment: unwrap(shipment),
+          pickupCode: pickup && !pickup.used_at ? pickup.code : null,
         };
       });
+    },
+
+    // ---- Fulfillment (Stages G-H): every step is checked by the server ----
+    /** Seller: accept a paid order. */
+    accept(orderId: string): Promise<void> {
+      return step('orders.accept', 'order_accept', () => ({ p_order_id: v.uuid(orderId, 'orderId') }));
+    },
+    /** Seller: decline a paid order; the buyer is refunded in full and the stock returns. */
+    reject(orderId: string, reason: string): Promise<void> {
+      return step('orders.reject', 'order_reject', () => ({ p_order_id: v.uuid(orderId, 'orderId'), p_reason: v.text(reason, 'reason', { min: 3, max: 500 }) }));
+    },
+    startProcessing(orderId: string): Promise<void> {
+      return step('orders.startProcessing', 'order_start_processing', () => ({ p_order_id: v.uuid(orderId, 'orderId') }));
+    },
+    /** Seller (pickup orders): ready; the buyer receives a pickup code. */
+    readyForPickup(orderId: string, note?: string | null): Promise<void> {
+      return step('orders.readyForPickup', 'order_ready_for_pickup', () => ({
+        p_order_id: v.uuid(orderId, 'orderId'), p_note: v.optionalText(note, 'note', { max: 500 }) ?? undefined,
+      }));
+    },
+    /** Seller: completes a pickup with the buyer's code. */
+    confirmPickup(orderId: string, code: string): Promise<'completed' | 'wrong_code'> {
+      return ctx.run('orders.confirmPickup', async () => {
+        await ctx.requireUserId();
+        const result = unwrap(await db.rpc('order_confirm_pickup', {
+          p_order_id: v.uuid(orderId, 'orderId'),
+          p_code: v.text(code, 'code', { max: 6, pattern: /^[0-9]{6}$/, patternMessage: 'Enter the 6-digit code.' }),
+        }));
+        return result === 'completed' ? 'completed' : 'wrong_code';
+      });
+    },
+    /** Seller (delivery orders): sent, with the courier's details if any. */
+    dispatch(orderId: string, details: { courierName?: string | null; trackingReference?: string | null; trackingUrl?: string | null } = {}): Promise<void> {
+      return step('orders.dispatch', 'order_dispatch', () => ({
+        p_order_id: v.uuid(orderId, 'orderId'),
+        p_courier_name: v.optionalText(details.courierName, 'courierName', { max: 80 }) ?? undefined,
+        p_tracking_reference: v.optionalText(details.trackingReference, 'trackingReference', { max: 120 }) ?? undefined,
+        p_tracking_url: v.optionalText(details.trackingUrl, 'trackingUrl', { max: 500, pattern: /^https:\/\/\S{4,}$/, patternMessage: 'A tracking link must start with https://' }) ?? undefined,
+      }));
+    },
+    markDelivered(orderId: string): Promise<void> {
+      return step('orders.markDelivered', 'order_mark_delivered', () => ({ p_order_id: v.uuid(orderId, 'orderId') }));
+    },
+    markDeliveryFailed(orderId: string, reason: string): Promise<void> {
+      return step('orders.markDeliveryFailed', 'order_mark_delivery_failed', () => ({ p_order_id: v.uuid(orderId, 'orderId'), p_reason: v.text(reason, 'reason', { min: 3, max: 500 }) }));
+    },
+    /** Seller: cannot complete an accepted order; the buyer is refunded in full. */
+    sellerCancel(orderId: string, reason: string): Promise<void> {
+      return step('orders.sellerCancel', 'order_seller_cancel', () => ({ p_order_id: v.uuid(orderId, 'orderId'), p_reason: v.text(reason, 'reason', { min: 3, max: 500 }) }));
+    },
+    /** Buyer: cancel a paid order before the seller accepts it (full refund). */
+    buyerCancel(orderId: string, reason?: string | null): Promise<void> {
+      return step('orders.buyerCancel', 'order_buyer_cancel', () => ({ p_order_id: v.uuid(orderId, 'orderId'), p_reason: v.optionalText(reason, 'reason', { max: 500 }) ?? undefined }));
+    },
+    /** Buyer: confirm a delivered order arrived. */
+    confirmReceived(orderId: string): Promise<void> {
+      return step('orders.confirmReceived', 'order_confirm_received', () => ({ p_order_id: v.uuid(orderId, 'orderId') }));
     },
   };
 }

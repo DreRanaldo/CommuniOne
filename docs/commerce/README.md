@@ -34,7 +34,7 @@ It is built in small stages (B to M), each tested and approved before the next.
 | Payment provider: real sandbox | **Waiting for merchant application and sandbox credentials** |
 | Live payments | **Waiting for merchant approval and owner decisions**; not operational |
 | Reconciliation, payment state machine, ledger | **Implemented and tested (F)** against the test provider; reconcile schedule not deployed |
-| Seller fulfillment, delivery, pickup | Not yet implemented (G, H) |
+| Seller fulfillment, delivery, pickup | **Implemented and tested (G, H)**: see [`stage-g-h-fulfillment.md`](stage-g-h-fulfillment.md). Tracking is seller-recorded only. |
 | Refunds and cancellations | Not yet implemented (I). Real refunds depend on the provider. |
 | Service bookings | Not yet implemented (J) |
 | Seller payouts | **Blocked on provider support and owner decisions** (K) |

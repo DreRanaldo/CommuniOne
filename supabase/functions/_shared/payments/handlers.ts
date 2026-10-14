@@ -108,8 +108,9 @@ export async function handleWebhook(ctx: PaymentsContext, req: Request): Promise
 }
 
 // ---------------------------------------------------------------------------
-// payments-reconcile: scheduled; asks the provider about open payments and
-// expires unpaid checkouts (releasing their reservations).
+// payments-reconcile: scheduled; asks the provider about open payments,
+// expires unpaid checkouts (releasing their reservations), refunds paid
+// orders nobody accepted in 48 hours and completes delivered orders after 7 days.
 // ---------------------------------------------------------------------------
 export async function handleReconcile(ctx: PaymentsContext, req: Request): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
@@ -140,7 +141,15 @@ export async function handleReconcile(ctx: PaymentsContext, req: Request): Promi
     outcomes[key] = (outcomes[key] ?? 0) + 1;
   }
   const expired = await ctx.db.rpc('expire_checkouts');
-  return json(200, { outcomes, expiredCheckouts: expired.error ? null : expired.data });
+  // Order housekeeping: unaccepted paid orders are refunded; delivered ones complete.
+  const unaccepted = await ctx.db.rpc('expire_unaccepted_orders');
+  const completed = await ctx.db.rpc('complete_delivered_orders');
+  return json(200, {
+    outcomes,
+    expiredCheckouts: expired.error ? null : expired.data,
+    unacceptedOrders: unaccepted.error ? null : unaccepted.data,
+    completedOrders: completed.error ? null : completed.data,
+  });
 }
 
 // ---------------------------------------------------------------------------

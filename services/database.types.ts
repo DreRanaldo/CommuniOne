@@ -997,16 +997,56 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"orders": {
+                },"order_pickup_codes": {
                   Row: {
-                    "address_snapshot": Json | null,"buyer_user_id": string | null,"checkout_id": string,"community_id": string,"contact_snapshot": NonNullable<Json>,"created_at": string,"currency": string,"delivery_minor": number,"estimated_days_max": number | null,"estimated_days_min": number | null,"fulfillment_method": string,"id": string,"seller_name": string,"seller_profile_id": string | null,"seller_user_id": string | null,"status": string,"status_reason": string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at": string
+                    "code": string,"created_at": string,"failed_attempts": number,"order_id": string,"used_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id": string,"community_id": string,"contact_snapshot": NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor": number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method": string,"id"?: string,"seller_name": string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at"?: string
+                    "code": string,"created_at"?: string,"failed_attempts"?: number,"order_id": string,"used_at"?: string | null
                   }
                   Update: {
-                    "address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id"?: string,"community_id"?: string,"contact_snapshot"?: NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor"?: number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method"?: string,"id"?: string,"seller_name"?: string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor"?: number,"tax_minor"?: number,"total_minor"?: number,"updated_at"?: string
+                    "code"?: string,"created_at"?: string,"failed_attempts"?: number,"order_id"?: string,"used_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "order_pickup_codes_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: true
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"order_shipments": {
+                  Row: {
+                    "attempts": number,"courier_name": string | null,"delivered_at": string | null,"dispatched_at": string | null,"failed_at": string | null,"failure_reason": string | null,"order_id": string,"tracking_reference": string | null,"tracking_url": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"courier_name"?: string | null,"delivered_at"?: string | null,"dispatched_at"?: string | null,"failed_at"?: string | null,"failure_reason"?: string | null,"order_id": string,"tracking_reference"?: string | null,"tracking_url"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "attempts"?: number,"courier_name"?: string | null,"delivered_at"?: string | null,"dispatched_at"?: string | null,"failed_at"?: string | null,"failure_reason"?: string | null,"order_id"?: string,"tracking_reference"?: string | null,"tracking_url"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "order_shipments_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: true
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"orders": {
+                  Row: {
+                    "accepted_at": string | null,"address_snapshot": Json | null,"buyer_user_id": string | null,"checkout_id": string,"community_id": string,"completed_at": string | null,"contact_snapshot": NonNullable<Json>,"created_at": string,"currency": string,"delivery_minor": number,"estimated_days_max": number | null,"estimated_days_min": number | null,"fulfillment_method": string,"id": string,"seller_name": string,"seller_profile_id": string | null,"seller_user_id": string | null,"status": string,"status_reason": string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "accepted_at"?: string | null,"address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id": string,"community_id": string,"completed_at"?: string | null,"contact_snapshot": NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor": number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method": string,"id"?: string,"seller_name": string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "accepted_at"?: string | null,"address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id"?: string,"community_id"?: string,"completed_at"?: string | null,"contact_snapshot"?: NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor"?: number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method"?: string,"id"?: string,"seller_name"?: string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor"?: number,"tax_minor"?: number,"total_minor"?: number,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1609,6 +1649,9 @@ isOneToOne: false
               "active_alerts": number,"current_announcements": number,"document_count": number,"member_count": number,"posts_today": number,"upcoming_events": number
             }[]
                            },
+"complete_delivered_orders":
+{ Args: { "p_after"?: string }; Returns: number
+                           },
 "complete_document_upload":
 { Args: { "p_document_id": string }; Returns: {
               "archived_at": string | null,
@@ -1730,6 +1773,9 @@ isOneToOne: false
                            },
 "expire_invitations":
 { Args: Record<PropertyKey, never>; Returns: number
+                           },
+"expire_unaccepted_orders":
+{ Args: { "p_after"?: string }; Returns: number
                            },
 "get_community_member":
 { Args: { "p_community_id": string,"p_user_id": string }; Returns: {
@@ -2017,6 +2063,39 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "communities": number,"events_going": number,"member_since": string,"posts": number
             }[]
+                           },
+"order_accept":
+{ Args: { "p_order_id": string }; Returns: undefined
+                           },
+"order_buyer_cancel":
+{ Args: { "p_order_id": string,"p_reason"?: string }; Returns: undefined
+                           },
+"order_confirm_pickup":
+{ Args: { "p_code": string,"p_order_id": string }; Returns: string
+                           },
+"order_confirm_received":
+{ Args: { "p_order_id": string }; Returns: undefined
+                           },
+"order_dispatch":
+{ Args: { "p_courier_name"?: string,"p_order_id": string,"p_tracking_reference"?: string,"p_tracking_url"?: string }; Returns: undefined
+                           },
+"order_mark_delivered":
+{ Args: { "p_order_id": string }; Returns: undefined
+                           },
+"order_mark_delivery_failed":
+{ Args: { "p_order_id": string,"p_reason": string }; Returns: undefined
+                           },
+"order_ready_for_pickup":
+{ Args: { "p_note"?: string,"p_order_id": string }; Returns: undefined
+                           },
+"order_reject":
+{ Args: { "p_order_id": string,"p_reason": string }; Returns: undefined
+                           },
+"order_seller_cancel":
+{ Args: { "p_order_id": string,"p_reason": string }; Returns: undefined
+                           },
+"order_start_processing":
+{ Args: { "p_order_id": string }; Returns: undefined
                            },
 "payment_apply_event":
 { Args: { "p_amount_minor": number,"p_currency": string,"p_occurred_at": string,"p_provider": string,"p_provider_event_id": string,"p_provider_reference": string,"p_raw_sha256": string,"p_source": string,"p_status": string }; Returns: string

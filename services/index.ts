@@ -122,6 +122,6 @@ export { CART_MAX_QUANTITY, type CartIssue, type CartLine, type CartQuote } from
 export {
   FULFILLMENT, ORDER_TERMS_VERSION, PARISHES,
   type Address, type AddressInput, type Checkout, type CheckoutInput, type CheckoutPreview, type DeliveryOption,
-  type Fulfillment, type Order, type OrderDetail, type OrderEvent, type OrderItem, type Parish, type PreviewLine, type PreviewSeller,
+  type Fulfillment, type Order, type OrderDetail, type OrderEvent, type OrderItem, type OrderShipment, type Parish, type PreviewLine, type PreviewSeller,
 } from './orders/index.ts';
 export { type CheckoutPaymentState, type PaymentSession, type PaymentStatus } from './payments/index.ts';

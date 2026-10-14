@@ -119,6 +119,8 @@ const order = (status = 'paid'): Order =>
     estimated_days_min: null,
     estimated_days_max: null,
     status_reason: null,
+    accepted_at: null,
+    completed_at: null,
     created_at: '2026-10-14T10:00:00Z',
     updated_at: '2026-10-14T10:00:00Z',
   }) as Order;
@@ -231,6 +233,8 @@ describe('payment', () => {
       events: [],
       checkout: { id: CHECKOUT, status: 'awaiting_payment' } as OrderDetail['checkout'],
       role: 'buyer',
+      shipment: null,
+      pickupCode: null,
     });
     return app;
   }
@@ -309,6 +313,8 @@ describe('orders', () => {
       items: [item],
       role: 'buyer',
       checkout: null,
+      shipment: null,
+      pickupCode: null,
       events: [
         {
           id: 'e1',
@@ -341,5 +347,100 @@ describe('orders', () => {
     expect(estimateText({ min: 1, max: 2 })).toBe('1-2 days');
     expect(estimateText({ min: null, max: 1 })).toBe('1 day');
     expect(estimateText(null)).toBeNull();
+  });
+});
+
+describe('fulfillment', () => {
+  const detail = (
+    status: string,
+    role: 'buyer' | 'seller',
+    over: Partial<OrderDetail> = {},
+  ): OrderDetail => ({
+    order: { ...order(status), fulfillment_method: 'pickup' },
+    items: [item],
+    events: [],
+    checkout: null,
+    role,
+    shipment: null,
+    pickupCode: null,
+    ...over,
+  });
+
+  async function openSale(d: OrderDetail) {
+    const app = await openMarket();
+    const s = app.dependencies.services;
+    jest.spyOn(s.orders, 'myOrders').mockResolvedValue({ items: [], nextCursor: null });
+    jest
+      .spyOn(s.orders, 'sellerOrders')
+      .mockResolvedValue({ items: [{ ...d.order, items: [item] }], nextCursor: null });
+    const load = jest.spyOn(s.orders, 'order').mockResolvedValue(d);
+    await app.user.press(screen.getByTestId('market-orders'));
+    await app.user.press(within(await screen.findByTestId('orders-side')).getByText('Sales'));
+    await app.user.press(await screen.findByTestId(`order-row-${ORDER}`));
+    await screen.findByTestId('order-detail');
+    return { ...app, s, load };
+  }
+
+  test('the seller accepts a paid order, or declines it with a reason', async () => {
+    const { user, s, load } = await openSale(detail('paid', 'seller'));
+    expect(screen.getByTestId('order-contact')).toHaveTextContent(/876 555 0101/);
+    const accept = jest.spyOn(s.orders, 'accept').mockResolvedValue();
+    await user.press(screen.getByTestId('order-accept'));
+    expect(accept).toHaveBeenCalledWith(ORDER);
+    load.mockResolvedValue(detail('paid', 'seller'));
+    const reject = jest.spyOn(s.orders, 'reject').mockResolvedValue();
+    await user.press(await screen.findByTestId('order-reject'));
+    await user.type(screen.getByTestId('order-form-text'), 'Sold out');
+    await user.press(screen.getByTestId('order-form-submit'));
+    expect(reject).toHaveBeenCalledWith(ORDER, 'Sold out');
+  });
+
+  test('pickup handover: a wrong code is refused; the right one completes the order', async () => {
+    const { user, s } = await openSale(detail('ready_for_pickup', 'seller'));
+    const confirm = jest
+      .spyOn(s.orders, 'confirmPickup')
+      .mockResolvedValueOnce('wrong_code')
+      .mockResolvedValueOnce('completed');
+    await user.press(screen.getByTestId('order-pickup'));
+    await user.type(screen.getByTestId('order-form-text'), '111111');
+    await user.press(screen.getByTestId('order-form-submit'));
+    expect(await screen.findByTestId('order-action-error')).toHaveTextContent(/not right/);
+    await user.clear(screen.getByTestId('order-form-text'));
+    await user.type(screen.getByTestId('order-form-text'), '123456');
+    await user.press(screen.getByTestId('order-form-submit'));
+    expect(await screen.findByTestId('order-action-notice')).toHaveTextContent(/complete/);
+    expect(confirm).toHaveBeenLastCalledWith(ORDER, '123456');
+  });
+
+  test('the buyer sees the pickup code and what the seller recorded about a delivery', async () => {
+    const app = await openMarket();
+    const s = app.dependencies.services;
+    jest
+      .spyOn(s.orders, 'myOrders')
+      .mockResolvedValue({ items: [{ ...order('ready_for_pickup'), items: [item] }], nextCursor: null });
+    const load = jest
+      .spyOn(s.orders, 'order')
+      .mockResolvedValue(detail('ready_for_pickup', 'buyer', { pickupCode: '482913' }));
+    await app.user.press(screen.getByTestId('market-orders'));
+    await app.user.press(await screen.findByTestId(`order-row-${ORDER}`));
+    expect(await screen.findByTestId('order-pickup-code')).toHaveTextContent(/482913/);
+    expect(screen.queryByTestId('order-contact')).toBeNull();
+    expect(load).toHaveBeenCalledWith(ORDER);
+  });
+
+  test('dispatch sends only the courier details the seller typed', async () => {
+    const d = detail('accepted', 'seller');
+    d.order = { ...d.order, fulfillment_method: 'seller_delivery' };
+    const { user, s } = await openSale(d);
+    const dispatch = jest.spyOn(s.orders, 'dispatch').mockResolvedValue();
+    await user.press(screen.getByTestId('order-dispatch'));
+    await user.type(screen.getByTestId('order-form-courier'), 'Knutsford Express');
+    await user.type(screen.getByTestId('order-form-tracking'), 'KX1');
+    await user.press(screen.getByTestId('order-form-submit'));
+    expect(dispatch).toHaveBeenCalledWith(ORDER, {
+      courierName: 'Knutsford Express',
+      trackingReference: 'KX1',
+      trackingUrl: null,
+    });
   });
 });
