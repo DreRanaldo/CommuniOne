@@ -85,7 +85,7 @@ the time, and the app shows such an alert as **Ended**.
 **your own**. Since RN-16 (migration 30), taking a published alert down (end,
 cancel) or archiving it needs `alerts.manage` (Owners and Admins by default):
 authors without it keep their drafts and can correct their published text only.
-Members see none of these controls. Alerts are never deleted.
+Members (who may send alerts since migration 31) get only "Edit" on their own published alerts, and the "Send a quick alert" button (see [`quick-alerts.md`](quick-alerts.md)). Alerts are never deleted.
 
 Nothing is optimistic: each action waits for the server, then shows the result
 ("Issued. Members can see it now.", "Ended.", "Cancelled.", …). After a refusal

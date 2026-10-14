@@ -4,6 +4,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { createServices, ErrorCode, type FileUploader, type Services } from '@communione/services';
 import { expoLinkSource, type LinkSource } from './links';
+import { expoLocationSource, type LocationSource } from './location';
 import { logger } from './logger';
 import { expoMediaPicker, type MediaPicker } from './media';
 import { createSessionEvents, type SessionEvents } from './sessionEvents';
@@ -15,6 +16,8 @@ export interface Dependencies {
   links: LinkSource;
   sessionEvents: SessionEvents;
   media: MediaPicker;
+  /** The device position, read only when the user asks to share it. */
+  location: LocationSource;
 }
 
 /**
@@ -37,6 +40,7 @@ export function createDependencies(
   media: MediaPicker = expoMediaPicker,
   /** Document upload transport (with progress); default: supabase-js. */
   uploadFile?: FileUploader,
+  location: LocationSource = expoLocationSource,
 ): Dependencies {
   const sessionEvents = createSessionEvents();
   const services = createServices(supabase, {
@@ -47,7 +51,7 @@ export function createDependencies(
     },
     uploadFile,
   });
-  return { supabase, services, links, sessionEvents, media };
+  return { supabase, services, links, sessionEvents, media, location };
 }
 
 export function DependenciesProvider({ value, children }: { value: Dependencies; children: ReactNode }) {

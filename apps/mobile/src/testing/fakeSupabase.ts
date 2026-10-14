@@ -6,6 +6,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { UploadError, type FileUploader } from '@communione/services';
 import type { LinkSource } from '@/lib/links';
+import type { CurrentPosition, LocationSource } from '@/lib/location';
 import type { MediaPicker, PickedFile, PickedImage } from '@/lib/media';
 import type { AppSupabaseClient } from '@/lib/supabase';
 
@@ -148,6 +149,8 @@ const MEMBER_PERMISSIONS = [
   'members.view',
   'roles.view',
   'alerts.view',
+  // Migration 31: members may send alerts (emergencies still need alerts.manage).
+  'alerts.create',
   'announcements.view',
   'documents.view',
   'events.view',
@@ -161,7 +164,6 @@ const MEMBER_PERMISSIONS = [
 ];
 const MODERATION = ['posts.moderate', 'comments.moderate'];
 const MANAGEMENT = [
-  'alerts.create',
   'alerts.manage',
   'announcements.create',
   'announcements.manage',
@@ -641,6 +643,21 @@ export function fakeSupabase(options: FakeOptions = {}) {
         }
         if (status === 'published' && !futureExpiry(values?.expires_at))
           return invalid('expires_at must be in the future when publishing');
+        // Migration 31: location complete and in range; the photo is the sender's own upload here.
+        const lat = values?.latitude as number | null | undefined;
+        const lng = values?.longitude as number | null | undefined;
+        if ((lat == null) !== (lng == null) || (lat != null && (Math.abs(lat) > 90 || Math.abs(lng!) > 180)))
+          return {
+            data: null,
+            error: { code: '23514', message: 'new row violates check constraint "alerts_location_complete"' },
+          };
+        const imagePath = (values?.image_path as string | null | undefined) ?? null;
+        if (imagePath) {
+          const [folderCommunity, folderUser] = imagePath.split('/');
+          if (folderCommunity !== communityId || folderUser !== user)
+            return denied('the photo must be your own upload for this community');
+          if (!alertImageFiles.has(imagePath)) return invalid('the photo was not uploaded');
+        }
         const row: AlertRow = {
           ...makeAlert(communityId, ++alertCount),
           title: String(values?.title),
@@ -655,6 +672,10 @@ export function fakeSupabase(options: FakeOptions = {}) {
           published_by: status === 'published' ? user : null,
           created_at: now,
           updated_at: now,
+          latitude: lat ?? null,
+          longitude: lng ?? null,
+          location_accuracy_m: (values?.location_accuracy_m as number | null | undefined) ?? null,
+          image_path: imagePath,
         };
         content[communityId] = {
           ...content[communityId],
@@ -1353,6 +1374,42 @@ export function fakeSupabase(options: FakeOptions = {}) {
       error: null,
     })),
   };
+  // ---- Storage: the private alert-images bucket (migration 31) ----
+  const alertImageFiles = new Map<string, string>(); // path → uploader
+  const allAlerts = () => Object.values(content).flatMap((c) => c.alerts ?? []) as AlertRow[];
+  const alertImagesBucket = {
+    upload: jest.fn(async (path: string, _body: unknown, _options?: unknown) => {
+      if (offline || uploadFailures > 0) {
+        if (uploadFailures > 0) uploadFailures -= 1;
+        return { data: null, error: { message: 'Network request failed' } };
+      }
+      const user = me();
+      const [communityId, owner] = path.split('/');
+      if (!user || owner !== user || !permissionsIn(communityId ?? '').includes('alerts.create'))
+        return {
+          data: null,
+          error: { message: 'new row violates row-level security policy', statusCode: '403' },
+        };
+      alertImageFiles.set(path, user);
+      return { data: { path }, error: null };
+    }),
+    remove: jest.fn(async (paths: string[]) => {
+      // Policy: your own files, only while no alert uses them.
+      for (const path of paths)
+        if (alertImageFiles.get(path) === me() && !allAlerts().some((a) => a.image_path === path))
+          alertImageFiles.delete(path);
+      return { data: [], error: null };
+    }),
+    // private.can_read_alert_image_object: whoever can see an alert using it, or the uploader.
+    createSignedUrl: jest.fn(async (path: string, seconds: number) => {
+      const used = allAlerts().find((a) => a.image_path === path);
+      const readable =
+        alertImageFiles.has(path) && ((used && canViewAlert(used)) || alertImageFiles.get(path) === me());
+      return readable
+        ? { data: { signedUrl: `https://storage.test/alert-images/${path}?expires=${seconds}` }, error: null }
+        : { data: null, error: { message: 'Object not found', statusCode: '404' } };
+    }),
+  };
   // ---- Storage: the public community-media bucket (community managers only) ----
   const mediaFiles = new Set<string>();
   /** community.update (RLS on communities and the community-media storage policies). */
@@ -1386,9 +1443,11 @@ export function fakeSupabase(options: FakeOptions = {}) {
           ? postImagesBucket
           : bucket === 'documents'
             ? documentsBucket
-            : bucket === 'stories'
-              ? storiesBucket
-              : storageBucket,
+            : bucket === 'alert-images'
+              ? alertImagesBucket
+              : bucket === 'stories'
+                ? storiesBucket
+                : storageBucket,
     ),
   };
   if (options.profile?.avatar_path) files.add(options.profile.avatar_path);
@@ -2733,6 +2792,8 @@ export function fakeSupabase(options: FakeOptions = {}) {
     storyFiles,
     storyViews,
     storiesStorage: storiesBucket,
+    /** Photos in the private alert-images bucket (path → uploader). */
+    alertImageFiles,
     /** Files in the private documents bucket (path → stored size and type). */
     documentFiles,
     documentsStorage: documentsBucket,
@@ -2815,7 +2876,13 @@ export function fakeMedia() {
   const queue: (PickedImage | null | Error)[] = [];
   const photoQueue: (PickedImage[] | Error)[] = [];
   const fileQueue: (PickedFile | null | Error)[] = [];
+  const cameraQueue: (PickedImage | null | Error)[] = [];
   const picker: MediaPicker = {
+    takePhoto: jest.fn(async () => {
+      const next = cameraQueue.length ? cameraQueue.shift() : null;
+      if (next instanceof Error) throw next;
+      return next ?? null;
+    }),
     pickDocument: jest.fn(async () => {
       const next = fileQueue.length ? fileQueue.shift() : null;
       if (next instanceof Error) throw next;
@@ -2844,6 +2911,28 @@ export function fakeMedia() {
     /** The next document picked (null = cancelled). */
     nextFile(file: PickedFile | null | Error) {
       fileQueue.push(file);
+    },
+    /** The next camera shot (null = cancelled, Error = permission refused). */
+    nextShot(photo: PickedImage | null | Error) {
+      cameraQueue.push(photo);
+    },
+  };
+}
+
+/** A scripted device position: each call to current() takes the next one (default: a fixed spot). */
+export function fakeLocation() {
+  const queue: (CurrentPosition | Error)[] = [];
+  const source: LocationSource = {
+    current: jest.fn(async () => {
+      const next = queue.length ? queue.shift()! : { latitude: 51.501364, longitude: -0.14189, accuracy: 12 };
+      if (next instanceof Error) throw next;
+      return next;
+    }),
+  };
+  return {
+    source,
+    next(position: CurrentPosition | Error) {
+      queue.push(position);
     },
   };
 }
@@ -2947,6 +3036,10 @@ export const makeAlert = (communityId: string, n: number, overrides: Record<stri
   archived_at: null as string | null,
   edited_at: null as string | null,
   updated_at: at(-n),
+  latitude: null as number | null,
+  longitude: null as number | null,
+  location_accuracy_m: null as number | null,
+  image_path: null as string | null,
   ...overrides,
 });
 

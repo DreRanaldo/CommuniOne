@@ -210,7 +210,7 @@ describe('multiple memberships and different roles across communities', () => {
     assert.equal(await check(c.B, 'posts.create'), true);
 
     const { data: inB } = await u.ownerA.client.rpc('my_community_permissions', { p_community_id: c.B.id });
-    assert.equal(inB.length, 14);
+    assert.equal(inB.length, 15); // Member template (alerts.create since migration 31)
   });
 
   test('being Owner in A gives no management power in B', async () => {

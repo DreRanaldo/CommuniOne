@@ -112,7 +112,7 @@ export function FeedScreen({ navigation }: Props) {
         onCompose={() => navigation.navigate('PostEditor')}
         onAddPhotos={() => navigation.navigate('PostEditor', { addPhotos: true })}
         onNewEvent={() => navigation.navigate('EventEditor')}
-        onNewAlert={() => navigation.navigate('AlertEditor')}
+        onNewAlert={() => navigation.navigate('QuickAlert')}
         stories={{
           groups: stories.groups,
           avatars: stories.avatars,

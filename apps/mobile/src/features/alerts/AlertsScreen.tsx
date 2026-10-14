@@ -52,6 +52,16 @@ export function AlertsScreen({ navigation }: Props) {
   const views = VIEWS.filter((v) => v.view !== 'drafts' || drafts);
   return (
     <View style={styles.container} testID="alerts-screen">
+      {canAuthor ? (
+        <View style={styles.quick}>
+          <Button
+            title="Send a quick alert"
+            variant="danger"
+            icon="megaphone-outline"
+            onPress={() => navigation.navigate('QuickAlert')}
+          />
+        </View>
+      ) : null}
       <View style={styles.tabs} accessibilityRole="tablist">
         {views.map((v) => (
           <Pressable
@@ -140,6 +150,7 @@ function AlertList({ view, onOpen }: { view: AlertView; onOpen(id: string): void
 }
 
 const useStyles = makeStyles((t) => ({
+  quick: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.md },
   container: { flex: 1, backgroundColor: t.colors.background },
   tabs: {
     flexDirection: 'row',

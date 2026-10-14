@@ -126,8 +126,8 @@ select results_eq(
 -- =========================================================================
 select pg_temp.login(pg_temp.fx('carol'));
 select throws_ok(
-  format($$ insert into public.alerts (community_id, title, body) values (%L, 'Hi', 'Member alert') $$, pg_temp.fx('A')),
-  '42501', null, '2. a normal member cannot create an alert'
+  format($$ insert into public.alerts (community_id, title, body, severity) values (%L, 'Hi', 'Member alert', 'emergency') $$, pg_temp.fx('A')),
+  '42501', null, '2. a normal member cannot create an emergency alert (members may send others since migration 31)'
 );
 select pg_temp.login(pg_temp.fx('grace'));
 select throws_ok(

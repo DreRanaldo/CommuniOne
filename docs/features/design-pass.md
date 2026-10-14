@@ -25,7 +25,7 @@ for an element of the mockups, the element was **left out rather than faked**
   The sheet offers:
   - Post, Photos and Story need `posts.create`;
   - Event needs `events.create`;
-  - Alert needs `alerts.create`;
+  - Quick alert needs `alerts.create`, which members hold since migration 31 (see [`quick-alerts.md`](quick-alerts.md));
   - Announcement needs `announcements.create`;
   - Document needs `documents.upload`;
   - Join a community and Create a community are always offered.

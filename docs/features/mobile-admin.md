@@ -35,7 +35,7 @@ Admin controls are kept apart from the normal member experience:
 | People | Members and requests | `members.approve`, `members.suspend`, `members.remove` or `roles.manage` |
 | People | Invite members | `members.invite` |
 | Content | New announcement | `announcements.create` |
-| Content | New alert | `alerts.create` |
+| Content | New alert (full editor) | `alerts.manage`. Members send quick alerts instead, see [`quick-alerts.md`](quick-alerts.md) |
 | Content | Manage events | `events.create` or `events.manage` |
 | Content | Manage documents | `documents.upload` or `documents.manage` |
 | Moderation | Hidden and deleted posts | `posts.moderate` |
