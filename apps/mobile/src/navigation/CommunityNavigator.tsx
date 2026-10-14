@@ -28,12 +28,16 @@ import { AddressEditorScreen } from '@/features/marketplace/screens/AddressEdito
 import { CartScreen } from '@/features/marketplace/screens/CartScreen';
 import { CheckoutScreen } from '@/features/marketplace/screens/CheckoutScreen';
 import { DeliverySettingsScreen } from '@/features/marketplace/screens/DeliverySettingsScreen';
+import { DisputeScreen } from '@/features/marketplace/screens/DisputeScreen';
+import { DisputesScreen } from '@/features/marketplace/screens/DisputesScreen';
 import { ListingDetailScreen } from '@/features/marketplace/screens/ListingDetailScreen';
 import { ListingEditorScreen } from '@/features/marketplace/screens/ListingEditorScreen';
 import { MarketHomeScreen } from '@/features/marketplace/screens/MarketHomeScreen';
 import { OrderDetailScreen } from '@/features/marketplace/screens/OrderDetailScreen';
 import { OrdersScreen } from '@/features/marketplace/screens/OrdersScreen';
 import { PaymentScreen } from '@/features/marketplace/screens/PaymentScreen';
+import { RefundRequestScreen } from '@/features/marketplace/screens/RefundRequestScreen';
+import { RefundSettingsScreen } from '@/features/marketplace/screens/RefundSettingsScreen';
 import { SavedListingsScreen } from '@/features/marketplace/screens/SavedListingsScreen';
 import { SellerScreen } from '@/features/marketplace/screens/SellerScreen';
 import { ShopScreen } from '@/features/marketplace/screens/ShopScreen';
@@ -175,6 +179,18 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         name="DeliverySettings"
         component={DeliverySettingsScreen}
         options={{ title: 'Delivery' }}
+      />
+      <Stack.Screen
+        name="RefundRequest"
+        component={RefundRequestScreen}
+        options={{ title: 'Request a refund' }}
+      />
+      <Stack.Screen name="Dispute" component={DisputeScreen} options={{ title: 'Dispute' }} />
+      <Stack.Screen name="Disputes" component={DisputesScreen} options={{ title: 'Marketplace disputes' }} />
+      <Stack.Screen
+        name="RefundSettings"
+        component={RefundSettingsScreen}
+        options={{ title: 'Refund settings' }}
       />
       <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
       <Stack.Screen

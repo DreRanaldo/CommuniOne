@@ -27,6 +27,7 @@ import { marketplaceService } from './marketplace/index.ts';
 import { cartService } from './cart/index.ts';
 import { ordersService } from './orders/index.ts';
 import { paymentsService } from './payments/index.ts';
+import { refundsService } from './refunds/index.ts';
 import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
@@ -61,6 +62,7 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     cart: cartService(ctx),
     orders: ordersService(ctx),
     payments: paymentsService(ctx),
+    refunds: refundsService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -125,3 +127,4 @@ export {
   type Fulfillment, type Order, type OrderDetail, type OrderEvent, type OrderItem, type OrderShipment, type Parish, type PreviewLine, type PreviewSeller,
 } from './orders/index.ts';
 export { type CheckoutPaymentState, type PaymentSession, type PaymentStatus } from './payments/index.ts';
+export { REFUND_STATUS_LABELS, type Dispute, type DisputeMessage, type Refund, type RefundPolicy } from './refunds/index.ts';

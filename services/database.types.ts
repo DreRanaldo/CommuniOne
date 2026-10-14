@@ -361,6 +361,82 @@ isOneToOne: false
       referencedColumns: ["id","community_id"]
     }
                   ]
+                },"dispute_messages": {
+                  Row: {
+                    "author_user_id": string | null,"body": string,"created_at": string,"dispute_id": string,"id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_user_id"?: string | null,"body": string,"created_at"?: string,"dispute_id": string,"id"?: string
+                  }
+                  Update: {
+                    "author_user_id"?: string | null,"body"?: string,"created_at"?: string,"dispute_id"?: string,"id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dispute_messages_author_user_id_fkey"
+      columns: ["author_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dispute_messages_dispute_id_fkey"
+      columns: ["dispute_id"]
+isOneToOne: false
+      referencedRelation: "disputes"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"disputes": {
+                  Row: {
+                    "buyer_user_id": string | null,"community_id": string,"created_at": string,"id": string,"order_id": string,"reason": string,"refund_id": string | null,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"seller_user_id": string | null,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "buyer_user_id"?: string | null,"community_id": string,"created_at"?: string,"id"?: string,"order_id": string,"reason": string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "buyer_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"id"?: string,"order_id"?: string,"reason"?: string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "disputes_buyer_user_id_fkey"
+      columns: ["buyer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disputes_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disputes_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: false
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disputes_refund_id_fkey"
+      columns: ["refund_id"]
+isOneToOne: false
+      referencedRelation: "refunds"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disputes_resolved_by_fkey"
+      columns: ["resolved_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disputes_seller_user_id_fkey"
+      columns: ["seller_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"document_folders": {
                   Row: {
                     "community_id": string,"created_at": string,"created_by": string | null,"id": string,"name": string,"parent_folder_id": string | null,"updated_at": string
@@ -1325,6 +1401,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"refund_policies": {
+                  Row: {
+                    "community_id": string,"policy_text": string | null,"request_window_days": number,"requests_enabled": boolean,"updated_at": string,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"policy_text"?: string | null,"request_window_days"?: number,"requests_enabled"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "community_id"?: string,"policy_text"?: string | null,"request_window_days"?: number,"requests_enabled"?: boolean,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "refund_policies_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: true
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refund_policies_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"refunds": {
                   Row: {
                     "amount_minor": number,"attempts": number,"booking_id": string | null,"buyer_user_id": string | null,"community_id": string,"created_at": string,"currency": string,"decided_by": string | null,"decision_note": string | null,"failure_code": string | null,"id": string,"kind": string,"order_id": string | null,"payment_id": string,"provider_refund_reference": string | null,"reason": string,"requested_by": string | null,"seller_user_id": string | null,"status": string,"succeeded_at": string | null,"updated_at": string
@@ -1765,6 +1867,18 @@ isOneToOne: false
 "delete_story":
 { Args: { "p_story_id": string }; Returns: boolean
                            },
+"dispute_add_message":
+{ Args: { "p_body": string,"p_dispute_id": string }; Returns: string
+                           },
+"dispute_open":
+{ Args: { "p_order_id": string,"p_reason": string }; Returns: string
+                           },
+"dispute_resolve":
+{ Args: { "p_amount_minor": number,"p_dispute_id": string,"p_note": string,"p_refund": boolean }; Returns: undefined
+                           },
+"dispute_withdraw":
+{ Args: { "p_dispute_id": string }; Returns: undefined
+                           },
 "expire_checkouts":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
@@ -2133,6 +2247,26 @@ isOneToOne: false
 "redeem_invitation":
 { Args: { "p_token": string }; Returns: {
               "community_id": string,"membership_id": string,"membership_status": string
+            }[]
+                           },
+"refund_apply_result":
+{ Args: { "p_failure_code": string,"p_provider_reference": string,"p_refund_id": string,"p_status": string }; Returns: string
+                           },
+"refund_decide":
+{ Args: { "p_amount_minor"?: number,"p_approve": boolean,"p_note"?: string,"p_refund_id": string }; Returns: undefined
+                           },
+"refund_policy_save":
+{ Args: { "p_community_id": string,"p_policy_text": string,"p_request_window_days": number,"p_requests_enabled": boolean }; Returns: undefined
+                           },
+"refund_request":
+{ Args: { "p_amount_minor"?: number,"p_order_id": string,"p_reason": string }; Returns: string
+                           },
+"refund_retry":
+{ Args: { "p_refund_id": string }; Returns: undefined
+                           },
+"refunds_claim":
+{ Args: { "p_limit"?: number }; Returns: {
+              "amount_minor": number,"currency": string,"provider": string,"provider_reference": string,"refund_id": string,"status": string
             }[]
                            },
 "revoke_invitation":

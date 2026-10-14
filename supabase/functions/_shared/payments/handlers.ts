@@ -221,3 +221,36 @@ ${button('succeeded', 'Simulate successful payment')}${button('failed', 'Simulat
   await deliverWebhook(completed.body, completed.signature).catch(() => undefined);
   return new Response(null, { status: 303, headers: { location: completed.returnUrl } });
 }
+
+// ---------------------------------------------------------------------------
+// refunds-process: scheduled; sends approved refunds to the provider. A
+// refund is completed only when the provider says 'succeeded'.
+// ---------------------------------------------------------------------------
+export async function handleRefunds(ctx: PaymentsContext, req: Request): Promise<Response> {
+  if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
+  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!ctx.serviceRoleKey || !timingSafeEqualHex(bearer, ctx.serviceRoleKey)) return json(401, { error: 'unauthorized' });
+  const claimed = await ctx.db.rpc('refunds_claim', { p_limit: 20 });
+  if (claimed.error) return json(500, { error: 'could not claim refunds' });
+  const outcomes: Record<string, number> = {};
+  for (const r of (claimed.data ?? []) as Array<{ refund_id: string; provider: string; provider_reference: string | null; amount_minor: number; currency: string }>) {
+    let result: { status: string; reference: string | null; failureCode: string | null };
+    if (r.provider !== ctx.provider.name || !r.provider_reference) {
+      result = { status: 'failed', reference: null, failureCode: 'no_provider_for_payment' };
+    } else {
+      try {
+        const answer = await ctx.provider.refund({ refundId: r.refund_id, reference: r.provider_reference, amountMinor: Number(r.amount_minor), currency: r.currency });
+        result = { status: answer.status, reference: answer.reference, failureCode: answer.failureCode ?? null };
+      } catch (error) {
+        if (!(error instanceof ProviderUnavailable)) throw error;
+        result = { status: 'retry', reference: null, failureCode: null };
+      }
+    }
+    const applied = await ctx.db.rpc('refund_apply_result', {
+      p_refund_id: r.refund_id, p_status: result.status, p_provider_reference: result.reference, p_failure_code: result.failureCode,
+    });
+    const key = applied.error ? 'error' : String(applied.data);
+    outcomes[key] = (outcomes[key] ?? 0) + 1;
+  }
+  return json(200, { outcomes });
+}

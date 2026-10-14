@@ -19,7 +19,9 @@ export type AdminRoute =
   | 'Events'
   | 'Documents'
   | 'Moderation'
-  | 'EditCommunity';
+  | 'EditCommunity'
+  | 'Disputes'
+  | 'RefundSettings';
 
 export interface AdminTool {
   key: string;
@@ -101,6 +103,24 @@ export function adminTools(can: Can): AdminTool[] {
       icon: 'eye-off-outline',
       route: 'Moderation',
       show: can('posts.moderate'),
+    },
+    {
+      key: 'disputes',
+      group: 'Moderation',
+      title: 'Marketplace disputes',
+      detail: 'Decide between buyers and sellers',
+      icon: 'chatbubbles-outline',
+      route: 'Disputes',
+      show: can('marketplace.manage'),
+    },
+    {
+      key: 'refunds',
+      group: 'Community',
+      title: 'Refund settings',
+      detail: 'Requests, time limit and your policy text',
+      icon: 'cash-outline',
+      route: 'RefundSettings',
+      show: can('marketplace.manage'),
     },
     {
       key: 'profile',

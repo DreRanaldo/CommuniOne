@@ -12,6 +12,7 @@ import type {
   Order,
   OrderDetail,
   OrderItem,
+  Refund,
 } from '@communione/services';
 import { makeSession, OTHER_USER_ID, sampleCommunities, TEST_USER_ID } from '@/testing/fakeSupabase';
 import { makeListing, makeSellerProfile } from '@/testing/fakeMarket';
@@ -28,11 +29,11 @@ const CHECKOUT = '0c000000-0000-4000-8000-000000000001';
 const ORDER = '0d000000-0000-4000-8000-000000000001';
 const ADDRESS = '0a000000-0000-4000-8000-000000000001';
 
-async function openMarket() {
+async function openMarket(communities: unknown[] = [choir]) {
   const user = userEvent.setup();
   const app = await renderApp({
     session: makeSession(),
-    communities: [choir],
+    communities: communities as never,
     market: { sellers: [{ ...grace }], listings: [{ ...laptop }] },
   });
   await user.press(await screen.findByRole('button', { name: /^Market/ }));
@@ -441,6 +442,149 @@ describe('fulfillment', () => {
       courierName: 'Knutsford Express',
       trackingReference: 'KX1',
       trackingUrl: null,
+    });
+  });
+});
+
+describe('refunds and disputes', () => {
+  const refund = (over: Partial<Refund> = {}): Refund =>
+    ({
+      id: 'rf000000-0000-4000-8000-000000000001'.replace('rf', 'af'),
+      community_id: C,
+      payment_id: 'p1',
+      order_id: ORDER,
+      booking_id: null,
+      buyer_user_id: TEST_USER_ID,
+      seller_user_id: OTHER_USER_ID,
+      kind: 'customer',
+      requested_by: TEST_USER_ID,
+      reason: 'One fan arrived broken',
+      amount_minor: 400_000,
+      currency: 'JMD',
+      status: 'requested',
+      decision_note: null,
+      decided_by: null,
+      provider_refund_reference: null,
+      failure_code: null,
+      attempts: 0,
+      created_at: '2026-10-14T10:00:00Z',
+      updated_at: '2026-10-14T10:00:00Z',
+      succeeded_at: null,
+      ...over,
+    }) as Refund;
+
+  async function openOrder(
+    role: 'buyer' | 'seller',
+    status: string,
+    refunds: Refund[] = [],
+    communities?: unknown[],
+  ) {
+    const app = await openMarket(communities);
+    const s = app.dependencies.services;
+    const d: OrderDetail = {
+      order: order(status),
+      items: [item],
+      events: [],
+      checkout: null,
+      role,
+      shipment: null,
+      pickupCode: null,
+    };
+    jest
+      .spyOn(s.orders, 'myOrders')
+      .mockResolvedValue({ items: [{ ...d.order, items: [item] }], nextCursor: null });
+    jest
+      .spyOn(s.orders, 'sellerOrders')
+      .mockResolvedValue({ items: [{ ...d.order, items: [item] }], nextCursor: null });
+    jest.spyOn(s.orders, 'order').mockResolvedValue(d);
+    jest.spyOn(s.refunds, 'forOrder').mockResolvedValue(refunds);
+    jest.spyOn(s.refunds, 'disputesForOrder').mockResolvedValue([]);
+    await app.user.press(screen.getByTestId('market-orders'));
+    if (role === 'seller')
+      await app.user.press(within(await screen.findByTestId('orders-side')).getByText('Sales'));
+    await app.user.press(await screen.findByTestId(`order-row-${ORDER}`));
+    await screen.findByTestId('order-detail');
+    return { ...app, s };
+  }
+
+  test('the buyer asks for part of the money back, seeing the community policy as written', async () => {
+    const { user, s } = await openOrder('buyer', 'completed');
+    jest.spyOn(s.refunds, 'policy').mockResolvedValue({
+      community_id: C,
+      requests_enabled: true,
+      request_window_days: 14,
+      policy_text: 'Unused items within 7 days.',
+      updated_by: null,
+      updated_at: '',
+    });
+    const request = jest.spyOn(s.refunds, 'request').mockResolvedValue('r1');
+    await user.press(screen.getByTestId('order-refund'));
+    expect(await screen.findByTestId('refund-policy')).toHaveTextContent(/Unused items within 7 days\./);
+    await user.press(within(screen.getByTestId('refund-scope')).getByText('Part of it'));
+    await user.type(screen.getByTestId('refund-amount'), '1500');
+    await user.type(screen.getByTestId('refund-reason'), 'One fan arrived broken');
+    await user.press(screen.getByTestId('refund-submit'));
+    expect(request).toHaveBeenCalledWith(ORDER, 'One fan arrived broken', 150_000);
+  });
+
+  test('an approved refund is not shown as refunded; only a provider-confirmed one is', async () => {
+    await openOrder('buyer', 'accepted', [
+      refund({ id: 'a1', status: 'approved' }),
+      refund({ id: 'a2', status: 'succeeded', amount_minor: 100_000 }),
+    ]);
+    expect(await screen.findByTestId('refund-status-a1')).toHaveTextContent('Approved, waiting to be sent');
+    expect(screen.getByTestId('refund-status-a2')).toHaveTextContent('Refunded');
+  });
+
+  test('the seller approves a smaller amount', async () => {
+    const { user, s } = await openOrder('seller', 'accepted', [refund({ id: 'a3' })]);
+    const decide = jest.spyOn(s.refunds, 'decide').mockResolvedValue();
+    await user.press(await screen.findByTestId('refund-review-a3'));
+    await user.type(screen.getByTestId('refund-decide-amount'), '2000');
+    await user.type(screen.getByTestId('refund-decide-note'), 'Partial');
+    await user.press(screen.getByTestId('refund-approve'));
+    expect(decide).toHaveBeenCalledWith('a3', true, { amountMinor: 200_000, note: 'Partial' });
+  });
+
+  test('a declined refund can go to the community; a manager who is not a party decides', async () => {
+    const maple = sampleCommunities[0]!;
+    const { user, s } = await openOrder(
+      'buyer',
+      'accepted',
+      [refund({ id: 'a4', status: 'rejected', decision_note: 'Works fine' })],
+      [maple],
+    );
+    const open = jest.spyOn(s.refunds, 'openDispute').mockResolvedValue('d1');
+    const dispute = {
+      id: 'd1',
+      community_id: maple.community_id,
+      order_id: ORDER,
+      buyer_user_id: OTHER_USER_ID,
+      seller_user_id: '00000000-0000-4000-8000-0000000000ff',
+      reason: 'It flickers',
+      status: 'open',
+      resolution_note: null,
+      resolved_by: null,
+      refund_id: null,
+      created_at: '2026-10-14T10:00:00Z',
+      updated_at: '2026-10-14T10:00:00Z',
+      resolved_at: null,
+    };
+    jest.spyOn(s.refunds, 'dispute').mockResolvedValue({ dispute, messages: [] });
+    const resolve = jest.spyOn(s.refunds, 'resolve').mockResolvedValue();
+    await user.press(await screen.findByTestId('order-new-dispute'));
+    await user.type(await screen.findByTestId('dispute-reason'), 'The lamp flickers all the time');
+    await user.press(screen.getByTestId('dispute-submit'));
+    expect(open).toHaveBeenCalledWith(ORDER, 'The lamp flickers all the time');
+    // The viewer here is not a party and holds marketplace.manage (Owner of Maple).
+    await screen.findByTestId('dispute-decide');
+    await user.type(screen.getByTestId('dispute-amount'), '500');
+    await user.type(screen.getByTestId('dispute-note'), 'Half for the flicker');
+    await user.press(screen.getByTestId('dispute-resolve'));
+    expect(resolve).toHaveBeenCalledWith('d1', {
+      refund: true,
+      amountMinor: 50_000,
+      note: 'Half for the flicker',
     });
   });
 });

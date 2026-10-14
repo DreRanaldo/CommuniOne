@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   handleReconcile,
+  handleRefunds,
   handleSession,
   handleTestCheckout,
   handleWebhook,
@@ -66,10 +67,22 @@ export function paymentHarness(now?: () => number) {
     page(redirectUrl: string) {
       return handleTestCheckout(ctx, new Request(redirectUrl.replace(/^.*\?/, `${PAGE}?`)), () => Promise.reject(new Error('no webhook on GET')));
     },
+    async refunds(bearer = serviceRoleKey) {
+      const res = await handleRefunds(ctx, new Request('http://localhost/functions/v1/refunds-process', { method: 'POST', headers: { authorization: `Bearer ${bearer}` } }));
+      return { status: res.status, body: (await res.json()) as { outcomes?: Record<string, number> } };
+    },
     reconcile(bearer = serviceRoleKey) {
       return handleReconcile(ctx, new Request('http://localhost/functions/v1/payments-reconcile?age_seconds=0', { method: 'POST', headers: { authorization: `Bearer ${bearer}` } }));
     },
   };
+}
+
+/** Places and pays for an order (pickup) and returns its order id. */
+export async function paidOrder(h: ReturnType<typeof paymentHarness>, buyer: TestUser, communityId: string, listingId: string, sellerProfileId: string, quantity = 1): Promise<string> {
+  const checkoutId = await placeOrder(buyer, communityId, listingId, sellerProfileId, quantity);
+  const s = await h.session(buyer, checkoutId);
+  await h.pay(s.body.redirectUrl!, 'succeeded');
+  return (await buyer.services.orders.checkout(checkoutId)).orders[0]!.id;
 }
 
 /** Puts a buyer's cart line through checkout and returns the checkout id. */

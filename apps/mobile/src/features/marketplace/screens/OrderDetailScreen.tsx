@@ -10,6 +10,7 @@ import type { CommunityStackParamList } from '@/types/navigation';
 import { FULFILLMENT_LABELS, formatMoney } from '../marketRules';
 import { orderError, orderStatusLabel, orderStatusTone } from '../orderRules';
 import { OrderActions } from '../components/OrderActions';
+import { OrderRefunds } from '../components/OrderRefunds';
 
 type Props = NativeStackScreenProps<CommunityStackParamList, 'OrderDetail'>;
 
@@ -123,6 +124,14 @@ export function OrderDetailScreen({ navigation, route }: Props) {
         detail={d}
         onChanged={reload}
         onPay={(checkoutId) => navigation.navigate('Payment', { checkoutId })}
+        onRequestRefund={() => navigation.navigate('RefundRequest', { orderId })}
+      />
+      <OrderRefunds
+        detail={d}
+        version={attempt}
+        onChanged={reload}
+        onOpenDispute={(disputeId) => navigation.navigate('Dispute', { disputeId })}
+        onNewDispute={() => navigation.navigate('Dispute', { orderId })}
       />
 
       <Card testID="order-items">

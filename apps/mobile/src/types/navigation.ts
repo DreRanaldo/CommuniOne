@@ -73,6 +73,14 @@ export type CommunityStackParamList = {
   OrderDetail: { orderId: string };
   /** A seller's delivery fee, parishes and estimate. */
   DeliverySettings: { sellerProfileId: string };
+  /** Ask the seller for a refund on one order (Stage I). */
+  RefundRequest: { orderId: string };
+  /** A dispute (`disputeId`), or open one for an order (`orderId`). */
+  Dispute: { disputeId?: string; orderId?: string };
+  /** marketplace.manage: the community's disputes. */
+  Disputes: undefined;
+  /** marketplace.manage: refund requests on/off, window, the community's own policy text. */
+  RefundSettings: undefined;
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

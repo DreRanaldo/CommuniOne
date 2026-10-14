@@ -35,7 +35,7 @@ It is built in small stages (B to M), each tested and approved before the next.
 | Live payments | **Waiting for merchant approval and owner decisions**; not operational |
 | Reconciliation, payment state machine, ledger | **Implemented and tested (F)** against the test provider; reconcile schedule not deployed |
 | Seller fulfillment, delivery, pickup | **Implemented and tested (G, H)**: see [`stage-g-h-fulfillment.md`](stage-g-h-fulfillment.md). Tracking is seller-recorded only. |
-| Refunds and cancellations | Not yet implemented (I). Real refunds depend on the provider. |
+| Refunds, cancellations, disputes | **Implemented and tested (I) with the test provider**: see [`stage-i-refunds-disputes.md`](stage-i-refunds-disputes.md). Real refunds depend on a real provider. |
 | Service bookings | Not yet implemented (J) |
 | Seller payouts | **Blocked on provider support and owner decisions** (K) |
 | Courier integration, live GPS tracking | **Dependent on a third-party courier API**; not planned until one is chosen |
