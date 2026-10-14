@@ -29,6 +29,7 @@ import { ordersService } from './orders/index.ts';
 import { paymentsService } from './payments/index.ts';
 import { refundsService } from './refunds/index.ts';
 import { bookingsService } from './bookings/index.ts';
+import { earningsService } from './earnings/index.ts';
 import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
@@ -65,6 +66,7 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     payments: paymentsService(ctx),
     refunds: refundsService(ctx),
     bookings: bookingsService(ctx),
+    earnings: earningsService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -131,3 +133,4 @@ export {
 export { type BookingPaymentState, type CheckoutPaymentState, type PaymentSession, type PaymentStatus } from './payments/index.ts';
 export { REFUND_STATUS_LABELS, type Dispute, type DisputeMessage, type Refund, type RefundPolicy } from './refunds/index.ts';
 export { BOOKING_STATUS_LABELS, parsePeriod, type AvailabilityWindow, type Booking, type BookingEvent } from './bookings/index.ts';
+export { type Payout, type SellerBalance, type StatementLine } from './earnings/index.ts';

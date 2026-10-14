@@ -146,6 +146,7 @@ select results_eq(
      ('payments', 'payments_checkout_id_fkey', 'checkouts', 'r'),
      ('payments', 'payments_community_id_fkey', 'communities', 'r'),
      ('payments', 'payments_payer_user_id_fkey', 'profiles', 'n'),
+     ('payouts', 'payouts_community_id_fkey', 'communities', 'r'),
      ('platform_admins', 'platform_admins_granted_by_fkey', 'auth.users', 'n'),
      ('platform_admins', 'platform_admins_user_id_fkey', 'auth.users', 'c'),
      ('post_images', 'post_images_post_fkey', 'posts', 'c'),

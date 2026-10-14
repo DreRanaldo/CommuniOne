@@ -238,6 +238,14 @@ export function ShopScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('ServiceHours', { sellerProfileId: seller.id })}
               testID="shop-hours"
             />
+            <Button
+              title="Earnings"
+              icon="wallet-outline"
+              variant="secondary"
+              fullWidth={false}
+              onPress={() => navigation.navigate('Earnings')}
+              testID="shop-earnings"
+            />
           </View>
           <Text variant="heading" accessibilityRole="header">
             Your listings
@@ -300,7 +308,7 @@ export function ShopScreen({ navigation }: Props) {
 }
 
 const useStyles = makeStyles((t) => ({
-  shopLinks: { flexDirection: 'row', gap: t.spacing.sm },
+  shopLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
   flex: { flex: 1, gap: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm },

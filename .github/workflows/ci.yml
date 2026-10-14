@@ -63,6 +63,8 @@ jobs:
         run: bash scripts/db/invitation-race.sh
       - name: RSVP capacity stress test
         run: bash scripts/db/rsvp-stress.sh 16 100
+      - name: Marketplace checkout and payment stress test (no overselling)
+        run: bash scripts/db/checkout-stress.sh 32
 
   supabase:
     name: Supabase stack (migrations, schema lint, pgTAP, integration)

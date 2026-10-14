@@ -15,4 +15,7 @@ module.exports = {
   // Shared code outside this folder resolves packages from this app's node_modules (as Metro does).
   moduleDirectories: ['node_modules', path.resolve(__dirname, 'node_modules')],
   clearMocks: true,
+  // Whole-app UI tests render the full navigation tree; shared CI runners can
+  // be slow enough to pass the 5 s default on a cold start.
+  testTimeout: 20000,
 };

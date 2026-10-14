@@ -33,6 +33,16 @@ export function destinationOf(target: NotificationTarget): Destination {
       return { tab: 'CommunitiesTab', screen: 'DocumentDetail', params: { documentId: target.id } };
     case 'community':
       return { tab: 'CommunitiesTab', screen: 'CommunityHome', params: undefined };
+    case 'order':
+      return { tab: 'Marketplace', screen: 'OrderDetail', params: { orderId: target.id } };
+    case 'checkout':
+      return { tab: 'Marketplace', screen: 'Payment', params: { checkoutId: target.id } };
+    case 'booking':
+      return { tab: 'Marketplace', screen: 'BookingDetail', params: { bookingId: target.id } };
+    case 'dispute':
+      return { tab: 'Marketplace', screen: 'Dispute', params: { disputeId: target.id } };
+    case 'earnings':
+      return { tab: 'Marketplace', screen: 'Earnings', params: undefined };
   }
 }
 

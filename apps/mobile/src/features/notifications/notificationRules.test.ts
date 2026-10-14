@@ -63,13 +63,33 @@ describe('destinationOf', () => {
     expect(at('event')).toMatchObject({ tab: 'CommunitiesTab', screen: 'EventDetail' });
     expect(at('document')).toMatchObject({ tab: 'CommunitiesTab', screen: 'DocumentDetail' });
     expect(at('community')).toMatchObject({ tab: 'CommunitiesTab', screen: 'CommunityHome' });
+    expect(at('order')).toEqual({ tab: 'Marketplace', screen: 'OrderDetail', params: { orderId: ID } });
+    expect(at('checkout')).toEqual({ tab: 'Marketplace', screen: 'Payment', params: { checkoutId: ID } });
+    expect(at('booking')).toMatchObject({ tab: 'Marketplace', screen: 'BookingDetail' });
+    expect(at('dispute')).toMatchObject({ tab: 'Marketplace', screen: 'Dispute' });
+    expect(at('earnings')).toMatchObject({ tab: 'Marketplace', screen: 'Earnings' });
+  });
+});
+
+describe('marketplace notifications', () => {
+  test('each type opens its own item; payment data is never needed', () => {
+    expect(notificationTarget(n('order', { order_id: ID }))).toMatchObject({ kind: 'order', id: ID });
+    expect(notificationTarget(n('refund', { order_id: null, booking_id: ID }))).toMatchObject({
+      kind: 'booking',
+      id: ID,
+    });
+    expect(notificationTarget(n('payment', { checkout_id: ID }))).toMatchObject({ kind: 'checkout', id: ID });
+    expect(notificationTarget(n('payment', { payout_id: ID }))).toMatchObject({ kind: 'earnings' });
+    expect(notificationTarget(n('dispute', { dispute_id: ID }))).toMatchObject({ kind: 'dispute', id: ID });
+    expect(notificationTarget(n('booking', { booking_id: 'not-an-id' }))).toBeNull();
   });
 });
 
 test('kinds, labels and read state', () => {
   expect(notificationKind('event_cancelled').label).toBe('Event cancelled');
   expect(notificationKind('something_new').label).toBe('CommuniOne');
-  expect(Object.keys(TARGET_LABELS)).toHaveLength(6);
+  expect(Object.keys(TARGET_LABELS)).toHaveLength(11);
+  expect(notificationKind('refund').label).toBe('Refund');
   expect(isUnread({ read_at: null })).toBe(true);
   expect(isUnread({ read_at: '2026-10-13T00:00:00Z' })).toBe(false);
 });

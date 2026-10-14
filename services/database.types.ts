@@ -1285,6 +1285,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"payouts": {
+                  Row: {
+                    "amount_minor": number,"community_id": string,"created_at": string,"currency": string,"external_reference": string,"id": string,"method": string,"note": string | null,"recorded_by": string,"seller_user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor": number,"community_id": string,"created_at"?: string,"currency"?: string,"external_reference": string,"id"?: string,"method": string,"note"?: string | null,"recorded_by": string,"seller_user_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"community_id"?: string,"created_at"?: string,"currency"?: string,"external_reference"?: string,"id"?: string,"method"?: string,"note"?: string | null,"recorded_by"?: string,"seller_user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payouts_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"permissions": {
                   Row: {
                     "created_at": string,"description": string,"id": string,"key": string,"module": string
@@ -2073,6 +2093,11 @@ isOneToOne: false
 "has_community_permission":
 { Args: { "p_community_id": string,"p_permission_key": string }; Returns: boolean
                            },
+"ledger_summary":
+{ Args: { "p_community_id": string }; Returns: {
+              "account_kind": string,"balance_minor": number,"currency": string
+            }[]
+                           },
 "list_active_alerts":
 { Args: { "p_community_id": string,"p_cursor_id"?: string,"p_cursor_published_at"?: string,"p_cursor_severity_rank"?: number,"p_limit"?: number }; Returns: {
               "body": string,"community_id": string,"edited_at": string,"expires_at": string,"id": string,"is_emergency": boolean,"published_at": string,"published_by": string,"severity": string,"severity_rank": number,"title": string
@@ -2396,6 +2421,9 @@ isOneToOne: false
               "amount_minor": number,"currency": string,"payment_id": string,"provider": string,"provider_reference": string,"status": string
             }[]
                            },
+"payout_record":
+{ Args: { "p_amount_minor": number,"p_community_id": string,"p_external_reference": string,"p_method": string,"p_note"?: string,"p_recorded_by": string,"p_seller_user_id": string }; Returns: string
+                           },
 "preview_invitation":
 { Args: { "p_token": string }; Returns: {
               "community_id": string,"community_type": string,"cover_image_path": string,"cover_image_url": string,"description": string,"expires_at": string,"logo_path": string,"logo_url": string,"member_count": number,"membership_status": string,"name": string
@@ -2451,9 +2479,19 @@ isOneToOne: false
               "available": number,"category_id": string,"category_name": string,"community_id": string,"condition": string,"cover_image_path": string,"currency": string,"id": string,"image_count": number,"is_favorite": boolean,"kind": string,"price_minor": number,"pricing": string,"published_at": string,"rank": number,"seller_display_name": string,"seller_profile_id": string,"seller_verified": boolean,"title": string
             }[]
                            },
+"seller_balance":
+{ Args: { "p_community_id": string }; Returns: {
+              "balance_minor": number,"currency": string,"earned_minor": number,"paid_out_minor": number,"refunded_minor": number
+            }[]
+                           },
 "seller_busy_times":
 { Args: { "p_from": string,"p_seller_profile_id": string,"p_to": string }; Returns: {
               "ends_at": string,"starts_at": string
+            }[]
+                           },
+"seller_statement":
+{ Args: { "p_before"?: string,"p_community_id": string,"p_limit"?: number }; Returns: {
+              "amount_minor": number,"created_at": string,"currency": string,"entry_id": string,"kind": string,"reference_id": string,"reference_type": string
             }[]
                            },
 "service_availability_save":

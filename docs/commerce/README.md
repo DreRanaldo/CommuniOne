@@ -37,11 +37,16 @@ It is built in small stages (B to M), each tested and approved before the next.
 | Seller fulfillment, delivery, pickup | **Implemented and tested (G, H)**: see [`stage-g-h-fulfillment.md`](stage-g-h-fulfillment.md). Tracking is seller-recorded only. |
 | Refunds, cancellations, disputes | **Implemented and tested (I) with the test provider**: see [`stage-i-refunds-disputes.md`](stage-i-refunds-disputes.md). Real refunds depend on a real provider. |
 | Service bookings | **Implemented and tested (J)**: see [`stage-j-bookings.md`](stage-j-bookings.md). Payment in test mode. |
-| Seller payouts | **Blocked on provider support and owner decisions** (K) |
+| Seller balances, statements, payout records | **Implemented and tested (K)**: ledger figures; payouts are operator-recorded only. See [`stage-k-m-settlement-operations.md`](stage-k-m-settlement-operations.md) |
+| Automatic seller payouts / split payments | **Not implemented**: blocked on provider support and owner decisions (D2, D4–D8). No escrow is claimed. |
+| Commerce notifications, audit, dispute tools | **Implemented and tested (L)** |
+| Concurrency stress, recovery drills, security sweep | **Implemented and tested (M)**; external security review still required |
+| Deployment of Edge Functions, secrets and schedules | **Not done** for any hosted project: see [`operations.md`](operations.md) |
 | Courier integration, live GPS tracking | **Dependent on a third-party courier API**; not planned until one is chosen |
 
-Nothing here may be described as production-ready while live payments,
-reconciliation, refunds or security review are incomplete.
+**Not production-ready.** Live payments, real refunds, payouts, the
+deployed schedules and an external security review are all still missing;
+see the live checklist in [`operations.md`](operations.md).
 
 ## Decisions the owner must make
 

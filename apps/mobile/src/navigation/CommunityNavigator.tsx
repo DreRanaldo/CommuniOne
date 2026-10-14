@@ -31,6 +31,7 @@ import { BookingDetailScreen } from '@/features/marketplace/screens/BookingDetai
 import { BookingsScreen } from '@/features/marketplace/screens/BookingsScreen';
 import { BookServiceScreen } from '@/features/marketplace/screens/BookServiceScreen';
 import { DeliverySettingsScreen } from '@/features/marketplace/screens/DeliverySettingsScreen';
+import { EarningsScreen } from '@/features/marketplace/screens/EarningsScreen';
 import { DisputeScreen } from '@/features/marketplace/screens/DisputeScreen';
 import { DisputesScreen } from '@/features/marketplace/screens/DisputesScreen';
 import { ListingDetailScreen } from '@/features/marketplace/screens/ListingDetailScreen';
@@ -200,6 +201,7 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
       <Stack.Screen name="Bookings" component={BookingsScreen} options={{ title: 'Bookings' }} />
       <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: 'Booking' }} />
       <Stack.Screen name="ServiceHours" component={ServiceHoursScreen} options={{ title: 'Booking hours' }} />
+      <Stack.Screen name="Earnings" component={EarningsScreen} options={{ title: 'Earnings' }} />
       <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
       <Stack.Screen
         name="AdminMembers"

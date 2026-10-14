@@ -89,6 +89,8 @@ export type CommunityStackParamList = {
   BookingDetail: { bookingId: string };
   /** A seller's weekly booking hours. */
   ServiceHours: { sellerProfileId: string };
+  /** A seller's balance, statement and recorded payouts (Stage K). */
+  Earnings: undefined;
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

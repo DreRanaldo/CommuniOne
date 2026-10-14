@@ -724,3 +724,38 @@ describe('bookings', () => {
     expect(accept).toHaveBeenCalledWith(BOOKING, 900_000);
   });
 });
+
+describe('earnings', () => {
+  test('the seller sees ledger figures, clearly marked as records, not automatic payouts', async () => {
+    const app = await openMarket();
+    const s = app.dependencies.services;
+    jest
+      .spyOn(s.marketplace, 'mySellerProfile')
+      .mockResolvedValue({ ...grace, user_id: TEST_USER_ID } as never);
+    jest.spyOn(s.marketplace, 'myListings').mockResolvedValue([]);
+    jest.spyOn(s.earnings, 'balance').mockResolvedValue({
+      currency: 'JMD',
+      earnedMinor: 450_000,
+      refundedMinor: 150_000,
+      paidOutMinor: 200_000,
+      balanceMinor: 100_000,
+    });
+    jest.spyOn(s.earnings, 'statement').mockResolvedValue([
+      {
+        id: 'l1',
+        at: '2026-10-14T10:00:00Z',
+        kind: 'payout',
+        referenceType: 'payout',
+        referenceId: 'x',
+        amountMinor: -200_000,
+        currency: 'JMD',
+      },
+    ]);
+    jest.spyOn(s.earnings, 'payouts').mockResolvedValue([]);
+    await app.user.press(screen.getByTestId('market-shop'));
+    await app.user.press(await screen.findByTestId('shop-earnings'));
+    expect(await screen.findByTestId('earnings-balance')).toHaveTextContent('J$1,000');
+    expect(screen.getByTestId('earnings-note')).toHaveTextContent(/not automatic/);
+    expect(screen.getByTestId('earnings-statement')).toHaveTextContent(/Payout recorded/);
+  });
+});
