@@ -59,9 +59,10 @@ describe('creating and publishing', () => {
     al.weather = data.id;
   });
 
-  test('2. a normal member cannot create an alert', async () => {
-    const { error } = await u.memberA.client.from('alerts').insert({ community_id: c.A, title: 'x', body: 'y' });
-    assert.equal(error?.code, '42501');
+  test('2. a normal member may send a (non-emergency) alert since migration 31', async () => {
+    const { data, error } = await u.memberA.client.from('alerts').insert({ community_id: c.A, title: 'Loose dog', body: 'Brown labrador' }).select('created_by, status').single();
+    assert.equal(error, null);
+    assert.deepEqual(data, { created_by: u.memberA.id, status: 'draft' });
   });
 
   test('3. a normal member cannot create an emergency alert', async () => {

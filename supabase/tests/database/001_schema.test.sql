@@ -215,7 +215,7 @@ select results_eq(
      from public.role_templates t
      left join public.role_template_permissions tp on tp.template_id = t.id
      group by t.key, t.sort_order order by t.sort_order $$,
-  $$ values ('owner', 31), ('admin', 30), ('moderator', 17), ('member', 14) $$,
+  $$ values ('owner', 31), ('admin', 30), ('moderator', 18), ('member', 15) $$,
   'default role templates carry the documented number of permissions'
 );
 

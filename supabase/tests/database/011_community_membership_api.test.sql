@@ -118,7 +118,7 @@ select is_empty($$ select 1 from public.communities $$, 'a pending member cannot
 -- my_community_permissions() ---------------------------------------------------
 select pg_temp.login(pg_temp.fx('alice'));
 select is((select count(*)::int from public.my_community_permissions(pg_temp.fx('A'))), 31, 'Owner has 31 permission keys in A');
-select is((select count(*)::int from public.my_community_permissions(pg_temp.fx('B'))), 14, 'the same user has 14 permission keys in B');
+select is((select count(*)::int from public.my_community_permissions(pg_temp.fx('B'))), 15, 'the same user has 15 permission keys in B');
 select pg_temp.login(pg_temp.fx('frank'));
 select is_empty($$ select public.my_community_permissions(pg_temp.fx('A')) $$, 'non-members get no permission keys');
 select pg_temp.login(pg_temp.fx('grace'));

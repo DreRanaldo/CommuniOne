@@ -89,8 +89,10 @@ export type CommunityStackParamList = {
   DocumentUpload: { folderId?: string; folderName?: string } | undefined;
   /** The current community's alerts (active, history, drafts). */
   Alerts: undefined;
-  /** One alert, read from the server. */
-  AlertDetail: { alertId: string };
+  /** One alert, read from the server. `sent`: just sent from Quick alert (shows a confirmation). */
+  AlertDetail: { alertId: string; sent?: boolean };
+  /** Quick alert (members can send; migration 31): preset, location, photo, send at once. */
+  QuickAlert: undefined;
   /** New alert, or edit one (`alertId`, loaded from the server). */
   AlertEditor: { alertId?: string } | undefined;
   /** Write a post, or edit one (`postId`, loaded from the server). */

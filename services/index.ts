@@ -79,7 +79,7 @@ export {
 } from './communities/index.ts';
 export { IMAGE_TYPES, type ImageMimeType } from './core/files.ts';
 export {
-  ALERT_SEVERITIES, ALERT_STATUSES,
+  ALERT_IMAGE_MAX_BYTES, ALERT_IMAGES_BUCKET, ALERT_SEVERITIES, ALERT_STATUSES, type AlertLocation,
   type ActiveAlert, type Alert, type AlertHistoryItem, type AlertInput, type AlertPatch,
 } from './alerts/index.ts';
 export {

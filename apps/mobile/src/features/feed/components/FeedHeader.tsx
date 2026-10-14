@@ -88,7 +88,7 @@ export function FeedHeader({
             key: 'alert',
             icon: 'alert-circle-outline' as const,
             title: 'Alert',
-            label: 'Send an alert',
+            label: 'Send a quick alert',
             onPress: onNewAlert,
           },
         ]

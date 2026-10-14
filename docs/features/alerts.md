@@ -115,8 +115,9 @@ draft ──publish──► published ──cancel───► cancelled ──
 | `alerts.create` | Only alerts you created, and only non-emergency severities. Once published, only text corrections: ending, cancelling or archiving needs `alerts.manage` (migration 30, RN-16) |
 | `alerts.view` | Read only |
 
-Default roles: Owners and Admins hold all three; Moderators and Members hold
-`alerts.view`. Communities can grant `alerts.create` alone to a custom role (for
+Default roles: Owners and Admins hold all three. Since migration 31, Moderators
+and Members hold `alerts.view` and `alerts.create`, so they can send non-emergency
+alerts, optionally with a location and photo (see [`quick-alerts.md`](quick-alerts.md)). Communities can grant `alerts.create` alone to a custom role (for
 example "Alerter"). Nothing checks a role name.
 
 ## Expiration

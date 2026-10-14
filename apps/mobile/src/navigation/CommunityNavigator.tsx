@@ -12,6 +12,7 @@ import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHom
 import { AlertDetailScreen } from '@/features/alerts/AlertDetailScreen';
 import { AlertEditorScreen } from '@/features/alerts/AlertEditorScreen';
 import { AlertsScreen } from '@/features/alerts/AlertsScreen';
+import { QuickAlertScreen } from '@/features/alerts/QuickAlertScreen';
 import { DocumentDetailScreen } from '@/features/documents/screens/DocumentDetailScreen';
 import { DocumentsScreen } from '@/features/documents/screens/DocumentsScreen';
 import { DocumentUploadScreen } from '@/features/documents/screens/DocumentUploadScreen';
@@ -89,6 +90,11 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         options={{ title: 'New event', presentation: 'modal' }}
       />
       <Stack.Screen name="Alerts" component={AlertsScreen} options={{ title: 'Alerts' }} />
+      <Stack.Screen
+        name="QuickAlert"
+        component={QuickAlertScreen}
+        options={{ title: 'Quick alert', presentation: 'modal' }}
+      />
       <Stack.Screen name="AlertDetail" component={AlertDetailScreen} options={{ title: 'Alert' }} />
       <Stack.Screen
         name="AlertEditor"

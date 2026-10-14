@@ -144,8 +144,10 @@ describe('alerts', () => {
     id.alert = draft.id;
   });
 
-  test('members cannot create or cancel; outsiders cannot read', async () => {
-    await rejects(u.member.services.alerts.create({ communityId: c.A, title: 'x', body: 'y' }), ErrorCode.Forbidden);
+  test('members send alerts (migration 31) but cannot cancel; outsiders cannot read', async () => {
+    const mine = await u.member.services.alerts.create({ communityId: c.A, title: 'Loose dog', body: 'Brown labrador', severity: 'info' });
+    assert.equal(mine.created_by, u.member.id);
+    await rejects(u.member.services.alerts.create({ communityId: c.A, title: 'x', body: 'y', severity: 'emergency' }), ErrorCode.Forbidden);
     await rejects(u.member.services.alerts.cancel(id.alert, 'prank'), ErrorCode.Forbidden);
     await rejects(u.ownerB.services.alerts.get(id.alert), ErrorCode.NotFound);
     assert.deepEqual((await u.ownerB.services.alerts.listActive({ communityId: c.A })).items, []);

@@ -335,6 +335,7 @@ describe('permission differences', () => {
         'members.remove',
         'announcements.create',
         'alerts.create',
+        'alerts.manage',
         'events.create',
         'documents.upload',
         'posts.moderate',

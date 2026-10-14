@@ -95,7 +95,15 @@ describe('the centre + (Create)', () => {
     const actions = within(sheet)
       .getAllByRole('button')
       .map((b) => b.props.accessibilityLabel);
-    expect(actions).toEqual(['Post', 'Photos', 'Story', 'Join a community', 'Create a community']);
+    // Members may send quick alerts (migration 31).
+    expect(actions).toEqual([
+      'Post',
+      'Photos',
+      'Story',
+      'Quick alert',
+      'Join a community',
+      'Create a community',
+    ]);
     expect(within(sheet).getByText('In St. Mark Choir')).toBeOnTheScreen();
   });
 
@@ -112,7 +120,7 @@ describe('the centre + (Create)', () => {
       'Photos',
       'Story',
       'Event',
-      'Alert',
+      'Quick alert',
       'Announcement',
       'Document',
       'Join a community',

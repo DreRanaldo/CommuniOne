@@ -48,9 +48,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-image-picker',
       {
-        photosPermission: 'CommuniOne uses your photo library only when you choose a profile picture.',
-        cameraPermission: false,
+        photosPermission:
+          'CommuniOne uses your photo library only when you choose a picture to share (profile, posts, alerts).',
+        cameraPermission: 'CommuniOne uses the camera only when you take a photo to add to an alert.',
         microphonePermission: false,
+      },
+    ],
+    [
+      'expo-location',
+      {
+        // Foreground only, read once when you choose to share your location on an alert.
+        locationWhenInUsePermission:
+          'CommuniOne reads your location only when you choose to share it on an alert, so neighbours know where to look.',
+        locationAlwaysAndWhenInUsePermission: false,
+        locationAlwaysPermission: false,
+        motionUsagePermission: false,
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
+        isAndroidForegroundServiceEnabled: false,
       },
     ],
     [

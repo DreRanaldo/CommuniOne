@@ -12,6 +12,7 @@ import { useServices } from '@/lib/dependencies';
 import { makeStyles, useTheme } from '@/theme';
 import type { CommunityStackParamList } from '@/types/navigation';
 import { errorMessage } from '@/utils/errors';
+import { AlertAttachments } from './AlertAttachments';
 import { SeverityBadge } from './AlertCard';
 import {
   alertDates,
@@ -51,7 +52,9 @@ export function AlertDetailScreen({ navigation, route }: Props) {
   }, [alerts, alertId, community.community_id]);
   const current = useAsync(load);
   // Kept here so a message survives the reload that follows an action.
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(
+    route.params.sent ? { tone: 'success', message: 'Alert sent. Your community is being notified.' } : null,
+  );
 
   // Back from the editor: show the saved version.
   const { reload } = current;
@@ -200,6 +203,7 @@ function Detail({
       ) : null}
       <View style={styles.divider} />
       <Text>{a.body}</Text>
+      <AlertAttachments alert={a} />
 
       {notice ? (
         <Banner

@@ -1,5 +1,5 @@
 // Choosing images (avatar, community logo or cover; photos for a post): the system photo picker
-// (no camera, no broad library permission on modern iOS/Android), cropped to
+// (no broad library permission on modern iOS/Android), cropped to
 // the image's shape, then re-encoded as a JPEG at a fixed size. Re-encoding
 // keeps uploads small and strips metadata such as GPS location.
 import * as DocumentPicker from 'expo-document-picker';
@@ -72,6 +72,34 @@ export interface MediaPicker {
   pickImage(kind: ImageKind): Promise<PickedImage | null>;
   /** Several photos for a post, uncropped (at most `limit`). Resolves [] when the user cancels. */
   pickPhotos(limit: number): Promise<PickedImage[]>;
+  /**
+   * One photo taken with the camera (e.g. for an alert), re-encoded like
+   * picked photos, so camera metadata such as GPS is not uploaded. Asks for
+   * camera permission first; resolves null when the user cancels. Throws
+   * CameraUnavailableError when permission is refused.
+   */
+  takePhoto(): Promise<PickedImage | null>;
+}
+
+export class CameraUnavailableError extends Error {
+  constructor() {
+    super('Camera permission was not given. You can allow it in your device settings.');
+  }
+}
+
+/** Shrinks a photo to POST_PHOTO_MAX_EDGE and re-encodes it as JPEG (no metadata). */
+async function reencode(asset: { uri: string; width: number; height: number }): Promise<PickedImage> {
+  const scale = Math.min(1, POST_PHOTO_MAX_EDGE / Math.max(asset.width || 1, asset.height || 1));
+  let context = ImageManipulator.manipulate(asset.uri);
+  if (scale < 1)
+    context = context.resize({
+      width: Math.round(asset.width * scale),
+      height: Math.round(asset.height * scale),
+    });
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8, base64: true });
+  const bytes = saved.base64 ? base64ToBytes(saved.base64) : await readFileBytes(saved.uri);
+  return { bytes, mimeType: 'image/jpeg', uri: saved.uri, width: saved.width, height: saved.height };
 }
 
 /** Crop aspect and output size per kind (square avatars and logos, a wide cover). */
@@ -126,25 +154,15 @@ export const expoMediaPicker: MediaPicker = {
     });
     if (result.canceled) return [];
     const photos: PickedImage[] = [];
-    for (const asset of result.assets.slice(0, limit)) {
-      const scale = Math.min(1, POST_PHOTO_MAX_EDGE / Math.max(asset.width || 1, asset.height || 1));
-      let context = ImageManipulator.manipulate(asset.uri);
-      if (scale < 1)
-        context = context.resize({
-          width: Math.round(asset.width * scale),
-          height: Math.round(asset.height * scale),
-        });
-      const image = await context.renderAsync();
-      const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8, base64: true });
-      const bytes = saved.base64 ? base64ToBytes(saved.base64) : await readFileBytes(saved.uri);
-      photos.push({
-        bytes,
-        mimeType: 'image/jpeg',
-        uri: saved.uri,
-        width: saved.width,
-        height: saved.height,
-      });
-    }
+    for (const asset of result.assets.slice(0, limit)) photos.push(await reencode(asset));
     return photos;
+  },
+
+  async takePhoto() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) throw new CameraUnavailableError();
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false });
+    const asset = result.canceled ? undefined : result.assets[0];
+    return asset ? reencode(asset) : null;
   },
 };

@@ -57,14 +57,14 @@ isOneToOne: false
                   ]
                 },"alerts": {
                   Row: {
-                    "archived_at": string | null,"body": string,"cancellation_reason": string | null,"cancelled_at": string | null,"cancelled_by": string | null,"community_id": string,"created_at": string,"created_by": string | null,"edited_at": string | null,"expired_at": string | null,"expires_at": string | null,"id": string,"is_emergency": boolean | null,"published_at": string | null,"published_by": string | null,"severity": string,"severity_rank": number | null,"status": string,"title": string,"updated_at": string,"updated_by_user_id": string | null
+                    "archived_at": string | null,"body": string,"cancellation_reason": string | null,"cancelled_at": string | null,"cancelled_by": string | null,"community_id": string,"created_at": string,"created_by": string | null,"edited_at": string | null,"expired_at": string | null,"expires_at": string | null,"id": string,"image_path": string | null,"is_emergency": boolean | null,"latitude": number | null,"location_accuracy_m": number | null,"longitude": number | null,"published_at": string | null,"published_by": string | null,"severity": string,"severity_rank": number | null,"status": string,"title": string,"updated_at": string,"updated_by_user_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "archived_at"?: string | null,"body": string,"cancellation_reason"?: string | null,"cancelled_at"?: string | null,"cancelled_by"?: string | null,"community_id": string,"created_at"?: string,"created_by"?: string | null,"edited_at"?: string | null,"expired_at"?: string | null,"expires_at"?: string | null,"id"?: string,"is_emergency"?: never,"published_at"?: string | null,"published_by"?: string | null,"severity"?: string,"severity_rank"?: never,"status"?: string,"title": string,"updated_at"?: string,"updated_by_user_id"?: string | null
+                    "archived_at"?: string | null,"body": string,"cancellation_reason"?: string | null,"cancelled_at"?: string | null,"cancelled_by"?: string | null,"community_id": string,"created_at"?: string,"created_by"?: string | null,"edited_at"?: string | null,"expired_at"?: string | null,"expires_at"?: string | null,"id"?: string,"image_path"?: string | null,"is_emergency"?: never,"latitude"?: number | null,"location_accuracy_m"?: number | null,"longitude"?: number | null,"published_at"?: string | null,"published_by"?: string | null,"severity"?: string,"severity_rank"?: never,"status"?: string,"title": string,"updated_at"?: string,"updated_by_user_id"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"body"?: string,"cancellation_reason"?: string | null,"cancelled_at"?: string | null,"cancelled_by"?: string | null,"community_id"?: string,"created_at"?: string,"created_by"?: string | null,"edited_at"?: string | null,"expired_at"?: string | null,"expires_at"?: string | null,"id"?: string,"is_emergency"?: never,"published_at"?: string | null,"published_by"?: string | null,"severity"?: string,"severity_rank"?: never,"status"?: string,"title"?: string,"updated_at"?: string,"updated_by_user_id"?: string | null
+                    "archived_at"?: string | null,"body"?: string,"cancellation_reason"?: string | null,"cancelled_at"?: string | null,"cancelled_by"?: string | null,"community_id"?: string,"created_at"?: string,"created_by"?: string | null,"edited_at"?: string | null,"expired_at"?: string | null,"expires_at"?: string | null,"id"?: string,"image_path"?: string | null,"is_emergency"?: never,"latitude"?: number | null,"location_accuracy_m"?: number | null,"longitude"?: number | null,"published_at"?: string | null,"published_by"?: string | null,"severity"?: string,"severity_rank"?: never,"status"?: string,"title"?: string,"updated_at"?: string,"updated_by_user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -1050,6 +1050,11 @@ isOneToOne: false
 "list_alert_history":
 { Args: { "p_community_id": string,"p_cursor_id"?: string,"p_cursor_sort_at"?: string,"p_limit"?: number,"p_statuses"?: (string)[] }; Returns: {
               "archived_at": string,"body": string,"cancellation_reason": string,"cancelled_at": string,"community_id": string,"expired_at": string,"expires_at": string,"id": string,"is_active": boolean,"is_emergency": boolean,"published_at": string,"severity": string,"severity_rank": number,"sort_at": string,"status": string,"title": string
+            }[]
+                           },
+"list_alert_image_files_to_purge":
+{ Args: { "p_grace"?: string }; Returns: {
+              "name": string
             }[]
                            },
 "list_announcement_history":

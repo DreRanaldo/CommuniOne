@@ -388,8 +388,11 @@ describe('managing alerts', () => {
 });
 
 describe('permissions', () => {
-  test('members: no New button, no Drafts, no drafts received, no controls', async () => {
-    const { user, rpc } = await openAlerts('member');
+  test('without alerts.create (a community that turned it off): no New button, no Drafts, no controls', async () => {
+    const { user, rpc } = await openAlerts('member', {
+      permissions: { [C]: ['community.view', 'members.view', 'alerts.view', 'posts.view'] },
+    });
+    expect(screen.queryByRole('button', { name: 'Send a quick alert' })).not.toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'New alert' })).not.toBeOnTheScreen();
     expect(screen.queryByRole('tab', { name: 'Drafts' })).not.toBeOnTheScreen();
     await openTab(user, 'History');

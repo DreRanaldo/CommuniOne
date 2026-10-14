@@ -62,12 +62,12 @@ const COMMUNITY_ACTIONS: Action[] = [
   },
   {
     key: 'alert',
-    title: 'Alert',
-    detail: 'Warn members about something urgent',
+    title: 'Quick alert',
+    detail: 'Warn neighbours at once, with a photo and your location',
     icon: 'alert-circle-outline',
     tint: 'red',
     permission: 'alerts.create',
-    go: (n) => openInCommunity(n, 'CommunitiesTab', 'AlertEditor'),
+    go: (n) => openInCommunity(n, 'CommunitiesTab', 'QuickAlert'),
   },
   {
     key: 'announcement',

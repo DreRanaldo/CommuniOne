@@ -69,10 +69,11 @@ export function adminTools(can: Can): AdminTool[] {
       key: 'alert',
       group: 'Content',
       title: 'New alert',
-      detail: 'Safety and urgent information',
+      detail: 'Full editor: drafts, end time, emergencies',
       icon: 'warning-outline',
       route: 'AlertEditor',
-      show: can('alerts.create'),
+      // Members may send quick alerts (alerts.create); the admin tool is for alert managers.
+      show: can('alerts.manage'),
     },
     {
       key: 'events',

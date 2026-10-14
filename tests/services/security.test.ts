@@ -225,7 +225,9 @@ describe('bypassing the service layer and RLS through the raw Data API', () => {
     assert.equal((await raw.from('communities').update({ status: 'archived' } as never).eq('id', c.A)).error?.code, '42501');
     assert.equal((await raw.from('notifications').insert({ user_id: u.memberA.id, type: 'system', title: 'x' } as never)).error?.code, '42501');
     assert.equal((await raw.from('audit_logs').insert({ action: 'community.updated', entity_type: 'community' } as never)).error?.code, '42501');
-    assert.equal((await raw.from('alerts').insert({ community_id: c.A, title: 'x', body: 'y', severity: 'info' })).error?.code, '42501');
+    // Members may send alerts (migration 31), never emergencies and never as someone else.
+    assert.equal((await raw.from('alerts').insert({ community_id: c.A, title: 'x', body: 'y', severity: 'emergency', status: 'published' })).error?.code, '42501');
+    assert.equal((await raw.from('alerts').insert({ community_id: c.A, title: 'x', body: 'y', created_by: u.ownerA.id } as never)).error?.code, '42501');
   });
 
   test('server-only functions and the private schema are not callable', async () => {

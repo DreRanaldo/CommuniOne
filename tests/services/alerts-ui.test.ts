@@ -60,8 +60,8 @@ describe('reading alerts', () => {
 });
 
 describe('who may create and manage', () => {
-  test('members cannot create; creators cannot issue emergencies; managers can', async () => {
-    await rejects(u.member.services.alerts.create({ communityId: c.A!, title: 'x', body: 'y' }), ErrorCode.Forbidden);
+  test('members and creators send alerts but no emergencies; managers can', async () => {
+    await rejects(u.member.services.alerts.create({ communityId: c.A!, title: 'x', body: 'y', severity: 'emergency' }), ErrorCode.Forbidden);
     await rejects(u.creator.services.alerts.create({ communityId: c.A!, title: 'x', body: 'y', severity: 'emergency' }), ErrorCode.Forbidden);
     const urgent = await u.creator.services.alerts.create({ communityId: c.A!, title: 'Ice', body: 'Slippery', severity: 'urgent', publish: true });
     assert.equal(urgent.status, 'published');
