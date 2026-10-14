@@ -170,11 +170,13 @@ const MANAGEMENT = [
   'events.create',
   'events.manage',
 ];
+/** Membership management (seed: Admins and Owners; Moderators suspend only). */
+const PEOPLE = ['members.invite', 'members.approve', 'members.suspend', 'members.remove', 'audit.view'];
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   // Seed templates: Owners hold everything; Admins everything except roles.manage.
-  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update', 'roles.manage'],
-  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, 'community.update'],
-  Moderator: [...MEMBER_PERMISSIONS, ...MODERATION],
+  Owner: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, ...PEOPLE, 'community.update', 'roles.manage'],
+  Admin: [...MEMBER_PERMISSIONS, ...MODERATION, ...MANAGEMENT, ...PEOPLE, 'community.update'],
+  Moderator: [...MEMBER_PERMISSIONS, ...MODERATION, 'members.suspend'],
   Member: MEMBER_PERMISSIONS,
 };
 
@@ -690,6 +692,9 @@ export function fakeSupabase(options: FakeOptions = {}) {
           };
           if (!allowed[visible.status]?.includes(next.status))
             return invalid(`invalid alert transition: ${visible.status} -> ${next.status}`);
+          // Migration 30: taking a published alert down (or archiving) needs alerts.manage.
+          if (visible.status !== 'draft' && !manager)
+            return denied('ending, cancelling or archiving a published alert requires alerts.manage');
           if (next.status === 'published') {
             if (next.severity === 'emergency' && !manager)
               return denied('publishing an emergency alert requires alerts.manage');
@@ -986,44 +991,127 @@ export function fakeSupabase(options: FakeOptions = {}) {
       }
     }
     if (table === 'memberships') {
-      // The caller's own memberships (my_communities rows); leaving is the only self-change.
-      const own = communities
-        .map(
-          (c) =>
-            c as {
-              community_id: string;
-              membership_id: string;
-              membership_status: string;
-              role_names: string[];
-            },
-        )
-        .map((c) => ({
-          id: c.membership_id,
-          community_id: c.community_id,
-          user_id: user,
-          status: c.membership_status,
-          roles: c.role_names,
-        }))
-        .filter((row) => matches(row));
+      // RLS (migration 10): your own rows; others' ACTIVE rows with members.view,
+      // other statuses with members.approve / suspend / remove.
+      const visibleRows = membershipRows().filter(
+        (r) => r.user_id === user || canViewMembership(r.community_id, r.status),
+      );
+      const shaped = (r: MembershipRow) => {
+        const { member: _m, ...row } = r;
+        return columns.includes('(') ? row : pick(row, columns);
+      };
+      const targets = visibleRows.filter((row) => matches({ ...row }));
       if (op === 'select') {
-        const rows = own.map((row) => pick(row, columns));
+        const rows = targets.map(shaped);
         return { data: single ? (rows[0] ?? null) : rows, error: null };
       }
-      if (op === 'update' && values?.status === 'left') {
-        for (const row of own) {
-          // private.is_sole_role_manager: the last member able to manage roles cannot leave.
-          if (permissionsIn(row.community_id).includes('roles.manage') && !options.otherRoleManagers)
+      if (op === 'update' && values && 'status' in values) {
+        const next = String(values.status);
+        const updated: MembershipRow[] = [];
+        for (const row of targets) {
+          if (row.user_id === user) {
+            // private.enforce_membership_update: leaving is the only self-change.
+            if (next !== 'left') return denied(`you cannot change your own membership status to ${next}`);
+            // private.is_sole_role_manager: the last member able to manage roles cannot leave.
+            if (permissionsIn(row.community_id).includes('roles.manage') && !options.otherRoleManagers)
+              return denied('the last member able to manage roles cannot leave the community');
+            communities = communities.filter(
+              (c) => (c as { membership_id: string }).membership_id !== row.id,
+            );
+            updated.push({ ...row, status: 'left' });
+            continue;
+          }
+          const perms = permissionsIn(row.community_id);
+          // RLS USING: members.approve or members.suspend, else the row is not updatable (0 rows).
+          if (!perms.includes('members.approve') && !perms.includes('members.suspend')) continue;
+          if (!covers(row.community_id, permissionsOfRoles(row.member.role_names)))
+            return denied('insufficient privileges to modify this membership');
+          const from = row.status;
+          const approval =
+            (['pending', 'rejected', 'left'].includes(from) && next === 'active') ||
+            (from === 'pending' && next === 'rejected');
+          const suspension =
+            (from === 'active' && next === 'suspended') || (from === 'suspended' && next === 'active');
+          if (!approval && !suspension)
             return {
               data: null,
-              error: {
-                code: '42501',
-                message: 'the last member able to manage roles cannot leave the community',
-              },
+              error: { code: '22023', message: `invalid membership status transition: ${from} -> ${next}` },
             };
+          if (
+            (approval && !perms.includes('members.approve')) ||
+            (suspension && !perms.includes('members.suspend'))
+          )
+            return denied(`insufficient privileges for membership transition ${from} -> ${next}`);
+          const m = row.member;
+          m.status = next;
+          // Stage 3 lifecycle: admission assigns the default role; rejection removes roles.
+          if (next === 'active' && m.role_names.length === 0) m.role_names = ['Member'];
+          if (next === 'rejected') m.role_names = [];
+          if (next === 'active' && !m.joined_at) m.joined_at = new Date().toISOString();
+          updated.push(membershipRow(row.community_id, m));
         }
-        const ids = new Set(own.map((row) => row.id));
-        communities = communities.filter((c) => !ids.has((c as { membership_id: string }).membership_id));
-        return { data: own.map((row) => pick({ ...row, status: 'left' }, columns)), error: null };
+        return { data: updated.map(shaped), error: null };
+      }
+      if (op === 'delete') {
+        // RLS: members.remove, never your own row, and the actor covers the member.
+        const removed = targets.filter(
+          (row) =>
+            row.user_id !== user &&
+            permissionsIn(row.community_id).includes('members.remove') &&
+            covers(row.community_id, permissionsOfRoles(row.member.role_names)),
+        );
+        for (const row of removed) {
+          const list = memberRows[row.community_id] ?? [];
+          memberRows[row.community_id] = list.filter((m) => m.membership_id !== row.id);
+        }
+        return { data: removed.map(shaped), error: null };
+      }
+    }
+    if (table === 'roles' && op === 'select') {
+      // RLS: roles.view in the role's community.
+      const rows = rolesOf()
+        .filter((r) => permissionsIn(r.community_id).includes('roles.view'))
+        .filter((r) => matches({ ...r }))
+        .map((r) => pick(r, columns));
+      return { data: single ? (rows[0] ?? null) : rows, error: null };
+    }
+    if (table === 'membership_roles') {
+      const membershipId = (values?.membership_id ??
+        filters.find(([c]) => c === 'membership_id')?.[1]) as string;
+      const roleId = (values?.role_id ?? filters.find(([c]) => c === 'role_id')?.[1]) as string;
+      const target = membershipRows().find((r) => r.id === membershipId);
+      const role = rolesOf().find((r) => r.id === roleId);
+      // RLS (Stage 1): roles.manage, never your own membership, and the actor
+      // covers both the member and the role (no privilege escalation).
+      const allowed =
+        !!target &&
+        !!role &&
+        role.community_id === target.community_id &&
+        permissionsIn(target.community_id).includes('roles.manage') &&
+        target.user_id !== user &&
+        covers(target.community_id, permissionsOfRoles(target.member.role_names)) &&
+        covers(target.community_id, ROLE_PERMISSIONS[role.name] ?? []);
+      const has = !!target && !!role && target.member.role_names.includes(role.name);
+      if (op === 'insert') {
+        if (!allowed)
+          return denied('new row violates row-level security policy for table "membership_roles"');
+        if (has)
+          return {
+            data: null,
+            error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+          };
+        target.member.role_names = [...target.member.role_names, role.name];
+        return { data: null, error: null };
+      }
+      if (op === 'delete') {
+        if (!allowed || !has) return { data: [], error: null };
+        target.member.role_names = target.member.role_names.filter((n) => n !== role.name);
+        return { data: [{ id: `${membershipId}:${roleId}` }], error: null };
+      }
+      if (op === 'select') {
+        const visible =
+          has && (target.user_id === user || canViewMembership(target.community_id, target.status));
+        return { data: visible ? [{ id: `${membershipId}:${roleId}` }] : [], error: null };
       }
     }
     if (table === 'profile_private') {
@@ -1080,6 +1168,10 @@ export function fakeSupabase(options: FakeOptions = {}) {
       },
       in(column: string, list: unknown[]) {
         filters.push([column, new InList(list)]);
+        return builder;
+      },
+      // Keyset pagination (memberships.list); every row fits on one test page.
+      or(_expression: string) {
         return builder;
       },
       order(_column: string) {
@@ -1390,6 +1482,71 @@ export function fakeSupabase(options: FakeOptions = {}) {
         : [];
     return [...self, ...(memberRows[communityId] ?? [])];
   };
+  // ---- Member management (RN-16): memberships, roles, membership_roles ----
+  type MembershipRow = ReturnType<typeof membershipRow>;
+  const ROLE_NAMES = ['Admin', 'Member', 'Moderator', 'Owner'];
+  /** A stable role id per community and template name. */
+  const roleIdOf = (communityId: string, name: string) =>
+    `f0f0f0f0-000${ROLE_NAMES.indexOf(name) + 1}-4000-8000-${communityId.slice(-12)}`;
+  const membershipRow = (communityId: string, m: FakeMember) => ({
+    id: m.membership_id,
+    community_id: communityId,
+    user_id: m.user_id,
+    status: m.status,
+    joined_at: m.joined_at,
+    created_at: m.joined_at ?? '2025-01-01T00:00:00Z',
+    profiles: { display_name: m.display_name, avatar_url: m.avatar_url },
+    membership_roles: [...m.role_names]
+      .sort()
+      .map((name) => ({ roles: { id: roleIdOf(communityId, name), name } })),
+    member: m,
+  });
+  const membershipRows = () => {
+    const ids = new Set([
+      ...communities.map((c) => (c as { community_id: string }).community_id),
+      ...Object.keys(memberRows),
+    ]);
+    return [...ids].flatMap((id) => membersOf(id).map((m) => membershipRow(id, m)));
+  };
+  const rolesOf = () =>
+    [...new Set(communities.map((c) => (c as { community_id: string }).community_id))].flatMap((id) =>
+      ROLE_NAMES.map((name) => ({
+        id: roleIdOf(id, name),
+        community_id: id,
+        name,
+        description: null as string | null,
+        is_system_role: true,
+        is_default_for_new_members: name === 'Member',
+      })),
+    );
+  /** private.can_view_membership. */
+  const canViewMembership = (communityId: string, status: string) => {
+    const perms = permissionsIn(communityId);
+    return status === 'active'
+      ? perms.includes('members.view')
+      : ['members.approve', 'members.suspend', 'members.remove'].some((k) => perms.includes(k));
+  };
+  const permissionsOfRoles = (names: string[]) => [
+    ...new Set(names.flatMap((n) => ROLE_PERMISSIONS[n] ?? [])),
+  ];
+  /** private.current_user_covers_*: the caller holds every one of these permissions. */
+  const covers = (communityId: string, needed: string[]) => {
+    const mine = permissionsIn(communityId);
+    return needed.every((k) => mine.includes(k));
+  };
+  const denied = (message: string) => ({ data: null, error: { code: '42501', message } });
+  // ---- Invitations created in the app (create / list / revoke) ----
+  const createdInvitations: {
+    id: string;
+    community_id: string;
+    created_by: string;
+    expires_at: string;
+    max_uses: number | null;
+    use_count: number;
+    status: string;
+    created_at: string;
+    token: string;
+  }[] = [];
   // ---- Stories (migration 27 rules) ----
   const allStories = () => Object.values(content).flatMap((c) => c.stories ?? []) as StoryRow[];
   const storyFiles = new Set<string>(); // uploaded story pictures
@@ -2403,6 +2560,72 @@ export function fakeSupabase(options: FakeOptions = {}) {
       row.timezone = args.p_timezone;
       return { data: { ...row }, error: null };
     }
+    if (name === 'create_invitation' || name === 'list_invitations' || name === 'revoke_invitation') {
+      if (offline) return { data: null, error: OFFLINE };
+      const user = me();
+      if (!user) return { data: null, error: AUTH_REQUIRED };
+      if (name === 'list_invitations') {
+        // SECURITY INVOKER: RLS shows nothing without members.invite.
+        const communityId = String(args.p_community_id);
+        if (!permissionsIn(communityId).includes('members.invite')) return { data: [], error: null };
+        const rows = createdInvitations
+          .filter((i) => i.community_id === communityId)
+          .map(({ token: _token, ...i }) => ({
+            ...i,
+            effective_status:
+              i.status === 'active' && Date.parse(i.expires_at) <= Date.now() ? 'expired' : i.status,
+          }))
+          .filter((i) => args.p_include_inactive || i.effective_status === 'active')
+          .reverse();
+        return { data: rows, error: null };
+      }
+      if (name === 'revoke_invitation') {
+        const inv = createdInvitations.find((i) => i.id === args.p_invitation_id);
+        if (!inv || !permissionsIn(inv.community_id).includes('members.invite'))
+          return { data: null, error: { code: 'P0002', message: 'invitation not found' } };
+        if (inv.status === 'revoked') return { data: false, error: null };
+        inv.status = 'revoked';
+        const shared = invitations.get(inv.token);
+        if (shared) shared.state = 'revoked';
+        return { data: true, error: null };
+      }
+      const communityId = String(args.p_community_id);
+      if (!permissionsIn(communityId).includes('members.invite'))
+        return denied('members.invite is required in this community');
+      const days = /^(\d+) days?$/.exec(String(args.p_expires_in ?? '7 days'));
+      const hours = /^(\d+) hours?$/.exec(String(args.p_expires_in ?? ''));
+      const ms = days ? Number(days[1]) * 86_400_000 : hours ? Number(hours[1]) * 3_600_000 : NaN;
+      if (!(ms >= 3_600_000 && ms <= 30 * 86_400_000))
+        return {
+          data: null,
+          error: { code: '22023', message: 'invitations must expire between 1 hour and 30 days from now' },
+        };
+      const maxUses = (args.p_max_uses as number | undefined) ?? null;
+      if (maxUses !== null && (maxUses < 1 || maxUses > 10000))
+        return { data: null, error: { code: '22023', message: 'max_uses must be between 1 and 10000' } };
+      const n = 9000 + createdInvitations.length;
+      const token = invitationToken(n);
+      const row = {
+        id: `abababab-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        community_id: communityId,
+        created_by: user,
+        expires_at: new Date(Date.now() + ms).toISOString(),
+        max_uses: maxUses,
+        use_count: 0,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        token,
+      };
+      createdInvitations.push(row);
+      const community = communities.find(
+        (c) => (c as { community_id: string }).community_id === communityId,
+      ) as FakeInvitation['community'];
+      invitations.set(token, { community, state: 'valid' });
+      return {
+        data: [{ invitation_id: row.id, token, expires_at: row.expires_at, max_uses: maxUses }],
+        error: null,
+      };
+    }
     if (name === 'preview_invitation' || name === 'redeem_invitation') {
       if (offline) return { data: null, error: OFFLINE };
       const user = me();
@@ -2545,6 +2768,10 @@ export function fakeSupabase(options: FakeOptions = {}) {
     redemptions,
     /** Server-side invitations by token (change one to simulate a revocation). */
     invitations,
+    /** Invitations created through create_invitation (token included, for assertions only). */
+    createdInvitations,
+    /** Other members per community, as stored on the "server" (status and roles change). */
+    memberRows,
     /** Community content by community id (change it to simulate new posts, alerts, ...). */
     content,
     /** The user's memberships as my_communities() currently returns them. */

@@ -3,6 +3,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useRef } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
 import { Banner, Button, EmptyState, ErrorState, Icon, LoadingState, Screen, Text } from '@/components';
+import { hasAdminTools } from '@/features/admin/adminRules';
 import { AuthNoticeBanner } from '@/features/auth/components/AuthNoticeBanner';
 import { AlertCard } from '@/features/alerts/AlertCard';
 import { AnnouncementItem } from '@/features/announcements/AnnouncementItem';
@@ -152,6 +153,18 @@ export function CommunityHomeScreen({
             <Icon name="chevron-down" size={22} color="textMuted" />
           </Pressable>
         </View>
+        {hasAdminTools(permissions.can) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Admin tools"
+            onPress={() => navigation.navigate('Admin')}
+            style={styles.settings}
+            hitSlop={6}
+            testID="hub-admin"
+          >
+            <Icon name="shield-checkmark-outline" size={24} color="text" />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Community settings"

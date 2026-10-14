@@ -116,19 +116,22 @@ export function canChangeSeverity(a: AlertLike | null, can: Can): boolean {
 
 export type AlertAction = 'edit' | 'publish' | 'end' | 'cancel' | 'discard' | 'archive';
 
-/** Lifecycle actions from a status (the trigger's transitions). */
+/**
+ * Lifecycle actions from a status (the trigger's transitions). Taking a
+ * published alert down (end, cancel) or archiving it needs alerts.manage
+ * (migration 30): authors without it keep their drafts and corrections only.
+ */
 export function lifecycleActions(a: AlertLike, can: Can): AlertAction[] {
+  const manager = can('alerts.manage');
   switch (statusOf(a)) {
     case 'draft':
       // Publishing an emergency needs alerts.manage.
-      return a.severity === 'emergency' && !can('alerts.manage')
-        ? ['edit', 'discard']
-        : ['edit', 'publish', 'discard'];
+      return a.severity === 'emergency' && !manager ? ['edit', 'discard'] : ['edit', 'publish', 'discard'];
     case 'published':
-      return ['edit', 'end', 'cancel'];
+      return manager ? ['edit', 'end', 'cancel'] : ['edit'];
     case 'cancelled':
     case 'expired':
-      return ['archive'];
+      return manager ? ['archive'] : [];
     default:
       return [];
   }
@@ -139,6 +142,9 @@ export function alertError(error: unknown): string {
   if (isServiceError(error)) {
     if (/must be in the future/i.test(error.message)) {
       return 'The end time has passed. Choose a later time or remove it.';
+    }
+    if (/requires alerts\.manage/i.test(error.message) && !/emergency|severity/i.test(error.message)) {
+      return 'Only people who manage alerts can end, cancel or archive a published alert.';
     }
     if (/emergency|severity requires/i.test(error.message)) {
       return 'Only people who manage alerts can issue or change emergency alerts.';

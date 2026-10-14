@@ -11,7 +11,7 @@ import {
   TEST_USER_ID,
   type FakeOptions,
 } from '@/testing/fakeSupabase';
-import { renderApp } from '@/testing/render';
+import { openHub, renderApp } from '@/testing/render';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -313,8 +313,8 @@ describe('delete', () => {
 });
 
 describe('moderation state', () => {
-  test('a member sees only their own hidden posts, with the moderator\'s reason; no "Deleted" view', async () => {
-    const { user } = await openFeed({
+  test('the feed shows published posts only: no Hidden or Deleted view for anyone (RN-16)', async () => {
+    const view = await openFeed({
       content: {
         [C]: {
           posts: [
@@ -325,16 +325,16 @@ describe('moderation state', () => {
         },
       },
     });
+    expect(screen.getByText('Their post 3')).toBeOnTheScreen();
     expect(screen.queryByText('My post 1')).not.toBeOnTheScreen();
+    expect(screen.queryByRole('tab', { name: 'Hidden' })).not.toBeOnTheScreen();
     expect(screen.queryByRole('tab', { name: 'Deleted' })).not.toBeOnTheScreen();
-    await user.press(screen.getByRole('tab', { name: 'Hidden' }));
-    expect(await screen.findByText('My post 1')).toBeOnTheScreen();
-    expect(within(cardOf('My post 1')).getByText('Hidden by a moderator: Off topic')).toBeOnTheScreen();
-    expect(screen.queryByText('Their post 2')).not.toBeOnTheScreen();
-    expect(screen.queryByText(/Spam/)).not.toBeOnTheScreen();
+    // The database still returns a member's own hidden post to them, never anyone else's.
+    const hidden = await view.dependencies.services.posts.list({ communityId: C, status: 'hidden' });
+    expect(hidden.items.map((p) => p.body)).toEqual(['My post 1']);
   });
 
-  test('moderators see every hidden and deleted post', async () => {
+  test('moderators review hidden and deleted posts in the admin tools', async () => {
     const user = userEvent.setup();
     await renderApp({
       session: makeSession(),
@@ -348,10 +348,14 @@ describe('moderation state', () => {
         },
       },
     });
-    await user.press(await screen.findByRole('tab', { name: 'Deleted' }));
-    expect(await screen.findByText('Deleted one')).toBeOnTheScreen();
-    await user.press(screen.getByRole('tab', { name: 'Hidden' }));
+    await screen.findByTestId('feed-screen');
+    expect(screen.queryByText('Hidden one')).not.toBeOnTheScreen();
+    await openHub();
+    await user.press(await screen.findByRole('button', { name: 'Admin tools' }));
+    await user.press(await screen.findByRole('button', { name: 'Hidden and deleted posts' }));
     expect(await screen.findByText('Hidden by a moderator: Spam')).toBeOnTheScreen();
+    await user.press(screen.getByRole('tab', { name: 'Deleted' }));
+    expect(await screen.findByText('Deleted one')).toBeOnTheScreen();
   });
 });
 

@@ -148,12 +148,20 @@ describe('editing', () => {
 });
 
 describe('cancellation and expiry', () => {
-  test('6. the author cancels her alert with a reason', async () => {
-    const { data, error } = await u.alerter.client
+  test('6. an author without alerts.manage cannot take her published alert down (migration 30)', async () => {
+    const refused = await u.alerter.client
+      .from('alerts').update({ status: 'cancelled', cancellation_reason: 'Pressure restored' }).eq('id', al.water);
+    assert.equal(refused.error?.code, '42501');
+    assert.match(refused.error?.message ?? '', /requires alerts\.manage/);
+    assert.equal((await alert(al.water)).status, 'published');
+  });
+
+  test('6. an alert manager cancels it with a reason', async () => {
+    const { data, error } = await u.adminA.client
       .from('alerts').update({ status: 'cancelled', cancellation_reason: 'Pressure restored' }).eq('id', al.water)
       .select('status, cancelled_by, cancellation_reason');
     assert.equal(error, null);
-    assert.deepEqual(data, [{ status: 'cancelled', cancelled_by: u.alerter.id, cancellation_reason: 'Pressure restored' }]);
+    assert.deepEqual(data, [{ status: 'cancelled', cancelled_by: u.adminA.id, cancellation_reason: 'Pressure restored' }]);
     const { data: history } = await u.memberA.client.rpc('list_alert_history', { p_community_id: c.A });
     assert.equal(history.find((r) => r.id === al.water)?.status, 'cancelled');
   });

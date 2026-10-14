@@ -16,6 +16,8 @@ export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
 export interface Member {
   id: string;
+  /** The membership's community (lets callers check it is the one they expect). */
+  communityId: string;
   userId: string;
   status: MembershipStatus;
   joinedAt: string | null;
@@ -51,10 +53,11 @@ export interface MemberProfile extends DirectoryMember {
 
 export const MEMBER_SEARCH_MAX = 100;
 
-const MEMBER_COLUMNS = 'id, user_id, status, joined_at, created_at, profiles(display_name, avatar_url), membership_roles(roles(id, name))';
+const MEMBER_COLUMNS = 'id, community_id, user_id, status, joined_at, created_at, profiles(display_name, avatar_url), membership_roles(roles(id, name))';
 
 interface MemberRow {
   id: string;
+  community_id: string;
   user_id: string;
   status: string;
   joined_at: string | null;
@@ -65,6 +68,7 @@ interface MemberRow {
 
 const toMember = (row: MemberRow): Member => ({
   id: row.id,
+  communityId: row.community_id,
   userId: row.user_id,
   status: row.status as MembershipStatus,
   joinedAt: row.joined_at,
@@ -195,6 +199,22 @@ export function membershipsService(ctx: ServiceContext) {
         }
         const rows = unwrap(await query) as unknown as MemberRow[];
         return toPage(rows.map(toMember), limit, (last) => [last.createdAt, last.id]);
+      });
+    },
+
+    /**
+     * One membership with its profile and roles, for member management
+     * (RN-16). NOT_FOUND unless RLS lets the caller see it: active members
+     * with members.view, other statuses with members.approve / suspend / remove.
+     */
+    get(membershipId: string): Promise<Member> {
+      return ctx.run('memberships.get', async () => {
+        await ctx.requireUserId();
+        const row = unwrapOne(
+          await db.from('memberships').select(MEMBER_COLUMNS).eq('id', v.uuid(membershipId, 'membershipId')).maybeSingle(),
+          'Membership not found.',
+        );
+        return toMember(row as unknown as MemberRow);
       });
     },
 

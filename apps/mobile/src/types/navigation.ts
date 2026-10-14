@@ -47,6 +47,16 @@ export type CommunityStackParamList = {
   CommunitySettings: undefined;
   /** Edit the community's profile (RN-15; community.update). */
   EditCommunity: undefined;
+  /** Admin tools for the current community (RN-16), each shown from permissions. */
+  Admin: undefined;
+  /** Member management (RN-16): active, requests, suspended. */
+  AdminMembers: { status?: 'active' | 'pending' | 'suspended' } | undefined;
+  /** One membership, read from the server; must belong to the current community. */
+  AdminMember: { membershipId: string };
+  /** Invitation codes and links (members.invite). */
+  Invitations: undefined;
+  /** Hidden and deleted posts (posts.moderate). */
+  Moderation: undefined;
   /** The current community's member directory (RN-14). */
   Members: undefined;
   /** One member's community profile (RN-14), read from the server. */

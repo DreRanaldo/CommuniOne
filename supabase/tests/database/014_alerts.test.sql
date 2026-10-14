@@ -2,7 +2,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(69);
+select plan(72);
 
 -- ---------------------------------------------------------------------------
 -- Fixture (identical in every behavioural test file)
@@ -249,11 +249,23 @@ select throws_like(
   format($$ update public.alerts set cancellation_reason = 'just because' where id = %L $$, pg_temp.fx('al_dave')),
   '%only be given when cancelling%', '6. a cancellation reason is only accepted when cancelling'
 );
+-- Migration 30: taking a published alert down needs alerts.manage, even for its author.
+select throws_ok(
+  format($$ update public.alerts set status = 'cancelled', cancellation_reason = 'mine' where id = %L $$, pg_temp.fx('al_dave')),
+  '42501', 'ending, cancelling or archiving a published alert requires alerts.manage',
+  '6. an author without alerts.manage cannot cancel her published alert'
+);
+select throws_ok(
+  format($$ update public.alerts set status = 'expired' where id = %L $$, pg_temp.fx('al_dave')),
+  '42501', 'ending, cancelling or archiving a published alert requires alerts.manage',
+  '6. ...nor end it early'
+);
+select pg_temp.login(pg_temp.fx('erin'));
 update public.alerts set status = 'cancelled', cancellation_reason = 'Pool reopened early' where id = pg_temp.fx('al_dave');
 select results_eq(
   $$ select status, cancelled_by, cancelled_at is not null, cancellation_reason from public.alerts where id = pg_temp.fx('al_dave') $$,
-  $$ values ('cancelled', pg_temp.fx('dave'), true, 'Pool reopened early') $$,
-  '6. the author cancels her alert with a reason'
+  $$ values ('cancelled', pg_temp.fx('erin'), true, 'Pool reopened early') $$,
+  '6. an alert manager (Admin) cancels it with a reason'
 );
 reset role;
 select is(
@@ -288,6 +300,12 @@ select results_eq(
   $$ values ('cancelled', null::timestamptz, 0) $$,
   '6. discarding a draft cancels it without any notification event'
 );
+select throws_ok(
+  format($$ update public.alerts set status = 'archived' where id = %L $$, pg_temp.fx('al_dave')),
+  '42501', 'ending, cancelling or archiving a published alert requires alerts.manage',
+  '6. an author without alerts.manage cannot archive'
+);
+select pg_temp.login(pg_temp.fx('erin'));
 update public.alerts set status = 'archived' where id = pg_temp.fx('al_dave');
 select throws_like(
   format($$ update public.alerts set status = 'cancelled' where id = %L $$, pg_temp.fx('al_dave')),

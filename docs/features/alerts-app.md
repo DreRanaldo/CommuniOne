@@ -76,13 +76,16 @@ the time, and the app shows such an alert as **Ended**.
 | Severity change after issue | `alerts.manage` | Trigger |
 | Edit | Draft or published, and you may manage it | Trigger: only draft or published; published edits are stamped `edited_at` |
 | Issue (asks first; stronger wording for emergencies) | Draft (emergency: manager only) | Trigger transition; `published_at` stamped; end time must be in the future |
-| End now (asks first) | Published | `published → expired`; `expired_at` stamped |
-| Cancel alert, with an optional reason (asks first) | Published | `published → cancelled`; reason ≤ 500 characters, shown to members |
+| End now (asks first) | Published, `alerts.manage` only (RN-16) | `published → expired`; `expired_at` stamped; migration 30 refuses non-managers |
+| Cancel alert, with an optional reason (asks first) | Published, `alerts.manage` only (RN-16) | `published → cancelled`; reason ≤ 500 characters, shown to members; migration 30 refuses non-managers |
 | Discard (asks first) | Draft | `draft → cancelled` |
-| Archive (asks first) | Ended or cancelled | Final: nothing can change an archived alert |
+| Archive (asks first) | Ended or cancelled, `alerts.manage` only (RN-16) | Final: nothing can change an archived alert |
 
 **"May manage it"** means `alerts.manage` for any alert, or `alerts.create` for
-**your own**. Members see none of these controls. Alerts are never deleted.
+**your own**. Since RN-16 (migration 30), taking a published alert down (end,
+cancel) or archiving it needs `alerts.manage` (Owners and Admins by default):
+authors without it keep their drafts and can correct their published text only.
+Members see none of these controls. Alerts are never deleted.
 
 Nothing is optimistic: each action waits for the server, then shows the result
 ("Issued. Members can see it now.", "Ended.", "Cancelled.", …). After a refusal

@@ -44,7 +44,7 @@ for an element of the mockups, the element was **left out rather than faked**
 - Stories row.
 - "Share something with {community}…": an avatar and a pill. Below it, Photo / Event / Alert quick actions, each shown only with its permission.
 - Pinned alerts: urgent ones as a soft red banner. An emergency in force keeps the solid red block.
-- Filter pills: **Latest** (newest first), plus Hidden and Deleted for moderators.
+- **Latest** (newest first): posts with current announcements, upcoming events and active info/warning alerts placed among them (RN-16). Hidden and deleted posts moved to Admin tools → Moderation.
 - Post card:
   - avatar with tinted initials;
   - name, then "{community} · {time}" and a members-only icon;
@@ -99,7 +99,6 @@ for an element of the mockups, the element was **left out rather than faked**
 | "For you" and "Curated" feed tabs | there is no ranking or curation; only newest-first exists | a ranking or curation model |
 | Public community search, categories, "Nearby", "Recommended", "Join community", favourites | communities are private and invitation-only; there is no location or interest data | an opt-in public listing, a join policy, location and interests (a privacy decision) |
 | Profile location, "Connections", Activity / Posts / Saved tabs | no location field, follow model, saved posts or activity feed | new tables and policies |
-| "Manage community" on the hub card | no community settings screen yet | a settings stage |
 | "2 unread" on Announcements, "42 new" on Feed | no per-user read tracking | read receipts |
 | The mockups' geometric typeface | system fonts are used; a custom font would mean bundling one | a font asset (licence) |
 

@@ -59,8 +59,15 @@ test('controls: managers any alert, creators their own; emergency needs alerts.m
     'discard',
   ]);
   expect(lifecycleActions({ ...draft, severity: 'emergency' }, can('alerts.manage'))).toContain('publish');
-  expect(lifecycleActions({ ...base, status: 'published' }, can())).toEqual(['edit', 'end', 'cancel']);
-  expect(lifecycleActions({ ...base, status: 'expired' }, can())).toEqual(['archive']);
+  expect(lifecycleActions({ ...base, status: 'published' }, can('alerts.manage'))).toEqual([
+    'edit',
+    'end',
+    'cancel',
+  ]);
+  expect(lifecycleActions({ ...base, status: 'expired' }, can('alerts.manage'))).toEqual(['archive']);
+  // Migration 30: authors without alerts.manage cannot take a published alert down.
+  expect(lifecycleActions({ ...base, status: 'published' }, can('alerts.create'))).toEqual(['edit']);
+  expect(lifecycleActions({ ...base, status: 'expired' }, can('alerts.create'))).toEqual([]);
   expect(lifecycleActions({ ...base, status: 'archived' }, can('alerts.manage'))).toEqual([]);
 });
 
