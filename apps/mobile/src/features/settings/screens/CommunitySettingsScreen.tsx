@@ -6,6 +6,7 @@ import { Banner, Button, Card, ErrorState, Icon, LoadingState, Screen, Text } fr
 import { useCommunity, useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
 import { roleLabel } from '@/features/communities/selection';
 import { useCommunityPermissions } from '@/features/communities/useCommunityPermissions';
+import { hasAdminTools } from '@/features/admin/adminRules';
 import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles, useTheme } from '@/theme';
@@ -134,6 +135,31 @@ export function CommunitySettingsScreen({ navigation }: Props) {
           </View>
         ))}
       </Card>
+
+      {hasAdminTools(permissions.can) ? (
+        <>
+          <Text variant="heading" accessibilityRole="header">
+            Administration
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Admin tools"
+            accessibilityHint="Members, invitations, content and moderation"
+            onPress={() => navigation.navigate('Admin')}
+            style={({ pressed }) => [styles.link, pressed && styles.pressed]}
+            testID="settings-admin"
+          >
+            <Icon name="shield-checkmark-outline" size={22} color="primary" />
+            <View style={styles.flex}>
+              <Text variant="bodyStrong">Admin tools</Text>
+              <Text variant="caption" tone="muted">
+                Members, invitations, content and moderation
+              </Text>
+            </View>
+            <Icon name="chevron-forward" size={18} color="textMuted" />
+          </Pressable>
+        </>
+      ) : null}
 
       {permissions.can('community.update') ? (
         <>

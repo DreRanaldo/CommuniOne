@@ -49,8 +49,9 @@ edit its profile.
 - **The last member able to manage roles cannot leave** (database rule since
   Stage 1, `private.is_sole_role_manager`). The app explains: "You're the only
   one who can manage roles…, give another member the Owner role first."
-- **No ownership-transfer workflow** was built: the backend has none (role
-  assignment exists, `roles.assign`, but no app screen yet).
+- **No ownership-transfer workflow** was built: the backend has none. Since
+  RN-16 an Owner can give another member the Owner role in Admin tools →
+  Members, then leave.
 
 ### Community-specific preferences
 
@@ -79,4 +80,4 @@ supports. There are no other per-community member preferences yet.
 
 - No push notifications yet (in-app only). The same preferences will apply to push when it is added.
 - No per-type muting beyond the four groups, and no "mute for a while".
-- No role management or ownership transfer in the app.
+- Role management is in the admin tools (RN-16, [`mobile-admin.md`](mobile-admin.md)); there is no ownership-transfer workflow.

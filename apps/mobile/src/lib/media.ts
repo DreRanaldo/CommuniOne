@@ -16,6 +16,35 @@ export interface PickedImage {
   height?: number;
 }
 
+/** Base64 → bytes (Hermes has atob). */
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64.replace(/^data:[^,]*,/, '').replace(/\s/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Reads a local file (file:// or content://) into bytes with XMLHttpRequest,
+ * which every React Native version supports for local URIs. (fetch(...)
+ * .arrayBuffer() depends on Blob / FileReader support that some builds lack,
+ * which made picked files silently fail.)
+ */
+export function readFileBytes(uri: string): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      const data = xhr.response as ArrayBuffer | null;
+      if (data && data.byteLength >= 0) resolve(new Uint8Array(data));
+      else reject(new Error('The file could not be read.'));
+    };
+    xhr.onerror = () => reject(new Error('The file could not be read.'));
+    xhr.responseType = 'arraybuffer';
+    xhr.open('GET', uri);
+    xhr.send();
+  });
+}
+
 /** Post photos keep their shape; the long edge is limited to this many pixels. */
 export const POST_PHOTO_MAX_EDGE = 2048;
 
@@ -62,7 +91,7 @@ export const expoMediaPicker: MediaPicker = {
       mimeType: asset.mimeType ?? null,
       size: typeof asset.size === 'number' ? asset.size : null,
       uri: asset.uri,
-      read: async () => new Uint8Array(await (await fetch(asset.uri)).arrayBuffer()),
+      read: () => readFileBytes(asset.uri),
     };
   },
 
@@ -80,8 +109,9 @@ export const expoMediaPicker: MediaPicker = {
     const image = await ImageManipulator.manipulate(asset.uri)
       .resize({ width: shape.width, height: shape.height })
       .renderAsync();
-    const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
-    const bytes = new Uint8Array(await (await fetch(saved.uri)).arrayBuffer());
+    // The re-encoded bytes come straight back as base64: no file read needed.
+    const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8, base64: true });
+    const bytes = saved.base64 ? base64ToBytes(saved.base64) : await readFileBytes(saved.uri);
     return { bytes, mimeType: 'image/jpeg', uri: saved.uri };
   },
 
@@ -105,8 +135,8 @@ export const expoMediaPicker: MediaPicker = {
           height: Math.round(asset.height * scale),
         });
       const image = await context.renderAsync();
-      const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
-      const bytes = new Uint8Array(await (await fetch(saved.uri)).arrayBuffer());
+      const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8, base64: true });
+      const bytes = saved.base64 ? base64ToBytes(saved.base64) : await readFileBytes(saved.uri);
       photos.push({
         bytes,
         mimeType: 'image/jpeg',

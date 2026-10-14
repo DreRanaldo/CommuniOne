@@ -2,6 +2,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MyCommunity } from '@communione/services';
 import { ErrorState, LoadingState } from '@/components';
 import { useCurrentCommunity } from '@/features/communities/CurrentCommunityProvider';
+import { AdminMemberScreen } from '@/features/admin/screens/AdminMemberScreen';
+import { AdminMembersScreen } from '@/features/admin/screens/AdminMembersScreen';
+import { AdminScreen } from '@/features/admin/screens/AdminScreen';
+import { InvitationsScreen } from '@/features/admin/screens/InvitationsScreen';
+import { ModerationScreen } from '@/features/admin/screens/ModerationScreen';
 import { ChooseCommunityScreen } from '@/features/communities/screens/ChooseCommunityScreen';
 import { CommunityHomeScreen } from '@/features/communities/screens/CommunityHomeScreen';
 import { AlertDetailScreen } from '@/features/alerts/AlertDetailScreen';
@@ -122,6 +127,15 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         options={{ title: 'Edit community', presentation: 'modal' }}
       />
       <Stack.Screen name="MemberProfile" component={MemberProfileScreen} options={{ title: 'Member' }} />
+      <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
+      <Stack.Screen
+        name="AdminMembers"
+        component={AdminMembersScreen}
+        options={{ title: 'Manage members' }}
+      />
+      <Stack.Screen name="AdminMember" component={AdminMemberScreen} options={{ title: 'Member' }} />
+      <Stack.Screen name="Invitations" component={InvitationsScreen} options={{ title: 'Invite members' }} />
+      <Stack.Screen name="Moderation" component={ModerationScreen} options={{ title: 'Moderation' }} />
     </Stack.Navigator>
   );
 }

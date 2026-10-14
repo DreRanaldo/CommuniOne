@@ -384,7 +384,10 @@ describe('moderation and permissions', () => {
     await waitFor(() => expect(screen.queryByText('Buy my stuff')).not.toBeOnTheScreen());
     expect(fake.content[M]!.posts![0]).toMatchObject({ status: 'hidden', moderation_reason: 'Spam' });
 
-    await user.press(screen.getByRole('tab', { name: 'Hidden' }));
+    // Hidden posts are reviewed in the admin tools (RN-16), not in the feed.
+    await openHub();
+    await user.press(await screen.findByRole('button', { name: 'Admin tools' }));
+    await user.press(await screen.findByRole('button', { name: 'Hidden and deleted posts' }));
     expect(await screen.findByText('Hidden by a moderator: Spam')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: 'Post options' }));
     await user.press(screen.getByRole('button', { name: 'Restore post' }));

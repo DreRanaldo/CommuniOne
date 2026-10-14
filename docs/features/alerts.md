@@ -112,7 +112,7 @@ draft ──publish──► published ──cancel───► cancelled ──
 | Permission | Allows |
 |---|---|
 | `alerts.manage` | Any alert in the community |
-| `alerts.create` | Only alerts you created, and only non-emergency severities |
+| `alerts.create` | Only alerts you created, and only non-emergency severities. Once published, only text corrections: ending, cancelling or archiving needs `alerts.manage` (migration 30, RN-16) |
 | `alerts.view` | Read only |
 
 Default roles: Owners and Admins hold all three; Moderators and Members hold
@@ -154,7 +154,9 @@ Expiry works at two levels:
 | UPDATE | `private.can_manage_alert_row()`: `alerts.manage`, or you are the creator and hold `alerts.create` |
 | DELETE | Never |
 
-The `enforce_alert_write` trigger then applies the lifecycle and severity rules.
+The `enforce_alert_write` trigger then applies the lifecycle and severity rules,
+and `alerts_restrict_removal` (migration 30) refuses any status change of a
+non-draft alert without `alerts.manage` (`42501`).
 
 All checks go through `has_community_permission()`, which requires a live
 session, an active account, and an active membership in an active community.

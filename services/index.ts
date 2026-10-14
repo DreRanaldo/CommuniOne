@@ -69,7 +69,10 @@ export {
 export { consoleLogger, silentLogger, redact, type Logger, type LogLevel } from './core/logger.ts';
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type Page, type PageRequest } from './core/pagination.ts';
 export type { Database } from './database.types.ts';
-export { parseInvitationToken, type InvitationPreview } from './invitations/index.ts';
+export {
+  parseInvitationToken, type CreatedInvitation, type InvitationPreview, type InvitationSummary,
+} from './invitations/index.ts';
+export type { Role } from './roles/index.ts';
 export {
   COMMUNITY_COVER_MAX_BYTES, COMMUNITY_LOGO_MAX_BYTES, COMMUNITY_MEDIA_BUCKET, COMMUNITY_TYPES,
   type Community, type CommunityImageKind, type CommunityImages, type CommunityNotificationSettings, type CommunityStats, type CommunityType, type MyCommunity,

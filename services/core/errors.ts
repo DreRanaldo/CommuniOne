@@ -120,11 +120,25 @@ export function networkError(cause?: unknown): ServiceError {
   );
 }
 
+/** The backend is older than this app (a migration or storage bucket is missing). */
+export function serverOutdated(cause?: unknown): ServiceError {
+  return new ServiceError(
+    ErrorCode.ServerError,
+    'The server is missing an update this feature needs (a database migration has not been applied). Please contact your administrator.',
+    {},
+    cause,
+  );
+}
+
 /** Translates a supabase-js error into a ServiceError. */
 export function fromDbError(error: DbError): ServiceError {
   const sqlstate = error.code ?? '';
   // supabase-js reports transport failures with no SQLSTATE and status 0 (or none).
   if (!sqlstate && (error.status === 0 || NETWORK_MESSAGE.test(error.message ?? ''))) return networkError(error);
+  // The server lacks a function or table this app version uses: a database
+  // migration has not been applied (PostgREST PGRST202 / PGRST205, Postgres
+  // 42883 / 42P01). Said plainly instead of "Something went wrong".
+  if (['PGRST202', 'PGRST205', '42883', '42P01'].includes(sqlstate)) return serverOutdated(error);
   let code: ErrorCode | undefined = SQLSTATE[sqlstate] ?? POSTGREST[sqlstate];
   if (!code && error.status === 401) code = ErrorCode.Unauthenticated;
   if (!code && error.status === 404) code = ErrorCode.NotFound;

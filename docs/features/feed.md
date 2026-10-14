@@ -29,8 +29,7 @@ existing posts backend (Stage 5 schema and RLS, Stage 12 service layer).
 | Edit own post | Own, published post, `posts.edit_own` | RLS + write trigger: author, `posts.edit_own`, published only; moderators can never change text |
 | Delete own post (asks first; soft delete) | Own post, `posts.delete_own` | Author with `posts.delete_own`, or `posts.moderate` |
 | Like / unlike | Published posts | `reactions` RLS: a member who can see the post; one reaction per user |
-| "Hidden" view | Everyone | RLS returns hidden posts only to moderators and to their own author |
-| "Deleted" view | `posts.moderate` | RLS returns deleted posts only to moderators and to their own author |
+| "Hidden" and "Deleted" views | `posts.moderate`, in Admin tools → Moderation (RN-16; no longer in the feed) | RLS returns these posts only to moderators and to their own author |
 
 **Nothing the app decides is trusted.** The community id comes from
 `useCommunity()`, the user's own memberships checked with the server. The
