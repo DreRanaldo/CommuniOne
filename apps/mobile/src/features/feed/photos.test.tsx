@@ -91,7 +91,7 @@ describe('the Home tab is the feed', () => {
     );
 
     await user.press(screen.getByRole('button', { name: /^Market/ }));
-    expect(await screen.findByText('Marketplace is coming soon')).toBeOnTheScreen();
+    expect(await screen.findByTestId('market-screen')).toBeOnTheScreen();
     await user.press(screen.getByRole('button', { name: /^Communities/ }));
     await user.press(await screen.findByRole('button', { name: 'Alerts' }));
     expect(await screen.findByTestId('alerts-screen')).toBeOnTheScreen();

@@ -4,7 +4,14 @@ import { AppProviders } from '@/AppProviders';
 import { createDependencies } from '@/lib/dependencies';
 import { linking, RootNavigator } from '@/navigation';
 import { ThemeProvider } from '@/theme';
-import { fakeLinks, fakeLocation, fakeMedia, fakeSupabase, type FakeOptions } from './fakeSupabase';
+import {
+  fakeLinks,
+  fakeLocation,
+  fakeMedia,
+  fakePaymentBrowser,
+  fakeSupabase,
+  type FakeOptions,
+} from './fakeSupabase';
 
 /** Renders the whole navigation tree with a fake backend. Links (initialURL, links.open) are routed like in the app. */
 export async function renderApp(options: FakeOptions & { initialURL?: string } = {}) {
@@ -12,12 +19,14 @@ export async function renderApp(options: FakeOptions & { initialURL?: string } =
   const links = fakeLinks(options.initialURL ?? null);
   const media = fakeMedia();
   const location = fakeLocation();
+  const payment = fakePaymentBrowser();
   const dependencies = createDependencies(
     fake.client,
     links.source,
     media.picker,
     fake.uploadFile,
     location.source,
+    payment.browser,
   );
   const view = await render(
     <AppProviders
@@ -27,7 +36,7 @@ export async function renderApp(options: FakeOptions & { initialURL?: string } =
       <RootNavigator />
     </AppProviders>,
   );
-  return { ...fake, links, media, location, dependencies, view };
+  return { ...fake, links, media, location, payment, dependencies, view };
 }
 
 /** Renders a component inside the theme only (design-system tests). */

@@ -7,10 +7,9 @@ import { useNavigation } from '@react-navigation/native';
 import { Pressable, View } from 'react-native';
 import { Icon, type IconName } from '@/components';
 import { DiscoverScreen } from '@/features/discover/DiscoverScreen';
-import { MarketplaceScreen } from '@/screens/MarketplaceScreen';
 import { makeStyles } from '@/theme';
 import type { AppTabParamList } from '@/types/navigation';
-import { CommunityHubNavigator, HomeNavigator } from './CommunityNavigator';
+import { CommunityHubNavigator, HomeNavigator, MarketNavigator } from './CommunityNavigator';
 import { ProfileNavigator } from './ProfileNavigator';
 import { useTabOptions } from './options';
 
@@ -92,7 +91,11 @@ export function AppTabs() {
         options={{ headerShown: false, title: 'Communities' }}
       />
       <Tab.Screen name="Discover" component={DiscoverScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Marketplace" component={MarketplaceScreen} options={{ title: 'Market' }} />
+      <Tab.Screen
+        name="Marketplace"
+        component={MarketNavigator}
+        options={{ headerShown: false, title: 'Market' }}
+      />
       <Tab.Screen name="Profile" component={ProfileNavigator} options={{ headerShown: false }} />
     </Tab.Navigator>
   );

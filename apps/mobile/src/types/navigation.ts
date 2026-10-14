@@ -34,7 +34,7 @@ export type AppTabParamList = {
   Home: NavigatorScreenParams<CommunityStackParamList> | undefined;
   CommunitiesTab: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Discover: undefined;
-  Marketplace: undefined;
+  Marketplace: NavigatorScreenParams<CommunityStackParamList> | undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
@@ -47,6 +47,50 @@ export type CommunityStackParamList = {
   CommunitySettings: undefined;
   /** Edit the community's profile (RN-15; community.update). */
   EditCommunity: undefined;
+  /** The current community's marketplace (Market tab root; Stage B). */
+  Market: undefined;
+  /** One listing, read from the server. `warning`: shown once (e.g. a picture failed to upload). */
+  Listing: { listingId: string; warning?: string };
+  /** A seller's shop in this community. */
+  Seller: { sellerProfileId: string };
+  /** The user's own shop: profile and listings (marketplace.sell). */
+  Shop: undefined;
+  /** New listing, or edit one of yours. */
+  ListingEditor: { listingId?: string } | undefined;
+  /** Listings the user saved. */
+  SavedListings: undefined;
+  /** The cart for the current community (Stage C); prices are the server's. */
+  Cart: undefined;
+  /** Checkout (Stage D): pickup/delivery per seller, address, contact, server totals. */
+  Checkout: undefined;
+  /** Add a delivery address to the user's private address book. */
+  AddressEditor: undefined;
+  /** Paying for a checkout (Stage E); the status shown is the server's. */
+  Payment: { checkoutId: string; bookingId?: undefined } | { bookingId: string; checkoutId?: undefined };
+  /** The user's purchases, or (sellers) sales, in the current community. */
+  Orders: { side?: 'purchases' | 'sales' } | undefined;
+  /** One order, read from the server (buyer, or seller once paid). */
+  OrderDetail: { orderId: string };
+  /** A seller's delivery fee, parishes and estimate. */
+  DeliverySettings: { sellerProfileId: string };
+  /** Ask the seller for a refund on one order (Stage I). */
+  RefundRequest: { orderId: string };
+  /** A dispute (`disputeId`), or open one for an order (`orderId`). */
+  Dispute: { disputeId?: string; orderId?: string; bookingId?: string };
+  /** marketplace.manage: the community's disputes. */
+  Disputes: undefined;
+  /** marketplace.manage: refund requests on/off, window, the community's own policy text. */
+  RefundSettings: undefined;
+  /** Request a booking for a service (Stage J). */
+  BookService: { listingId: string };
+  /** Service bookings: made by me, or (sellers) received. */
+  Bookings: { as?: 'buyer' | 'seller' } | undefined;
+  /** One booking, read from the server. */
+  BookingDetail: { bookingId: string };
+  /** A seller's weekly booking hours. */
+  ServiceHours: { sellerProfileId: string };
+  /** A seller's balance, statement and recorded payouts (Stage K). */
+  Earnings: undefined;
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

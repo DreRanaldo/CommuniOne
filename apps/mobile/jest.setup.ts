@@ -29,3 +29,9 @@ jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(async () => true),
   hideAsync: jest.fn(async () => true),
 }));
+
+// The payment page opens in the system browser; tests use fakePaymentBrowser().
+jest.mock('expo-web-browser', () => ({
+  openAuthSessionAsync: jest.fn(async () => ({ type: 'dismiss' })),
+  openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })),
+}));

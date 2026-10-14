@@ -108,7 +108,7 @@ describe('the creator becomes Owner', () => {
 
   test('the Owner holds every permission, including roles.manage', async () => {
     const { data } = await u.ownerA.client.rpc('my_community_permissions', { p_community_id: c.A.id });
-    assert.equal(data.length, 31);
+    assert.equal(data.length, 35); // 31 + 4 marketplace (migration 32)
     assert.ok(data.includes('roles.manage'));
     assert.ok(data.includes('members.remove'));
   });
@@ -210,7 +210,7 @@ describe('multiple memberships and different roles across communities', () => {
     assert.equal(await check(c.B, 'posts.create'), true);
 
     const { data: inB } = await u.ownerA.client.rpc('my_community_permissions', { p_community_id: c.B.id });
-    assert.equal(inB.length, 15); // Member template (alerts.create since migration 31)
+    assert.equal(inB.length, 18); // Member template (+ alerts.create, migration 31; + marketplace view/buy/sell, migration 32)
   });
 
   test('being Owner in A gives no management power in B', async () => {

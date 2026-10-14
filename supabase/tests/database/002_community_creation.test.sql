@@ -102,7 +102,7 @@ select results_eq(
   $$ select r.name, count(rp.permission_id)::int
      from public.roles r left join public.role_permissions rp on rp.role_id = r.id
      where r.community_id = pg_temp.fx('A') group by r.name order by r.name $$,
-  $$ values ('Admin', 30), ('Member', 15), ('Moderator', 18), ('Owner', 31) $$,
+  $$ values ('Admin', 34), ('Member', 18), ('Moderator', 21), ('Owner', 35) $$,
   'role permissions are copied from the templates'
 );
 

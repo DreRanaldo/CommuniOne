@@ -23,6 +23,13 @@ import { communitiesService } from './communities/index.ts';
 import { documentsService } from './documents/index.ts';
 import { eventsService } from './events/index.ts';
 import { invitationsService } from './invitations/index.ts';
+import { marketplaceService } from './marketplace/index.ts';
+import { cartService } from './cart/index.ts';
+import { ordersService } from './orders/index.ts';
+import { paymentsService } from './payments/index.ts';
+import { refundsService } from './refunds/index.ts';
+import { bookingsService } from './bookings/index.ts';
+import { earningsService } from './earnings/index.ts';
 import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
@@ -53,6 +60,13 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     notifications: notificationsService(ctx),
     documents: documentsService(ctx, options.uploadFile),
     stories: storiesService(ctx),
+    marketplace: marketplaceService(ctx),
+    cart: cartService(ctx),
+    orders: ordersService(ctx),
+    payments: paymentsService(ctx),
+    refunds: refundsService(ctx),
+    bookings: bookingsService(ctx),
+    earnings: earningsService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -104,3 +118,19 @@ export {
 export {
   MEMBER_SEARCH_MAX, MEMBERSHIP_STATUSES, type DirectoryMember, type Member, type MemberProfile, type MembershipStatus,
 } from './memberships/index.ts';
+export {
+  FULFILLMENT_METHODS, LISTING_CONDITIONS, LISTING_IMAGES_BUCKET, LISTING_IMAGE_MAX_BYTES, LISTING_KINDS, LISTING_MAX_IMAGES,
+  LISTING_PRICING, LISTING_SORTS, LISTING_STATUSES, MAX_PRICE_MINOR,
+  type Category, type Listing, type ListingCard, type ListingDetail, type ListingImage, type ListingInput, type ListingKind,
+  type ListingPatch, type SearchInput, type SellerProfile,
+} from './marketplace/index.ts';
+export { CART_MAX_QUANTITY, type CartIssue, type CartLine, type CartQuote } from './cart/index.ts';
+export {
+  FULFILLMENT, ORDER_TERMS_VERSION, PARISHES,
+  type Address, type AddressInput, type Checkout, type CheckoutInput, type CheckoutPreview, type DeliveryOption,
+  type Fulfillment, type Order, type OrderDetail, type OrderEvent, type OrderItem, type OrderShipment, type Parish, type PreviewLine, type PreviewSeller,
+} from './orders/index.ts';
+export { type BookingPaymentState, type CheckoutPaymentState, type PaymentSession, type PaymentStatus } from './payments/index.ts';
+export { REFUND_STATUS_LABELS, type Dispute, type DisputeMessage, type Refund, type RefundPolicy } from './refunds/index.ts';
+export { BOOKING_STATUS_LABELS, parsePeriod, type AvailabilityWindow, type Booking, type BookingEvent } from './bookings/index.ts';
+export { type Payout, type SellerBalance, type StatementLine } from './earnings/index.ts';

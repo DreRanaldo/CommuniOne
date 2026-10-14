@@ -1,7 +1,7 @@
 import { StackActions, type NavigationProp } from '@react-navigation/native';
 import type { AppTabParamList, CommunityStackParamList, RootStackParamList } from '@/types/navigation';
 
-export type CommunityTab = Extract<keyof AppTabParamList, 'Home' | 'CommunitiesTab'>;
+export type CommunityTab = Extract<keyof AppTabParamList, 'Home' | 'CommunitiesTab' | 'Marketplace'>;
 
 /**
  * From a root-level screen (notification center, Create sheet), back to the

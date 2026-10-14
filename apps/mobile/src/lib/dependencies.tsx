@@ -7,6 +7,7 @@ import { expoLinkSource, type LinkSource } from './links';
 import { expoLocationSource, type LocationSource } from './location';
 import { logger } from './logger';
 import { expoMediaPicker, type MediaPicker } from './media';
+import { expoPaymentBrowser, type PaymentBrowser } from './paymentBrowser';
 import { createSessionEvents, type SessionEvents } from './sessionEvents';
 import type { AppSupabaseClient } from './supabase';
 
@@ -18,6 +19,8 @@ export interface Dependencies {
   media: MediaPicker;
   /** The device position, read only when the user asks to share it. */
   location: LocationSource;
+  /** The payment provider's hosted page (Stage E). */
+  paymentBrowser: PaymentBrowser;
 }
 
 /**
@@ -41,6 +44,7 @@ export function createDependencies(
   /** Document upload transport (with progress); default: supabase-js. */
   uploadFile?: FileUploader,
   location: LocationSource = expoLocationSource,
+  paymentBrowser: PaymentBrowser = expoPaymentBrowser,
 ): Dependencies {
   const sessionEvents = createSessionEvents();
   const services = createServices(supabase, {
@@ -51,7 +55,7 @@ export function createDependencies(
     },
     uploadFile,
   });
-  return { supabase, services, links, sessionEvents, media, location };
+  return { supabase, services, links, sessionEvents, media, location, paymentBrowser };
 }
 
 export function DependenciesProvider({ value, children }: { value: Dependencies; children: ReactNode }) {

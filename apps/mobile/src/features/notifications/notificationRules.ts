@@ -10,7 +10,18 @@ import type { IconName } from '@/components';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (value: unknown): string | null => (typeof value === 'string' && UUID.test(value) ? value : null);
 
-export type TargetKind = 'post' | 'announcement' | 'alert' | 'event' | 'community' | 'document';
+export type TargetKind =
+  | 'post'
+  | 'announcement'
+  | 'alert'
+  | 'event'
+  | 'community'
+  | 'document'
+  | 'order'
+  | 'checkout'
+  | 'booking'
+  | 'dispute'
+  | 'earnings';
 
 export interface NotificationTarget {
   kind: TargetKind;
@@ -27,6 +38,11 @@ export const TARGET_LABELS: Record<TargetKind, string> = {
   event: 'Open the event',
   community: 'Open the community',
   document: 'Open the document',
+  order: 'Open the order',
+  checkout: 'Open the payment',
+  booking: 'Open the booking',
+  dispute: 'Open the dispute',
+  earnings: 'Open your earnings',
 };
 
 type Data = Record<string, unknown>;
@@ -52,6 +68,24 @@ export function notificationTarget(
     case 'event_updated':
     case 'event_cancelled':
       return make('event', data.event_id);
+    // Marketplace (Stages C-K). Amounts and payment details are never in the data.
+    case 'order':
+    case 'delivery':
+      return make('order', data.order_id);
+    case 'refund':
+      return make('order', data.order_id) ?? make('booking', data.booking_id);
+    case 'payment':
+      return (
+        make('checkout', data.checkout_id) ??
+        make('booking', data.booking_id) ??
+        (id(data.payout_id) && communityId
+          ? { kind: 'earnings', id: id(data.payout_id)!, communityId }
+          : null)
+      );
+    case 'booking':
+      return make('booking', data.booking_id);
+    case 'dispute':
+      return make('dispute', data.dispute_id);
     case 'membership':
       // Only an active membership leads into the community.
       return data.status === 'active' && communityId
@@ -87,6 +121,17 @@ export function notificationKind(type: string): { icon: IconName; label: string 
       return { icon: 'chatbubble-outline', label: 'Comment' };
     case 'membership':
       return { icon: 'people-outline', label: 'Membership' };
+    case 'order':
+    case 'delivery':
+      return { icon: 'bag-handle-outline', label: 'Order' };
+    case 'payment':
+      return { icon: 'card-outline', label: 'Payment' };
+    case 'refund':
+      return { icon: 'cash-outline', label: 'Refund' };
+    case 'booking':
+      return { icon: 'calendar-outline', label: 'Booking' };
+    case 'dispute':
+      return { icon: 'chatbubbles-outline', label: 'Dispute' };
     default:
       return { icon: 'notifications-outline', label: 'CommuniOne' };
   }
