@@ -11,6 +11,8 @@ supabase/.temp
 .DS_Store
 .idea/
 .vscode/
+# Visual Studio (Windows) caches and settings
+.vs/
 
 # Dependencies (future application code)
 node_modules/
