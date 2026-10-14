@@ -61,6 +61,7 @@ export function ListingDetailScreen({ navigation, route }: Props) {
       onEdit={() => navigation.navigate('ListingEditor', { listingId })}
       onOpenSeller={(sellerProfileId) => navigation.navigate('Seller', { sellerProfileId })}
       onOpenCart={() => navigation.navigate('Cart')}
+      onBook={() => navigation.navigate('BookService', { listingId })}
       warning={route.params.warning}
     />
   );

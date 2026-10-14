@@ -2,7 +2,7 @@
 // Request and returns a Response, so the Deno entry points stay one-liners
 // and the Node integration tests drive exactly the same code.
 //
-//   payments-session        POST {checkoutId}   (user JWT)  -> {paymentId, redirectUrl, expiresAt}
+//   payments-session        POST {checkoutId} | {bookingId} (user JWT) -> {paymentId, redirectUrl, expiresAt}
 //   payments-webhook        POST <provider body> (signature) -> 200 {outcome} | 401
 //   payments-reconcile      POST                (service-role bearer, cron)
 //   payments-test-checkout  GET page / POST choice (test provider only)
@@ -47,17 +47,22 @@ export async function handleSession(ctx: PaymentsContext, req: Request): Promise
   if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
   const userId = await ctx.resolveUser(req.headers.get('authorization'));
   if (!userId) return json(401, { error: 'sign in required' });
-  let checkoutId: unknown;
+  let body: { checkoutId?: unknown; bookingId?: unknown };
   try {
-    checkoutId = ((await req.json()) as { checkoutId?: unknown }).checkoutId;
+    body = (await req.json()) as typeof body;
   } catch {
     return json(400, { error: 'invalid body' });
   }
-  if (typeof checkoutId !== 'string' || !UUID.test(checkoutId)) return json(400, { error: 'checkoutId is required' });
+  // Exactly one of a checkout (products) or a booking (services).
+  const checkoutId = body.checkoutId;
+  const bookingId = body.bookingId;
+  const forBooking = typeof bookingId === 'string' && checkoutId === undefined;
+  const target = forBooking ? bookingId : checkoutId;
+  if (typeof target !== 'string' || !UUID.test(target)) return json(400, { error: 'checkoutId or bookingId is required' });
 
-  const begun = await ctx.db.rpc('payment_begin', {
-    p_user_id: userId, p_checkout_id: checkoutId, p_provider: ctx.provider.name, p_mode: ctx.provider.mode,
-  });
+  const begun = forBooking
+    ? await ctx.db.rpc('payment_begin_booking', { p_user_id: userId, p_booking_id: target, p_provider: ctx.provider.name, p_mode: ctx.provider.mode })
+    : await ctx.db.rpc('payment_begin', { p_user_id: userId, p_checkout_id: target, p_provider: ctx.provider.name, p_mode: ctx.provider.mode });
   if (begun.error) return json(dbStatus(begun.error), { error: dbStatus(begun.error) === 500 ? 'could not start the payment' : begun.error.message });
   const row = (begun.data as Array<{ payment_id: string; amount_minor: number; currency: string; provider_reference: string | null;
     redirect_url: string | null; session_expires_at: string | null; description: string }>)[0]!;
@@ -68,7 +73,7 @@ export async function handleSession(ctx: PaymentsContext, req: Request): Promise
   try {
     const session = await ctx.provider.createSession({
       paymentId: row.payment_id, amountMinor: Number(row.amount_minor), currency: row.currency, description: row.description,
-      returnUrl: `${ctx.returnUrl}?checkout=${checkoutId}`,
+      returnUrl: `${ctx.returnUrl}?${forBooking ? 'booking' : 'checkout'}=${target}`,
     });
     const attached = await ctx.db.rpc('payment_attach_session', {
       p_payment_id: row.payment_id, p_provider_reference: session.reference, p_redirect_url: session.redirectUrl,
@@ -144,11 +149,15 @@ export async function handleReconcile(ctx: PaymentsContext, req: Request): Promi
   // Order housekeeping: unaccepted paid orders are refunded; delivered ones complete.
   const unaccepted = await ctx.db.rpc('expire_unaccepted_orders');
   const completed = await ctx.db.rpc('complete_delivered_orders');
+  const expiredBookings = await ctx.db.rpc('expire_unpaid_bookings');
+  const completedBookings = await ctx.db.rpc('complete_past_bookings');
   return json(200, {
     outcomes,
     expiredCheckouts: expired.error ? null : expired.data,
     unacceptedOrders: unaccepted.error ? null : unaccepted.data,
     completedOrders: completed.error ? null : completed.data,
+    expiredBookings: expiredBookings.error ? null : expiredBookings.data,
+    completedBookings: completedBookings.error ? null : completedBookings.data,
   });
 }
 

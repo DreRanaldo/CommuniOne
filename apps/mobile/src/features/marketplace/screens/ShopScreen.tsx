@@ -230,6 +230,14 @@ export function ShopScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('DeliverySettings', { sellerProfileId: seller.id })}
               testID="shop-delivery"
             />
+            <Button
+              title="Hours"
+              icon="time-outline"
+              variant="secondary"
+              fullWidth={false}
+              onPress={() => navigation.navigate('ServiceHours', { sellerProfileId: seller.id })}
+              testID="shop-hours"
+            />
           </View>
           <Text variant="heading" accessibilityRole="header">
             Your listings

@@ -39,31 +39,54 @@ const HTTP_TO_CODE: Record<number, ErrorCode> = {
   409: ErrorCode.Conflict, 429: ErrorCode.RateLimited,
 };
 
+export interface BookingPaymentState {
+  status: string;
+  amountMinor: number | null;
+  currency: string;
+  paymentDueAt: string | null;
+  payment: CheckoutPaymentState['payment'];
+  /** The server has confirmed payment. */
+  paid: boolean;
+}
+
 export function paymentsService(ctx: ServiceContext) {
   const { db } = ctx;
+
+  /** Asks payments-session for a hosted payment page (the amount comes from the database). */
+  async function session(body: { checkoutId: string } | { bookingId: string }): Promise<PaymentSession> {
+    await ctx.requireUserId();
+    const { data, error } = await db.functions.invoke<PaymentSession>('payments-session', { body });
+    if (error) {
+      const response = (error as { context?: Response }).context;
+      const status = response?.status ?? 0;
+      let message: string | undefined;
+      try {
+        message = ((await response?.json()) as { error?: string } | undefined)?.error;
+      } catch {
+        message = undefined;
+      }
+      throw new ServiceError(HTTP_TO_CODE[status] ?? ErrorCode.ServerError, status >= 500 || !status ? undefined : message);
+    }
+    if (!data?.redirectUrl || !data.paymentId) throw new ServiceError(ErrorCode.ServerError);
+    return data;
+  }
+
+  const lastPayment = async (column: 'checkout_id' | 'booking_id', id: string) => {
+    const payments = unwrap(await db.from('payments').select('id, status, mode, failure_code').eq(column, id)
+      .order('created_at', { ascending: false }).limit(1)) ?? [];
+    const p = payments[0];
+    return p ? { id: p.id, status: p.status as PaymentStatus, mode: p.mode, failureCode: p.failure_code } : null;
+  };
 
   return {
     /** Starts (or resumes) paying for one of your checkouts. */
     start(checkoutId: string): Promise<PaymentSession> {
-      return ctx.run('payments.start', async () => {
-        await ctx.requireUserId();
-        const { data, error } = await db.functions.invoke<PaymentSession>('payments-session', {
-          body: { checkoutId: v.uuid(checkoutId, 'checkoutId') },
-        });
-        if (error) {
-          const response = (error as { context?: Response }).context;
-          const status = response?.status ?? 0;
-          let message: string | undefined;
-          try {
-            message = ((await response?.json()) as { error?: string } | undefined)?.error;
-          } catch {
-            message = undefined;
-          }
-          throw new ServiceError(HTTP_TO_CODE[status] ?? ErrorCode.ServerError, status >= 500 || !status ? undefined : message);
-        }
-        if (!data?.redirectUrl || !data.paymentId) throw new ServiceError(ErrorCode.ServerError);
-        return data;
-      });
+      return ctx.run('payments.start', () => session({ checkoutId: v.uuid(checkoutId, 'checkoutId') }));
+    },
+
+    /** Starts (or resumes) paying for one of your accepted bookings. */
+    startBooking(bookingId: string): Promise<PaymentSession> {
+      return ctx.run('payments.startBooking', () => session({ bookingId: v.uuid(bookingId, 'bookingId') }));
     },
 
     /** What the server knows about a checkout's payment (poll after returning from the payment page). */
@@ -73,16 +96,31 @@ export function paymentsService(ctx: ServiceContext) {
         const id = v.uuid(checkoutId, 'checkoutId');
         const checkout = unwrap(await db.from('checkouts').select('status, total_minor, currency, reservation_expires_at').eq('id', id).maybeSingle());
         if (!checkout) throw new ServiceError(ErrorCode.NotFound);
-        const payments = unwrap(await db.from('payments').select('id, status, mode, failure_code').eq('checkout_id', id)
-          .order('created_at', { ascending: false }).limit(1)) ?? [];
-        const p = payments[0];
         return {
           checkoutStatus: checkout.status,
           totalMinor: Number(checkout.total_minor),
           currency: checkout.currency,
           reservationExpiresAt: checkout.reservation_expires_at,
-          payment: p ? { id: p.id, status: p.status as PaymentStatus, mode: p.mode, failureCode: p.failure_code } : null,
+          payment: await lastPayment('checkout_id', id),
           paid: ['paid', 'partially_refunded', 'refunded'].includes(checkout.status),
+        };
+      });
+    },
+
+    /** What the server knows about a booking's payment. */
+    bookingState(bookingId: string): Promise<BookingPaymentState> {
+      return ctx.run('payments.bookingState', async () => {
+        await ctx.requireUserId();
+        const id = v.uuid(bookingId, 'bookingId');
+        const b = unwrap(await db.from('bookings').select('status, amount_minor, currency, payment_due_at').eq('id', id).maybeSingle());
+        if (!b) throw new ServiceError(ErrorCode.NotFound);
+        return {
+          status: b.status,
+          amountMinor: b.amount_minor === null ? null : Number(b.amount_minor),
+          currency: b.currency,
+          paymentDueAt: b.payment_due_at,
+          payment: await lastPayment('booking_id', id),
+          paid: ['confirmed', 'completed'].includes(b.status),
         };
       });
     },

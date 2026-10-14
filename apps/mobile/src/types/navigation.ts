@@ -66,7 +66,7 @@ export type CommunityStackParamList = {
   /** Add a delivery address to the user's private address book. */
   AddressEditor: undefined;
   /** Paying for a checkout (Stage E); the status shown is the server's. */
-  Payment: { checkoutId: string };
+  Payment: { checkoutId: string; bookingId?: undefined } | { bookingId: string; checkoutId?: undefined };
   /** The user's purchases, or (sellers) sales, in the current community. */
   Orders: { side?: 'purchases' | 'sales' } | undefined;
   /** One order, read from the server (buyer, or seller once paid). */
@@ -76,11 +76,19 @@ export type CommunityStackParamList = {
   /** Ask the seller for a refund on one order (Stage I). */
   RefundRequest: { orderId: string };
   /** A dispute (`disputeId`), or open one for an order (`orderId`). */
-  Dispute: { disputeId?: string; orderId?: string };
+  Dispute: { disputeId?: string; orderId?: string; bookingId?: string };
   /** marketplace.manage: the community's disputes. */
   Disputes: undefined;
   /** marketplace.manage: refund requests on/off, window, the community's own policy text. */
   RefundSettings: undefined;
+  /** Request a booking for a service (Stage J). */
+  BookService: { listingId: string };
+  /** Service bookings: made by me, or (sellers) received. */
+  Bookings: { as?: 'buyer' | 'seller' } | undefined;
+  /** One booking, read from the server. */
+  BookingDetail: { bookingId: string };
+  /** A seller's weekly booking hours. */
+  ServiceHours: { sellerProfileId: string };
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

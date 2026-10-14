@@ -48,6 +48,12 @@ export function paymentHarness(now?: () => number) {
       const res = await handleSession(ctx, new Request('http://localhost/functions/v1/payments-session', { method: 'POST', headers, body: JSON.stringify({ checkoutId }) }));
       return { status: res.status, body: (await res.json()) as { paymentId?: string; redirectUrl?: string; expiresAt?: string; error?: string } };
     },
+    async sessionBooking(u: TestUser, bookingId: string) {
+      const res = await handleSession(ctx, new Request('http://localhost/functions/v1/payments-session', {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${await this.token(u)}` }, body: JSON.stringify({ bookingId }),
+      }));
+      return { status: res.status, body: (await res.json()) as { paymentId?: string; redirectUrl?: string; error?: string } };
+    },
     /** The customer opens the hosted page and picks an outcome. */
     async pay(redirectUrl: string, outcome: 'succeeded' | 'failed' | 'cancelled') {
       const url = new URL(redirectUrl);

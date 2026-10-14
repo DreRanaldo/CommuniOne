@@ -27,6 +27,9 @@ import { FeedScreen } from '@/features/feed/screens/FeedScreen';
 import { AddressEditorScreen } from '@/features/marketplace/screens/AddressEditorScreen';
 import { CartScreen } from '@/features/marketplace/screens/CartScreen';
 import { CheckoutScreen } from '@/features/marketplace/screens/CheckoutScreen';
+import { BookingDetailScreen } from '@/features/marketplace/screens/BookingDetailScreen';
+import { BookingsScreen } from '@/features/marketplace/screens/BookingsScreen';
+import { BookServiceScreen } from '@/features/marketplace/screens/BookServiceScreen';
 import { DeliverySettingsScreen } from '@/features/marketplace/screens/DeliverySettingsScreen';
 import { DisputeScreen } from '@/features/marketplace/screens/DisputeScreen';
 import { DisputesScreen } from '@/features/marketplace/screens/DisputesScreen';
@@ -38,6 +41,7 @@ import { OrdersScreen } from '@/features/marketplace/screens/OrdersScreen';
 import { PaymentScreen } from '@/features/marketplace/screens/PaymentScreen';
 import { RefundRequestScreen } from '@/features/marketplace/screens/RefundRequestScreen';
 import { RefundSettingsScreen } from '@/features/marketplace/screens/RefundSettingsScreen';
+import { ServiceHoursScreen } from '@/features/marketplace/screens/ServiceHoursScreen';
 import { SavedListingsScreen } from '@/features/marketplace/screens/SavedListingsScreen';
 import { SellerScreen } from '@/features/marketplace/screens/SellerScreen';
 import { ShopScreen } from '@/features/marketplace/screens/ShopScreen';
@@ -192,6 +196,10 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         component={RefundSettingsScreen}
         options={{ title: 'Refund settings' }}
       />
+      <Stack.Screen name="BookService" component={BookServiceScreen} options={{ title: 'Book' }} />
+      <Stack.Screen name="Bookings" component={BookingsScreen} options={{ title: 'Bookings' }} />
+      <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: 'Booking' }} />
+      <Stack.Screen name="ServiceHours" component={ServiceHoursScreen} options={{ title: 'Booking hours' }} />
       <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
       <Stack.Screen
         name="AdminMembers"

@@ -185,6 +185,76 @@ isOneToOne: false
       referencedColumns: ["action"]
     }
                   ]
+                },"booking_events": {
+                  Row: {
+                    "actor_user_id": string | null,"booking_id": string,"created_at": string,"from_status": string | null,"id": string,"reason": string | null,"to_status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_user_id"?: string | null,"booking_id": string,"created_at"?: string,"from_status"?: string | null,"id"?: string,"reason"?: string | null,"to_status": string
+                  }
+                  Update: {
+                    "actor_user_id"?: string | null,"booking_id"?: string,"created_at"?: string,"from_status"?: string | null,"id"?: string,"reason"?: string | null,"to_status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "booking_events_actor_user_id_fkey"
+      columns: ["actor_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "booking_events_booking_id_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"bookings": {
+                  Row: {
+                    "amount_minor": number | null,"buyer_note": string | null,"buyer_user_id": string | null,"community_id": string,"created_at": string,"currency": string,"id": string,"listing_id": string | null,"location_note": string | null,"payment_due_at": string | null,"period": unknown,"pricing_snapshot": string,"seller_profile_id": string,"seller_user_id": string | null,"status": string,"status_reason": string | null,"title_snapshot": string,"unit_price_minor": number | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor"?: number | null,"buyer_note"?: string | null,"buyer_user_id"?: string | null,"community_id": string,"created_at"?: string,"currency"?: string,"id"?: string,"listing_id"?: string | null,"location_note"?: string | null,"payment_due_at"?: string | null,"period": unknown,"pricing_snapshot": string,"seller_profile_id": string,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"title_snapshot": string,"unit_price_minor"?: number | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_minor"?: number | null,"buyer_note"?: string | null,"buyer_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"currency"?: string,"id"?: string,"listing_id"?: string | null,"location_note"?: string | null,"payment_due_at"?: string | null,"period"?: unknown,"pricing_snapshot"?: string,"seller_profile_id"?: string,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"title_snapshot"?: string,"unit_price_minor"?: number | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "bookings_buyer_user_id_fkey"
+      columns: ["buyer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "bookings_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "bookings_listing_id_fkey"
+      columns: ["listing_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "bookings_seller_profile_id_fkey"
+      columns: ["seller_profile_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "bookings_seller_user_id_fkey"
+      columns: ["seller_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"cart_items": {
                   Row: {
                     "added_at": string,"cart_id": string,"community_id": string,"listing_id": string,"quantity": number,"seen_price_minor": number,"updated_at": string
@@ -389,17 +459,23 @@ isOneToOne: false
                   ]
                 },"disputes": {
                   Row: {
-                    "buyer_user_id": string | null,"community_id": string,"created_at": string,"id": string,"order_id": string,"reason": string,"refund_id": string | null,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"seller_user_id": string | null,"status": string,"updated_at": string
+                    "booking_id": string | null,"buyer_user_id": string | null,"community_id": string,"created_at": string,"id": string,"order_id": string | null,"reason": string,"refund_id": string | null,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"seller_user_id": string | null,"status": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "buyer_user_id"?: string | null,"community_id": string,"created_at"?: string,"id"?: string,"order_id": string,"reason": string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
+                    "booking_id"?: string | null,"buyer_user_id"?: string | null,"community_id": string,"created_at"?: string,"id"?: string,"order_id"?: string | null,"reason": string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "buyer_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"id"?: string,"order_id"?: string,"reason"?: string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
+                    "booking_id"?: string | null,"buyer_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"id"?: string,"order_id"?: string | null,"reason"?: string,"refund_id"?: string | null,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "disputes_booking_id_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "disputes_buyer_user_id_fkey"
       columns: ["buyer_user_id"]
 isOneToOne: false
@@ -1184,6 +1260,12 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
+      foreignKeyName: "payments_booking_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "payments_checkout_id_fkey"
       columns: ["checkout_id"]
 isOneToOne: false
@@ -1440,6 +1522,12 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
+      foreignKeyName: "refunds_booking_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "refunds_buyer_user_id_fkey"
       columns: ["buyer_user_id"]
 isOneToOne: false
@@ -1595,6 +1683,52 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"service_availability": {
+                  Row: {
+                    "community_id": string,"end_time": string,"id": string,"seller_profile_id": string,"start_time": string,"weekday": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"end_time": string,"id"?: string,"seller_profile_id": string,"start_time": string,"weekday": number
+                  }
+                  Update: {
+                    "community_id"?: string,"end_time"?: string,"id"?: string,"seller_profile_id"?: string,"start_time"?: string,"weekday"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "service_availability_seller_fkey"
+      columns: ["seller_profile_id","community_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id","community_id"]
+    },{
+      foreignKeyName: "service_availability_seller_profile_id_fkey"
+      columns: ["seller_profile_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"service_time_off": {
+                  Row: {
+                    "created_at": string,"id": string,"note": string | null,"period": unknown,"seller_profile_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"period": unknown,"seller_profile_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"period"?: unknown,"seller_profile_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "service_time_off_seller_profile_id_fkey"
+      columns: ["seller_profile_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"stories": {
                   Row: {
                     "author_user_id": string,"caption": string | null,"client_request_id": string | null,"community_id": string,"created_at": string,"deleted_at": string | null,"deleted_by": string | null,"expires_at": string,"height": number,"id": string,"storage_path": string,"width": number
@@ -1723,6 +1857,30 @@ isOneToOne: false
 "archive_notification":
 { Args: { "p_notification_id": string }; Returns: boolean
                            },
+"booking_accept":
+{ Args: { "p_booking_id": string,"p_price_minor"?: number }; Returns: undefined
+                           },
+"booking_accept_proposal":
+{ Args: { "p_booking_id": string }; Returns: undefined
+                           },
+"booking_cancel":
+{ Args: { "p_booking_id": string,"p_reason": string }; Returns: undefined
+                           },
+"booking_complete":
+{ Args: { "p_booking_id": string }; Returns: undefined
+                           },
+"booking_decline":
+{ Args: { "p_booking_id": string,"p_reason": string }; Returns: undefined
+                           },
+"booking_dispute_open":
+{ Args: { "p_booking_id": string,"p_reason": string }; Returns: string
+                           },
+"booking_propose":
+{ Args: { "p_booking_id": string,"p_ends_at": string,"p_note"?: string,"p_starts_at": string }; Returns: undefined
+                           },
+"booking_request":
+{ Args: { "p_ends_at": string,"p_listing_id": string,"p_location_note"?: string,"p_note"?: string,"p_starts_at": string }; Returns: string
+                           },
 "cancel_rsvp":
 { Args: { "p_event_id": string }; Returns: boolean
                            },
@@ -1781,6 +1939,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"complete_past_bookings":
+{ Args: { "p_after"?: string }; Returns: number
+                           },
 "create_community":
 { Args: { "p_community_type"?: string,"p_description"?: string,"p_name": string,"p_slug": string,"p_timezone"?: string }; Returns: {
               "community_type": string,
@@ -1890,6 +2051,9 @@ isOneToOne: false
                            },
 "expire_unaccepted_orders":
 { Args: { "p_after"?: string }; Returns: number
+                           },
+"expire_unpaid_bookings":
+{ Args: Record<PropertyKey, never>; Returns: number
                            },
 "get_community_member":
 { Args: { "p_community_id": string,"p_user_id": string }; Returns: {
@@ -2222,6 +2386,11 @@ isOneToOne: false
               "amount_minor": number,"currency": string,"description": string,"payment_id": string,"provider_reference": string,"redirect_url": string,"session_expires_at": string
             }[]
                            },
+"payment_begin_booking":
+{ Args: { "p_booking_id": string,"p_mode": string,"p_provider": string,"p_user_id": string }; Returns: {
+              "amount_minor": number,"currency": string,"description": string,"payment_id": string,"provider_reference": string,"redirect_url": string,"session_expires_at": string
+            }[]
+                           },
 "payments_to_reconcile":
 { Args: { "p_age"?: string }; Returns: {
               "amount_minor": number,"currency": string,"payment_id": string,"provider": string,"provider_reference": string,"status": string
@@ -2281,6 +2450,17 @@ isOneToOne: false
 { Args: { "p_category_id"?: string,"p_community_id": string,"p_condition"?: string,"p_favorites_only"?: boolean,"p_in_stock_only"?: boolean,"p_kind"?: string,"p_limit"?: number,"p_max_price_minor"?: number,"p_min_price_minor"?: number,"p_offset"?: number,"p_query"?: string,"p_seller_profile_id"?: string,"p_sort"?: string }; Returns: {
               "available": number,"category_id": string,"category_name": string,"community_id": string,"condition": string,"cover_image_path": string,"currency": string,"id": string,"image_count": number,"is_favorite": boolean,"kind": string,"price_minor": number,"pricing": string,"published_at": string,"rank": number,"seller_display_name": string,"seller_profile_id": string,"seller_verified": boolean,"title": string
             }[]
+                           },
+"seller_busy_times":
+{ Args: { "p_from": string,"p_seller_profile_id": string,"p_to": string }; Returns: {
+              "ends_at": string,"starts_at": string
+            }[]
+                           },
+"service_availability_save":
+{ Args: { "p_seller_profile_id": string,"p_windows": Json }; Returns: undefined
+                           },
+"service_time_off_add":
+{ Args: { "p_ends_at": string,"p_note"?: string,"p_seller_profile_id": string,"p_starts_at": string }; Returns: string
                            },
 "set_community_notification_settings":
 { Args: { "p_alerts"?: boolean,"p_announcements"?: boolean,"p_comments"?: boolean,"p_community_id": string,"p_events"?: boolean }; Returns: {

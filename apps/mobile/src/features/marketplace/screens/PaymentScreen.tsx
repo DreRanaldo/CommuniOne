@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CheckoutPaymentState } from '@communione/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Banner, Button, Card, ErrorState, Icon, LoadingState, Screen, Text } from '@/components';
@@ -14,6 +15,12 @@ type Props = NativeStackScreenProps<CommunityStackParamList, 'Payment'>;
 
 /** Delays between status checks after returning from the payment page. */
 export const PAYMENT_POLL_DELAYS_MS = [0, 1000, 2000, 3000, 5000];
+const BOOKING_AS_CHECKOUT: Record<string, string> = {
+  accepted: 'awaiting_payment',
+  confirmed: 'paid',
+  completed: 'paid',
+  declined: 'cancelled',
+};
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -25,8 +32,23 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function PaymentScreen({ navigation, route }: Props) {
   const styles = useStyles();
   const { services, paymentBrowser } = useDependencies();
-  const { checkoutId } = route.params;
-  const load = useCallback(() => services.payments.state(checkoutId), [services, checkoutId]);
+  const { checkoutId, bookingId } = route.params;
+  // A checkout (products) or a booking (services); bookings are shown in the same terms.
+  const fetchState = useCallback(
+    (): Promise<CheckoutPaymentState> =>
+      checkoutId
+        ? services.payments.state(checkoutId)
+        : services.payments.bookingState(bookingId!).then((b) => ({
+            checkoutStatus: BOOKING_AS_CHECKOUT[b.status] ?? b.status,
+            totalMinor: b.amountMinor ?? 0,
+            currency: b.currency,
+            reservationExpiresAt: b.paymentDueAt ?? new Date(0).toISOString(),
+            payment: b.payment,
+            paid: b.paid,
+          })),
+    [services, checkoutId, bookingId],
+  );
+  const load = fetchState;
   const state = useAsync(load);
   const [phase, setPhase] = useState<'idle' | 'starting' | 'checking' | 'waiting'>('idle');
   const [notice, setNotice] = useState<{ tone: 'danger' | 'info'; message: string } | null>(null);
@@ -40,7 +62,7 @@ export function PaymentScreen({ navigation, route }: Props) {
       if (delay) await wait(delay);
       if (!mounted.current) return;
       try {
-        const s = await services.payments.state(checkoutId);
+        const s = await fetchState();
         if (
           s.paid ||
           ['failed', 'cancelled', 'expired'].includes(s.payment?.status ?? '') ||
@@ -71,7 +93,9 @@ export function PaymentScreen({ navigation, route }: Props) {
     setPhase('starting');
     setNotice(null);
     try {
-      const session = await services.payments.start(checkoutId);
+      const session = checkoutId
+        ? await services.payments.start(checkoutId)
+        : await services.payments.startBooking(bookingId!);
       setTestMode(session.mode === 'test');
       setPhase('waiting');
       await paymentBrowser.open(session.redirectUrl, PAYMENT_RETURN_URL);
@@ -86,8 +110,10 @@ export function PaymentScreen({ navigation, route }: Props) {
   const cancel = async () => {
     setPhase('starting');
     try {
-      await services.orders.cancelCheckout(checkoutId);
-      navigation.navigate('Orders');
+      if (checkoutId) {
+        await services.orders.cancelCheckout(checkoutId);
+        navigation.navigate('Orders');
+      } else navigation.navigate('BookingDetail', { bookingId: bookingId! });
     } catch (thrown) {
       setNotice({ tone: 'danger', message: orderError(thrown) });
       setPhase('idle');
@@ -158,7 +184,11 @@ export function PaymentScreen({ navigation, route }: Props) {
             notified.
           </Text>
         ) : payable ? (
-          <Text tone="muted">{`Your items are held until ${heldUntil}.`}</Text>
+          <Text tone="muted">
+            {checkoutId
+              ? `Your items are held until ${heldUntil}.`
+              : `Pay by ${heldUntil} to keep this booking.`}
+          </Text>
         ) : s.checkoutStatus === 'expired' ? (
           <Text tone="muted">
             Your items were not paid for in time and have been released. Add them to your cart again to buy
@@ -180,7 +210,7 @@ export function PaymentScreen({ navigation, route }: Props) {
       ) : null}
       {payable && !pendingConfirmation ? (
         <Button
-          title="Cancel order"
+          title={checkoutId ? 'Cancel order' : 'Not now'}
           variant="ghost"
           disabled={phase !== 'idle'}
           onPress={() => void cancel()}
@@ -189,9 +219,13 @@ export function PaymentScreen({ navigation, route }: Props) {
       ) : null}
       {s.paid || !payable ? (
         <Button
-          title="View your orders"
+          title={checkoutId ? 'View your orders' : 'View booking'}
           variant={s.paid ? 'primary' : 'secondary'}
-          onPress={() => navigation.navigate('Orders')}
+          onPress={() =>
+            checkoutId
+              ? navigation.navigate('Orders')
+              : navigation.navigate('BookingDetail', { bookingId: bookingId! })
+          }
           testID="payment-orders"
         />
       ) : null}

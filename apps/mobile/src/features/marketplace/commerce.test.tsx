@@ -13,11 +13,13 @@ import type {
   OrderDetail,
   OrderItem,
   Refund,
+  Booking,
 } from '@communione/services';
 import { makeSession, OTHER_USER_ID, sampleCommunities, TEST_USER_ID } from '@/testing/fakeSupabase';
-import { makeListing, makeSellerProfile } from '@/testing/fakeMarket';
+import { categoryId, makeListing, makeSellerProfile } from '@/testing/fakeMarket';
 import { renderApp } from '@/testing/render';
 import { estimateText, orderStatusLabel, problemText } from './orderRules';
+import { localToIso, nextDates, startTimes } from './bookingRules';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -25,6 +27,13 @@ const choir = sampleCommunities[1]!;
 const C = choir.community_id;
 const grace = makeSellerProfile(C, OTHER_USER_ID, 1, { display_name: 'Grace Goods' });
 const laptop = makeListing(grace, 1, { title: 'Used laptop', price_minor: 4_500_000, on_hand: 3 });
+const tutoring = makeListing(grace, 2, {
+  kind: 'service',
+  title: 'Maths tutoring',
+  category_id: categoryId('cleaning'),
+  pricing: 'hourly',
+  price_minor: 300_000,
+});
 const CHECKOUT = '0c000000-0000-4000-8000-000000000001';
 const ORDER = '0d000000-0000-4000-8000-000000000001';
 const ADDRESS = '0a000000-0000-4000-8000-000000000001';
@@ -34,7 +43,7 @@ async function openMarket(communities: unknown[] = [choir]) {
   const app = await renderApp({
     session: makeSession(),
     communities: communities as never,
-    market: { sellers: [{ ...grace }], listings: [{ ...laptop }] },
+    market: { sellers: [{ ...grace }], listings: [{ ...laptop }, { ...tutoring }] },
   });
   await user.press(await screen.findByRole('button', { name: /^Market/ }));
   await screen.findByTestId('market-screen');
@@ -559,6 +568,7 @@ describe('refunds and disputes', () => {
       id: 'd1',
       community_id: maple.community_id,
       order_id: ORDER,
+      booking_id: null,
       buyer_user_id: OTHER_USER_ID,
       seller_user_id: '00000000-0000-4000-8000-0000000000ff',
       reason: 'It flickers',
@@ -586,5 +596,131 @@ describe('refunds and disputes', () => {
       amountMinor: 50_000,
       note: 'Half for the flicker',
     });
+  });
+});
+
+describe('bookings', () => {
+  const BOOKING = '0b000000-0000-4000-8000-000000000001';
+  const booking = (status: string, over: Partial<Booking> = {}): Booking =>
+    ({
+      id: BOOKING,
+      community_id: C,
+      listing_id: tutoring.id,
+      seller_profile_id: grace.id,
+      seller_user_id: OTHER_USER_ID,
+      buyer_user_id: TEST_USER_ID,
+      title_snapshot: 'Maths tutoring',
+      pricing_snapshot: 'hourly',
+      unit_price_minor: 300_000,
+      status,
+      amount_minor: status === 'requested' ? null : 600_000,
+      currency: 'JMD',
+      buyer_note: null,
+      location_note: null,
+      status_reason: null,
+      payment_due_at: '2030-01-01T00:00:00Z',
+      created_at: '2026-10-14T10:00:00Z',
+      updated_at: '2026-10-14T10:00:00Z',
+      startsAt: '2030-01-02T15:00:00.000Z',
+      endsAt: '2030-01-02T17:00:00.000Z',
+      ...over,
+    }) as Booking;
+
+  test('times: inside the seller hours, whole hours, never over busy periods', () => {
+    const [day] = nextDates(1, Date.parse('2026-10-14T12:00:00Z'));
+    expect(day).toBe('2026-10-15');
+    expect(localToIso('2026-10-15', '10:00')).toBe('2026-10-15T15:00:00.000Z');
+    const windows = [{ weekday: 4, start: '09:00', end: '13:00' }]; // Thursday
+    expect(startTimes('2026-10-15', 2, windows, [])).toEqual(['09:00', '10:00', '11:00']);
+    const busy = [{ startsAt: localToIso('2026-10-15', '10:00'), endsAt: localToIso('2026-10-15', '11:00') }];
+    expect(startTimes('2026-10-15', 1, windows, busy)).toEqual(['09:00', '11:00', '12:00']);
+    expect(startTimes('2026-10-16', 1, windows, [])).toEqual([]);
+  });
+
+  test('the buyer requests a time; only the chosen slot is sent', async () => {
+    const { user, dependencies } = await openMarket();
+    const s = dependencies.services;
+    jest.spyOn(s.bookings, 'availability').mockResolvedValue([]);
+    jest.spyOn(s.bookings, 'busy').mockResolvedValue([]);
+    const request = jest.spyOn(s.bookings, 'request').mockResolvedValue(BOOKING);
+    jest
+      .spyOn(s.bookings, 'booking')
+      .mockResolvedValue({ booking: booking('requested'), events: [], role: 'buyer' });
+    await user.press(await screen.findByTestId(`listing-${tutoring.id}`));
+    await user.press(await screen.findByTestId('listing-book'));
+    await screen.findByTestId('book-service');
+    expect(screen.getByTestId('book-submit')).toBeDisabled();
+    await user.press(within(screen.getByTestId('slot-hours')).getByText('2 hours'));
+    await user.press(within(screen.getByTestId('slot-start')).getByText('10:00'));
+    await user.type(screen.getByTestId('book-note'), 'Grade 9');
+    await user.press(screen.getByTestId('book-submit'));
+    const sent = request.mock.calls[0]![0];
+    expect(sent.listingId).toBe(tutoring.id);
+    expect(Date.parse(sent.endsAt) - Date.parse(sent.startsAt)).toBe(2 * 3_600_000);
+    expect(sent.startsAt).toMatch(/T15:00:00.000Z$/);
+    expect(await screen.findByTestId('booking-status')).toHaveTextContent('Waiting for the seller');
+  });
+
+  test('an accepted booking is paid through the payment screen; confirmed only by the server', async () => {
+    const app = await openMarket();
+    const s = app.dependencies.services;
+    jest.spyOn(s.bookings, 'list').mockResolvedValue({ items: [booking('accepted')], nextCursor: null });
+    jest
+      .spyOn(s.bookings, 'booking')
+      .mockResolvedValue({ booking: booking('accepted'), events: [], role: 'buyer' });
+    const pending = {
+      status: 'accepted',
+      amountMinor: 600_000,
+      currency: 'JMD',
+      paymentDueAt: '2030-01-01T00:00:00Z',
+      payment: null,
+      paid: false,
+    };
+    jest
+      .spyOn(s.payments, 'bookingState')
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValue({
+        ...pending,
+        status: 'confirmed',
+        paid: true,
+        payment: { id: 'p', status: 'succeeded', mode: 'test', failureCode: null },
+      });
+    const start = jest.spyOn(s.payments, 'startBooking').mockResolvedValue({
+      paymentId: 'p',
+      redirectUrl: 'https://pay.example/b',
+      expiresAt: null,
+      mode: 'test',
+    });
+    jest.spyOn(s.orders, 'myOrders').mockResolvedValue({ items: [], nextCursor: null });
+    await app.user.press(screen.getByTestId('market-orders'));
+    await app.user.press(await screen.findByTestId('orders-bookings'));
+    await app.user.press(await screen.findByTestId(`booking-row-${BOOKING}`));
+    await app.user.press(await screen.findByTestId('booking-pay'));
+    await app.user.press(await screen.findByTestId('payment-pay'));
+    expect(start).toHaveBeenCalledWith(BOOKING);
+    expect(await screen.findByText('Payment confirmed')).toBeTruthy();
+  });
+
+  test('the seller sets the price of a quoted service when accepting', async () => {
+    const app = await openMarket();
+    const s = app.dependencies.services;
+    jest
+      .spyOn(s.bookings, 'list')
+      .mockResolvedValue({ items: [booking('requested', { pricing_snapshot: 'quote' })], nextCursor: null });
+    jest.spyOn(s.bookings, 'booking').mockResolvedValue({
+      booking: booking('requested', { pricing_snapshot: 'quote' }),
+      events: [],
+      role: 'seller',
+    });
+    const accept = jest.spyOn(s.bookings, 'accept').mockResolvedValue();
+    jest.spyOn(s.orders, 'myOrders').mockResolvedValue({ items: [], nextCursor: null });
+    await app.user.press(screen.getByTestId('market-orders'));
+    await app.user.press(await screen.findByTestId('orders-bookings'));
+    await app.user.press(within(await screen.findByTestId('bookings-side')).getByText('For my services'));
+    await app.user.press(await screen.findByTestId(`booking-row-${BOOKING}`));
+    await app.user.press(await screen.findByTestId('booking-accept'));
+    await app.user.type(screen.getByTestId('booking-form-text'), '9000');
+    await app.user.press(screen.getByTestId('booking-form-submit'));
+    expect(accept).toHaveBeenCalledWith(BOOKING, 900_000);
   });
 });

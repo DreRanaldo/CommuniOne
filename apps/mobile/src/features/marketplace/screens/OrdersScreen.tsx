@@ -108,6 +108,13 @@ export function OrdersScreen({ navigation, route }: Props) {
   return (
     <Screen testID="orders-screen">
       {header}
+      <Button
+        title="Service bookings"
+        icon="calendar-outline"
+        variant="secondary"
+        onPress={() => navigation.navigate('Bookings', side === 'sales' ? { as: 'seller' } : undefined)}
+        testID="orders-bookings"
+      />
       {state.rows.length === 0 ? (
         <EmptyState
           icon="receipt-outline"

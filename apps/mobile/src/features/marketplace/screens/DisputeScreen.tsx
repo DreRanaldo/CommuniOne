@@ -26,16 +26,28 @@ const STATUS: Record<string, string> = {
  * server enforces who may see, write and decide.
  */
 export function DisputeScreen({ navigation, route }: Props) {
-  const { disputeId, orderId } = route.params;
+  const { disputeId, orderId, bookingId } = route.params;
   if (!disputeId)
     return (
-      <OpenDispute orderId={orderId!} onOpened={(id) => navigation.replace('Dispute', { disputeId: id })} />
+      <OpenDispute
+        orderId={orderId}
+        bookingId={bookingId}
+        onOpened={(id) => navigation.replace('Dispute', { disputeId: id })}
+      />
     );
   return <DisputeThread disputeId={disputeId} />;
 }
 
-function OpenDispute({ orderId, onOpened }: { orderId: string; onOpened(id: string): void }) {
-  const { refunds } = useServices();
+function OpenDispute({
+  orderId,
+  bookingId,
+  onOpened,
+}: {
+  orderId?: string;
+  bookingId?: string;
+  onOpened(id: string): void;
+}) {
+  const { refunds, bookings } = useServices();
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +55,9 @@ function OpenDispute({ orderId, onOpened }: { orderId: string; onOpened(id: stri
     setBusy(true);
     setError(null);
     try {
-      onOpened(await refunds.openDispute(orderId, reason));
+      onOpened(
+        await (bookingId ? bookings.openDispute(bookingId, reason) : refunds.openDispute(orderId!, reason)),
+      );
     } catch (thrown) {
       setError(orderError(thrown));
     } finally {
