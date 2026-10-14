@@ -10,6 +10,7 @@ import { useAsync } from '@/hooks/useAsync';
 import { useServices } from '@/lib/dependencies';
 import { makeStyles, useTheme } from '@/theme';
 import type { CommunityStackParamList } from '@/types/navigation';
+import { QuantityStepper } from '../components/QuantityStepper';
 import {
   availabilityLine,
   canModerate,
@@ -59,6 +60,7 @@ export function ListingDetailScreen({ navigation, route }: Props) {
       onReload={current.reload}
       onEdit={() => navigation.navigate('ListingEditor', { listingId })}
       onOpenSeller={(sellerProfileId) => navigation.navigate('Seller', { sellerProfileId })}
+      onOpenCart={() => navigation.navigate('Cart')}
       warning={route.params.warning}
     />
   );
@@ -69,9 +71,14 @@ function Detail({
   onReload,
   onEdit,
   onOpenSeller,
+  onOpenCart,
+  onBook,
   warning,
 }: {
   warning?: string;
+  onOpenCart(): void;
+  /** Service bookings (Stage J). */
+  onBook?: () => void;
   detail: ListingDetail;
   onReload(): void;
   onEdit(): void;
@@ -80,7 +87,8 @@ function Detail({
   const styles = useStyles();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
-  const { marketplace } = useServices();
+  const services = useServices();
+  const { marketplace } = services;
   const permissions = useCommunityPermissions();
   const [saved, setSaved] = useState(detail.isFavorite);
   const [page, setPage] = useState(0);
@@ -88,10 +96,39 @@ function Detail({
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [reason, setReason] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [inCart, setInCart] = useState(false);
   const l = detail.listing;
   const listingLike = { pricing: l.pricing, priceMinor: l.price_minor, currency: l.currency };
   const stock = availabilityLine(l.kind, detail.stock?.available ?? null);
   const moderator = !detail.isMine && canModerate(permissions.can) && l.status !== 'removed';
+  const available = detail.stock?.available ?? 0;
+  const buyable =
+    !detail.isMine &&
+    l.kind === 'product' &&
+    l.status === 'active' &&
+    detail.seller?.status === 'active' &&
+    permissions.can('marketplace.buy');
+  const bookable =
+    !detail.isMine &&
+    l.kind === 'service' &&
+    l.status === 'active' &&
+    detail.seller?.status === 'active' &&
+    permissions.can('marketplace.buy');
+
+  const addToCart = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await services.cart.setQuantity(l.id, quantity);
+      setInCart(true);
+      setNotice({ tone: 'success', message: `Added to your cart (${quantity}).` });
+    } catch (thrown) {
+      setNotice({ tone: 'danger', message: marketError(thrown) });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toggleSaved = async () => {
     setNotice(null);
@@ -247,10 +284,32 @@ function Detail({
           </Pressable>
         ) : null}
 
-        {!detail.isMine ? (
-          <Text variant="caption" tone="muted" testID="listing-checkout-note">
-            Buying in the app (cart, checkout and payment) arrives in a later update.
-          </Text>
+        {buyable ? (
+          <Card testID="listing-buy">
+            {available > 0 ? (
+              <>
+                <QuantityStepper
+                  value={quantity}
+                  max={Math.min(available, 99)}
+                  onChange={setQuantity}
+                  label="Quantity"
+                  disabled={busy}
+                />
+                <Button
+                  title={inCart ? 'Update cart' : 'Add to cart'}
+                  icon="cart-outline"
+                  loading={busy}
+                  onPress={() => void addToCart()}
+                />
+                {inCart ? <Button title="Go to cart" variant="secondary" onPress={onOpenCart} /> : null}
+              </>
+            ) : (
+              <Text tone="danger">Out of stock. Save it to find it again later.</Text>
+            )}
+          </Card>
+        ) : null}
+        {bookable && onBook ? (
+          <Button title="Request a booking" icon="calendar-outline" onPress={onBook} testID="listing-book" />
         ) : null}
 
         {detail.isMine && l.status !== 'removed' ? (

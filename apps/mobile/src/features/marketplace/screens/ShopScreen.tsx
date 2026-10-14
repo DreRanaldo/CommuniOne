@@ -213,6 +213,24 @@ export function ShopScreen({ navigation }: Props) {
           {seller.status !== 'suspended' ? (
             <Button title="New listing" icon="add" onPress={() => navigation.navigate('ListingEditor')} />
           ) : null}
+          <View style={styles.shopLinks}>
+            <Button
+              title="Sales"
+              icon="receipt-outline"
+              variant="secondary"
+              fullWidth={false}
+              onPress={() => navigation.navigate('Orders', { side: 'sales' })}
+              testID="shop-sales"
+            />
+            <Button
+              title="Delivery"
+              icon="bicycle-outline"
+              variant="secondary"
+              fullWidth={false}
+              onPress={() => navigation.navigate('DeliverySettings', { sellerProfileId: seller.id })}
+              testID="shop-delivery"
+            />
+          </View>
           <Text variant="heading" accessibilityRole="header">
             Your listings
           </Text>
@@ -274,6 +292,7 @@ export function ShopScreen({ navigation }: Props) {
 }
 
 const useStyles = makeStyles((t) => ({
+  shopLinks: { flexDirection: 'row', gap: t.spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
   flex: { flex: 1, gap: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm },

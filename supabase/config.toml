@@ -101,3 +101,18 @@ max_frequency = "5s"
 [storage]
 enabled = true
 file_size_limit = "50MiB"
+
+# Payments Edge Functions (docs/commerce/payments.md). The webhook and the
+# test checkout page authenticate by signature, not by user JWT; the
+# reconcile function checks the service-role bearer itself.
+[functions.payments-session]
+verify_jwt = true
+
+[functions.payments-webhook]
+verify_jwt = false
+
+[functions.payments-reconcile]
+verify_jwt = false
+
+[functions.payments-test-checkout]
+verify_jwt = false

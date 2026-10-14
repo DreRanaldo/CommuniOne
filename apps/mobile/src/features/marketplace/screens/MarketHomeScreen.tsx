@@ -64,6 +64,14 @@ export function MarketHomeScreen({ navigation }: Props) {
   }, [text]);
 
   const loadCategories = useCallback(() => marketplace.categories(), [marketplace]);
+  const { cart } = useServices();
+  const canBuy = permissions.can('marketplace.buy');
+  const loadCount = useCallback(
+    () => (canBuy ? cart.count(community.community_id) : Promise.resolve(0)),
+    [cart, community.community_id, canBuy],
+  );
+  const cartCount = useAsync(loadCount);
+  const reloadCount = cartCount.reload;
   const categories = useAsync(loadCategories);
 
   const min = parsePrice(minText);
@@ -91,8 +99,11 @@ export function MarketHomeScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
-      else void refresh();
-    }, [refresh]),
+      else {
+        void refresh();
+        reloadCount();
+      }
+    }, [refresh, reloadCount]),
   );
 
   if (!permissions.can('marketplace.view')) {
@@ -144,6 +155,33 @@ export function MarketHomeScreen({ navigation }: Props) {
         >
           <Icon name="heart-outline" size={22} color="text" />
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Your orders"
+          onPress={() => navigation.navigate('Orders')}
+          style={styles.round}
+          testID="market-orders"
+        >
+          <Icon name="receipt-outline" size={22} color="text" />
+        </Pressable>
+        {canBuy ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Cart, ${cartCount.status === 'success' ? cartCount.data : 0} items`}
+            onPress={() => navigation.navigate('Cart')}
+            style={styles.round}
+            testID="market-cart"
+          >
+            <Icon name="cart-outline" size={22} color="text" />
+            {cartCount.status === 'success' && cartCount.data > 0 ? (
+              <View style={styles.badge}>
+                <Text variant="caption" tone="inverse">
+                  {cartCount.data > 99 ? '99+' : cartCount.data}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
         {canSell(permissions.can) ? (
           <Pressable
             accessibilityRole="button"
@@ -372,6 +410,18 @@ const useStyles = makeStyles((t) => ({
     backgroundColor: t.colors.surfaceMuted,
   },
   sell: { backgroundColor: t.colors.primary },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.colors.danger,
+  },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

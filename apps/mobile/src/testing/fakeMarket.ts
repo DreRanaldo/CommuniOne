@@ -151,6 +151,11 @@ export function createFakeMarket(
   const files = new Map<string, string>(); // listing-images path → uploader
   const favorites: { user_id: string; listing_id: string; community_id: string; created_at: string }[] = [];
   const movements: { listing_id: string; delta: number; reason: string }[] = [];
+  /** Carts (migration 33): `${userId}:${communityId}` → lines. */
+  const carts = new Map<
+    string,
+    { listing_id: string; quantity: number; seen_price_minor: number; added_at: number }[]
+  >();
   let counter = 900;
 
   for (const seeded of seed.listings ?? []) {
@@ -417,6 +422,16 @@ export function createFakeMarket(
       }
     }
 
+    if (table === 'cart_items' && op === 'select') {
+      const community = filterValue('community_id');
+      const lines = [...carts.entries()]
+        .filter(
+          ([key]) => key.startsWith(`${user}:`) && (!community || key.endsWith(`:${String(community)}`)),
+        )
+        .flatMap(([, ls]) => ls);
+      return out(lines.map((l) => pick({ ...l }, columns)));
+    }
+
     if (table === 'inventory' && op === 'select') {
       const id = filterValue('listing_id');
       const l = listings.find((x) => x.id === id);
@@ -523,6 +538,87 @@ export function createFakeMarket(
         error: null,
       };
     }
+    if (name === 'cart_set_item' || name === 'cart_quote' || name === 'cart_clear') {
+      if (!user) return denied('authentication required');
+      if (name === 'cart_clear') {
+        carts.delete(`${user}:${String(args.p_community_id)}`);
+        return { data: null, error: null };
+      }
+      if (name === 'cart_quote') {
+        const communityId = String(args.p_community_id);
+        if (!can(communityId, 'marketplace.buy'))
+          return denied('marketplace.buy is required in this community');
+        const lines = (carts.get(`${user}:${communityId}`) ?? []).map((ci) => {
+          const l = listings.find((x) => x.id === ci.listing_id)!;
+          const seller = sellerOf(l.seller_profile_id)!;
+          const inv = inventory.get(l.id);
+          const available = Math.max(inv ? inv.on_hand - inv.reserved : 0, 0);
+          const issue =
+            l.status !== 'active' || seller.status !== 'active' || !canView(l)
+              ? 'unavailable'
+              : available <= 0
+                ? 'out_of_stock'
+                : available < ci.quantity
+                  ? 'insufficient_stock'
+                  : l.price_minor !== ci.seen_price_minor
+                    ? 'price_changed'
+                    : null;
+          const counts = issue === null || issue === 'price_changed';
+          return {
+            listing_id: l.id,
+            seller_profile_id: l.seller_profile_id,
+            seller_display_name: seller.display_name,
+            title: l.title,
+            cover_image_path:
+              images.filter((i) => i.listing_id === l.id).sort((a, b) => a.position - b.position)[0]
+                ?.storage_path ?? null,
+            unit_price_minor: l.price_minor,
+            seen_price_minor: ci.seen_price_minor,
+            currency: l.currency,
+            quantity: ci.quantity,
+            available,
+            fulfillment: l.fulfillment,
+            line_total_minor: counts ? (l.price_minor ?? 0) * ci.quantity : 0,
+            issue,
+          };
+        });
+        const subtotal = lines.reduce((sum, l) => sum + l.line_total_minor, 0);
+        const count = lines.reduce((sum, l) => sum + l.quantity, 0);
+        return {
+          data: lines.map((l) => ({ ...l, subtotal_minor: subtotal, item_count: count })),
+          error: null,
+        };
+      }
+      const quantity = Number(args.p_quantity);
+      if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99)
+        return invalid('quantity must be between 0 and 99');
+      const l = listings.find((x) => x.id === args.p_listing_id);
+      if (!l || !canView(l)) return { data: null, error: { code: 'P0002', message: 'listing not found' } };
+      if (!can(l.community_id, 'marketplace.buy'))
+        return denied('marketplace.buy is required in this community');
+      const key = `${user}:${l.community_id}`;
+      const lines = carts.get(key) ?? [];
+      if (quantity === 0) {
+        carts.set(
+          key,
+          lines.filter((x) => x.listing_id !== l.id),
+        );
+        return { data: 0, error: null };
+      }
+      if (l.seller_user_id === user) return invalid('you cannot buy your own listing');
+      if (l.kind !== 'product' || l.price_minor === null)
+        return invalid('services are booked, not added to the cart');
+      if (l.status !== 'active' || sellerOf(l.seller_profile_id)?.status !== 'active')
+        return invalid('this listing is not for sale right now');
+      const inv = inventory.get(l.id);
+      const available = inv ? inv.on_hand - inv.reserved : 0;
+      if (available < quantity) return invalid(`only ${Math.max(available, 0)} available`);
+      const existing = lines.find((x) => x.listing_id === l.id);
+      if (existing) Object.assign(existing, { quantity, seen_price_minor: l.price_minor });
+      else lines.push({ listing_id: l.id, quantity, seen_price_minor: l.price_minor, added_at: Date.now() });
+      carts.set(key, lines);
+      return { data: quantity, error: null };
+    }
     if (name === 'set_listing_stock') {
       const l = listings.find((x) => x.id === args.p_listing_id);
       if (!l || !isSeller(l)) return { data: null, error: { code: 'P0002', message: 'listing not found' } };
@@ -578,5 +674,10 @@ export function createFakeMarket(
     })),
   };
 
-  return { query, rpc, bucket, state: { sellers, listings, inventory, images, files, favorites, movements } };
+  return {
+    query,
+    rpc,
+    bucket,
+    state: { sellers, listings, inventory, images, files, favorites, movements, carts },
+  };
 }

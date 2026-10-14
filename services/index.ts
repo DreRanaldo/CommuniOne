@@ -24,6 +24,9 @@ import { documentsService } from './documents/index.ts';
 import { eventsService } from './events/index.ts';
 import { invitationsService } from './invitations/index.ts';
 import { marketplaceService } from './marketplace/index.ts';
+import { cartService } from './cart/index.ts';
+import { ordersService } from './orders/index.ts';
+import { paymentsService } from './payments/index.ts';
 import { membershipsService } from './memberships/index.ts';
 import { notificationsService } from './notifications/index.ts';
 import { postsService } from './posts/index.ts';
@@ -55,6 +58,9 @@ export function createServices(db: Db, options: ServicesOptions = {}) {
     documents: documentsService(ctx, options.uploadFile),
     stories: storiesService(ctx),
     marketplace: marketplaceService(ctx),
+    cart: cartService(ctx),
+    orders: ordersService(ctx),
+    payments: paymentsService(ctx),
     audit: auditService(ctx),
   };
 }
@@ -112,3 +118,10 @@ export {
   type Category, type Listing, type ListingCard, type ListingDetail, type ListingImage, type ListingInput, type ListingKind,
   type ListingPatch, type SearchInput, type SellerProfile,
 } from './marketplace/index.ts';
+export { CART_MAX_QUANTITY, type CartIssue, type CartLine, type CartQuote } from './cart/index.ts';
+export {
+  FULFILLMENT, ORDER_TERMS_VERSION, PARISHES,
+  type Address, type AddressInput, type Checkout, type CheckoutInput, type CheckoutPreview, type DeliveryOption,
+  type Fulfillment, type Order, type OrderDetail, type OrderEvent, type OrderItem, type Parish, type PreviewLine, type PreviewSeller,
+} from './orders/index.ts';
+export { type CheckoutPaymentState, type PaymentSession, type PaymentStatus } from './payments/index.ts';

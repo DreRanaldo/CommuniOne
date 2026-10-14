@@ -69,7 +69,7 @@ const titles = () =>
   within(screen.getByTestId('market-results'))
     .queryAllByRole('button')
     .map((b) => b.props.accessibilityLabel as string)
-    .filter((l) => /, /.test(l) && !/^(Save|Remove) /.test(l))
+    .filter((l) => /, /.test(l) && !/^(Save|Remove|Cart)\b/.test(l))
     .map((l) => l.split(', ')[0]);
 
 describe('storefront', () => {
@@ -146,7 +146,7 @@ describe('storefront', () => {
 });
 
 describe('listing page', () => {
-  test('pictures, price, stock, details and the seller; no buying yet', async () => {
+  test('pictures, price, stock, details, the seller and adding to the cart', async () => {
     const { user } = await openMarket();
     await user.press(screen.getByTestId(`listing-${laptop.id}`));
     await screen.findByTestId('listing-screen');
@@ -155,7 +155,9 @@ describe('listing page', () => {
     expect(screen.getByTestId('listing-availability')).toHaveTextContent('Only 3 left');
     expect(screen.getByText('Good')).toBeOnTheScreen();
     expect(screen.getByText('Pickup')).toBeOnTheScreen();
-    expect(screen.getByTestId('listing-checkout-note')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('listing-buy')).getByRole('button', { name: 'Add to cart' }),
+    ).toBeOnTheScreen();
     expect(screen.queryByTestId('listing-owner-controls')).not.toBeOnTheScreen();
     expect(screen.queryByTestId('listing-moderation')).not.toBeOnTheScreen();
     await user.press(screen.getByTestId('listing-seller'));

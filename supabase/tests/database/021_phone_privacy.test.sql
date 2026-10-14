@@ -115,8 +115,8 @@ reset role;
 select hasnt_column('public', 'profiles', 'phone', '6. profiles (readable by co-members) have no phone column');
 select is_empty(
   $$ select table_name || '.' || column_name from information_schema.columns
-     where table_schema = 'public' and column_name ilike '%phone%' and table_name <> 'profile_private' $$,
-  '6. no other public table or view has a phone column'
+     where table_schema = 'public' and column_name ilike '%phone%' and table_name not in ('profile_private', 'addresses') $$,
+  '6. no other public table or view has a phone column (addresses: owner-only, checked in 034_marketplace_checkout)'
 );
 select is_empty(
   $$ select p.proname from pg_proc p where p.pronamespace = 'public'::regnamespace

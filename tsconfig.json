@@ -22,6 +22,10 @@
   },
   "include": [
     "services/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "supabase/functions/_shared/**/*.ts"
+  ],
+  "exclude": [
+    "supabase/functions/_shared/**/env.ts"
   ]
 }

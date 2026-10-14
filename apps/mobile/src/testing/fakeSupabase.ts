@@ -3,6 +3,7 @@
 // and the user's own profile, phone and avatar files with the backend's
 // visibility rules (profile_private and avatars are the owner's only). Used with the REAL service layer, so screens are tested through
 // the same code path as the app.
+import type { PaymentBrowser } from '@/lib/paymentBrowser';
 import type { Session } from '@supabase/supabase-js';
 import { UploadError, type FileUploader } from '@communione/services';
 import type { LinkSource } from '@/lib/links';
@@ -3288,3 +3289,17 @@ export const makeComment = (
   my_reaction_type: null as string | null,
   ...overrides,
 });
+
+/** A payment page that "returns" (or is closed) without a device browser. */
+export function fakePaymentBrowser() {
+  const outcomes: ('returned' | 'closed')[] = [];
+  const browser: PaymentBrowser = {
+    open: jest.fn(async () => (outcomes.length ? outcomes.shift()! : 'returned')),
+  };
+  return {
+    browser,
+    next(outcome: 'returned' | 'closed') {
+      outcomes.push(outcome);
+    },
+  };
+}

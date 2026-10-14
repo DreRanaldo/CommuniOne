@@ -59,6 +59,20 @@ export type CommunityStackParamList = {
   ListingEditor: { listingId?: string } | undefined;
   /** Listings the user saved. */
   SavedListings: undefined;
+  /** The cart for the current community (Stage C); prices are the server's. */
+  Cart: undefined;
+  /** Checkout (Stage D): pickup/delivery per seller, address, contact, server totals. */
+  Checkout: undefined;
+  /** Add a delivery address to the user's private address book. */
+  AddressEditor: undefined;
+  /** Paying for a checkout (Stage E); the status shown is the server's. */
+  Payment: { checkoutId: string };
+  /** The user's purchases, or (sellers) sales, in the current community. */
+  Orders: { side?: 'purchases' | 'sales' } | undefined;
+  /** One order, read from the server (buyer, or seller once paid). */
+  OrderDetail: { orderId: string };
+  /** A seller's delivery fee, parishes and estimate. */
+  DeliverySettings: { sellerProfileId: string };
   /** Admin tools for the current community (RN-16), each shown from permissions. */
   Admin: undefined;
   /** Member management (RN-16): active, requests, suspended. */

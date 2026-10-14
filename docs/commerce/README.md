@@ -1,6 +1,6 @@
 # CommuniOne Marketplace and Commerce
 
-**Stage A: architecture, payment-provider assessment and data model.** Design only: no code, no migrations, no money moves.
+Design (Stage A) and the implementation notes of each stage. **No real money moves:** only a test payment provider exists.
 
 **Goal:** an Amazon-inspired marketplace inside CommuniOne. It covers:
 - products and services;
@@ -28,12 +28,12 @@ It is built in small stages (B to M), each tested and approved before the next.
 |---|---|
 | Design (this folder) | Done (Stage A) |
 | Listings, categories, seller profiles, inventory, search, favorites | **Implemented and tested (B)**: see [`stage-b-catalog.md`](stage-b-catalog.md) |
-| Cart and server-side price/stock validation | Not yet implemented (C) |
-| Checkout, addresses, delivery choices, orders | Not yet implemented (D) |
-| Payment provider: adapter and test provider | Not yet implemented (E) |
+| Cart and server-side price/stock validation | **Implemented and tested (C)**: see [`stage-c-f-checkout-payments.md`](stage-c-f-checkout-payments.md) |
+| Checkout, addresses, delivery choices, orders | **Implemented and tested (D)** |
+| Payment provider: adapter and test provider | **Implemented and tested in TEST MODE only (E)**: no real money moves |
 | Payment provider: real sandbox | **Waiting for merchant application and sandbox credentials** |
 | Live payments | **Waiting for merchant approval and owner decisions**; not operational |
-| Reconciliation and order state machine | Not yet implemented (F) |
+| Reconciliation, payment state machine, ledger | **Implemented and tested (F)** against the test provider; reconcile schedule not deployed |
 | Seller fulfillment, delivery, pickup | Not yet implemented (G, H) |
 | Refunds and cancellations | Not yet implemented (I). Real refunds depend on the provider. |
 | Service bookings | Not yet implemented (J) |

@@ -24,9 +24,16 @@ import { AnnouncementEditorScreen } from '@/features/announcements/AnnouncementE
 import { AnnouncementsScreen } from '@/features/announcements/AnnouncementsScreen';
 import { PostDetailScreen } from '@/features/comments/PostDetailScreen';
 import { FeedScreen } from '@/features/feed/screens/FeedScreen';
+import { AddressEditorScreen } from '@/features/marketplace/screens/AddressEditorScreen';
+import { CartScreen } from '@/features/marketplace/screens/CartScreen';
+import { CheckoutScreen } from '@/features/marketplace/screens/CheckoutScreen';
+import { DeliverySettingsScreen } from '@/features/marketplace/screens/DeliverySettingsScreen';
 import { ListingDetailScreen } from '@/features/marketplace/screens/ListingDetailScreen';
 import { ListingEditorScreen } from '@/features/marketplace/screens/ListingEditorScreen';
 import { MarketHomeScreen } from '@/features/marketplace/screens/MarketHomeScreen';
+import { OrderDetailScreen } from '@/features/marketplace/screens/OrderDetailScreen';
+import { OrdersScreen } from '@/features/marketplace/screens/OrdersScreen';
+import { PaymentScreen } from '@/features/marketplace/screens/PaymentScreen';
 import { SavedListingsScreen } from '@/features/marketplace/screens/SavedListingsScreen';
 import { SellerScreen } from '@/features/marketplace/screens/SellerScreen';
 import { ShopScreen } from '@/features/marketplace/screens/ShopScreen';
@@ -158,6 +165,17 @@ function CommunityStack({ community, root }: { community: MyCommunity; root: Sta
         })}
       />
       <Stack.Screen name="SavedListings" component={SavedListingsScreen} options={{ title: 'Saved' }} />
+      <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'Cart' }} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
+      <Stack.Screen name="AddressEditor" component={AddressEditorScreen} options={{ title: 'New address' }} />
+      <Stack.Screen name="Payment" component={PaymentScreen} options={{ title: 'Payment' }} />
+      <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: 'Orders' }} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
+      <Stack.Screen
+        name="DeliverySettings"
+        component={DeliverySettingsScreen}
+        options={{ title: 'Delivery' }}
+      />
       <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin tools' }} />
       <Stack.Screen
         name="AdminMembers"

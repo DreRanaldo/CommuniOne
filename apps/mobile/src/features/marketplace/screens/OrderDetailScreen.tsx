@@ -1,0 +1,175 @@
+import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { OrderDetail } from '@communione/services';
+import { useCallback, useRef } from 'react';
+import { View } from 'react-native';
+import { Button, Card, ErrorState, Icon, LoadingState, Screen, Text } from '@/components';
+import { useAsync } from '@/hooks/useAsync';
+import { useServices } from '@/lib/dependencies';
+import { makeStyles } from '@/theme';
+import type { CommunityStackParamList } from '@/types/navigation';
+import { FULFILLMENT_LABELS, formatMoney } from '../marketRules';
+import { orderError, orderStatusLabel, orderStatusTone } from '../orderRules';
+import { OrderActions } from '../components/OrderActions';
+
+type Props = NativeStackScreenProps<CommunityStackParamList, 'OrderDetail'>;
+
+/**
+ * One order, read from the server, for its buyer or (once paid) its seller.
+ * Every action is offered from the order's state and checked again by the
+ * server.
+ */
+export function OrderDetailScreen({ navigation, route }: Props) {
+  const styles = useStyles();
+  const { orders } = useServices();
+  const { orderId } = route.params;
+  const load = useCallback(() => orders.order(orderId), [orders, orderId]);
+  const detail = useAsync(load);
+  const { reload } = detail;
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) firstFocus.current = false;
+      else reload();
+    }, [reload]),
+  );
+
+  if (detail.status === 'loading') return <LoadingState label="Loading the order…" />;
+  if (detail.status === 'error')
+    return (
+      <ErrorState
+        title="This order could not be loaded"
+        message={orderError(detail.error)}
+        onRetry={detail.reload}
+      />
+    );
+  const d: OrderDetail = detail.data;
+  const o = d.order;
+  const contact = o.contact_snapshot as { name?: string; phone?: string } | null;
+  const address = o.address_snapshot as {
+    recipient_name?: string;
+    line1?: string;
+    line2?: string | null;
+    town?: string;
+    parish?: string;
+    instructions?: string | null;
+  } | null;
+
+  return (
+    <Screen testID="order-detail">
+      <Card>
+        <View style={styles.row}>
+          <Icon name="receipt-outline" size={24} color="primary" />
+          <View style={styles.flex}>
+            <Text variant="heading">
+              {d.role === 'buyer' ? o.seller_name : `Order from ${contact?.name ?? 'a buyer'}`}
+            </Text>
+            <Text tone={orderStatusTone(o.status)} testID="order-detail-status">
+              {orderStatusLabel(o.status)}
+            </Text>
+            {o.status_reason ? (
+              <Text tone="muted" variant="caption">
+                {o.status_reason}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+        <Text
+          variant="caption"
+          tone="muted"
+        >{`Placed ${new Date(o.created_at).toLocaleString()} · ${FULFILLMENT_LABELS[o.fulfillment_method] ?? o.fulfillment_method}`}</Text>
+      </Card>
+
+      <OrderActions
+        detail={d}
+        onChanged={detail.reload}
+        onPay={(checkoutId) => navigation.navigate('Payment', { checkoutId })}
+      />
+
+      <Card testID="order-items">
+        {d.items.map((i) => (
+          <View key={i.id} style={styles.row}>
+            <Text style={styles.flex}>{`${i.quantity} × ${i.title_snapshot}`}</Text>
+            <Text>{formatMoney(Number(i.line_total_minor), o.currency)}</Text>
+          </View>
+        ))}
+        <View style={styles.divider} />
+        <View style={styles.row}>
+          <Text style={styles.flex}>Items</Text>
+          <Text>{formatMoney(Number(o.subtotal_minor), o.currency)}</Text>
+        </View>
+        {Number(o.delivery_minor) > 0 ? (
+          <View style={styles.row}>
+            <Text style={styles.flex}>Delivery</Text>
+            <Text>{formatMoney(Number(o.delivery_minor), o.currency)}</Text>
+          </View>
+        ) : null}
+        {Number(o.tax_minor) > 0 ? (
+          <View style={styles.row}>
+            <Text style={styles.flex}>GCT</Text>
+            <Text>{formatMoney(Number(o.tax_minor), o.currency)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.row}>
+          <Text variant="bodyStrong" style={styles.flex}>
+            Total
+          </Text>
+          <Text variant="bodyStrong" testID="order-total">
+            {formatMoney(Number(o.total_minor), o.currency)}
+          </Text>
+        </View>
+      </Card>
+
+      {address ? (
+        <Card>
+          <Text variant="label">Delivery address</Text>
+          <Text>{address.recipient_name}</Text>
+          <Text tone="muted">{`${address.line1}${address.line2 ? `, ${address.line2}` : ''}, ${address.town}, ${address.parish}`}</Text>
+          {address.instructions ? (
+            <Text tone="muted" variant="caption">
+              {address.instructions}
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+      {d.role === 'seller' && contact ? (
+        <Card testID="order-contact">
+          <Text variant="label">Buyer contact</Text>
+          <Text>{`${contact.name ?? ''} · ${contact.phone ?? ''}`}</Text>
+        </Card>
+      ) : null}
+
+      <Card testID="order-history">
+        <Text variant="label">History</Text>
+        {d.events.map((e) => (
+          <View key={e.id} style={styles.row}>
+            <Icon name="ellipse" size={8} color="textMuted" />
+            <View style={styles.flex}>
+              <Text>{orderStatusLabel(e.to_status)}</Text>
+              <Text variant="caption" tone="muted">
+                {`${new Date(e.created_at).toLocaleString()}${e.reason ? ` · ${e.reason}` : ''}`}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </Card>
+      {d.role === 'buyer' && ['completed', 'cancelled', 'rejected', 'delivered'].includes(o.status) ? (
+        <Button
+          title="Buy again"
+          variant="secondary"
+          icon="refresh"
+          onPress={() => {
+            const first = d.items.find((i) => i.listing_id);
+            if (first?.listing_id) navigation.navigate('Listing', { listingId: first.listing_id });
+          }}
+        />
+      ) : null}
+    </Screen>
+  );
+}
+
+const useStyles = makeStyles((t) => ({
+  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  flex: { flex: 1, gap: 2 },
+  divider: { height: 1, backgroundColor: t.colors.border, marginVertical: t.spacing.xs },
+}));

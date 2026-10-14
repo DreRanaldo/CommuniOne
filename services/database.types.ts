@@ -23,7 +23,27 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "alert_events": {
+            "addresses": {
+                  Row: {
+                    "created_at": string,"id": string,"instructions": string | null,"is_default": boolean,"label": string | null,"line1": string,"line2": string | null,"parish": string,"phone": string,"recipient_name": string,"town": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"instructions"?: string | null,"is_default"?: boolean,"label"?: string | null,"line1": string,"line2"?: string | null,"parish": string,"phone": string,"recipient_name": string,"town": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"instructions"?: string | null,"is_default"?: boolean,"label"?: string | null,"line1"?: string,"line2"?: string | null,"parish"?: string,"phone"?: string,"recipient_name"?: string,"town"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "addresses_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"alert_events": {
                   Row: {
                     "actor_user_id": string | null,"alert_id": string,"community_id": string,"dispatched_at": string | null,"event_type": string,"id": string,"occurred_at": string,"severity": string
                   }
@@ -165,6 +185,84 @@ isOneToOne: false
       referencedColumns: ["action"]
     }
                   ]
+                },"cart_items": {
+                  Row: {
+                    "added_at": string,"cart_id": string,"community_id": string,"listing_id": string,"quantity": number,"seen_price_minor": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "added_at"?: string,"cart_id": string,"community_id": string,"listing_id": string,"quantity": number,"seen_price_minor": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "added_at"?: string,"cart_id"?: string,"community_id"?: string,"listing_id"?: string,"quantity"?: number,"seen_price_minor"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "cart_items_cart_fkey"
+      columns: ["cart_id","community_id"]
+isOneToOne: false
+      referencedRelation: "carts"
+      referencedColumns: ["id","community_id"]
+    },{
+      foreignKeyName: "cart_items_listing_fkey"
+      columns: ["listing_id","community_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id","community_id"]
+    }
+                  ]
+                },"carts": {
+                  Row: {
+                    "community_id": string,"created_at": string,"id": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id": string,"created_at"?: string,"id"?: string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "community_id"?: string,"created_at"?: string,"id"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "carts_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "carts_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"checkouts": {
+                  Row: {
+                    "buyer_user_id": string | null,"client_request_id": string,"community_id": string,"created_at": string,"currency": string,"delivery_minor": number,"discount_minor": number,"id": string,"paid_at": string | null,"reservation_expires_at": string,"status": string,"subtotal_minor": number,"tax_minor": number,"terms_version": string,"total_minor": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "buyer_user_id"?: string | null,"client_request_id": string,"community_id": string,"created_at"?: string,"currency"?: string,"delivery_minor": number,"discount_minor"?: number,"id"?: string,"paid_at"?: string | null,"reservation_expires_at": string,"status"?: string,"subtotal_minor": number,"tax_minor": number,"terms_version": string,"total_minor": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "buyer_user_id"?: string | null,"client_request_id"?: string,"community_id"?: string,"created_at"?: string,"currency"?: string,"delivery_minor"?: number,"discount_minor"?: number,"id"?: string,"paid_at"?: string | null,"reservation_expires_at"?: string,"status"?: string,"subtotal_minor"?: number,"tax_minor"?: number,"terms_version"?: string,"total_minor"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "checkouts_buyer_user_id_fkey"
+      columns: ["buyer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "checkouts_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"comments": {
                   Row: {
                     "author_user_id": string | null,"body": string,"community_id": string,"created_at": string,"depth": number,"edited_at": string | null,"id": string,"moderated_at": string | null,"moderated_by_user_id": string | null,"moderation_reason": string | null,"parent_comment_id": string | null,"post_id": string,"status": string,"updated_at": string
@@ -241,6 +339,26 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"delivery_options": {
+                  Row: {
+                    "active": boolean,"community_id": string,"currency": string,"estimated_days_max": number | null,"estimated_days_min": number | null,"fee_minor": number,"parishes": (string)[],"seller_profile_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"community_id": string,"currency"?: string,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fee_minor": number,"parishes"?: (string)[],"seller_profile_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"community_id"?: string,"currency"?: string,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fee_minor"?: number,"parishes"?: (string)[],"seller_profile_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "delivery_options_seller_fkey"
+      columns: ["seller_profile_id","community_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id","community_id"]
     }
                   ]
                 },"document_folders": {
@@ -483,6 +601,32 @@ isOneToOne: false
       referencedColumns: ["listing_id"]
     }
                   ]
+                },"inventory_reservations": {
+                  Row: {
+                    "checkout_id": string,"created_at": string,"expires_at": string,"id": string,"listing_id": string,"quantity": number,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "checkout_id": string,"created_at"?: string,"expires_at": string,"id"?: string,"listing_id": string,"quantity": number,"status"?: string
+                  }
+                  Update: {
+                    "checkout_id"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"listing_id"?: string,"quantity"?: number,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "inventory_reservations_checkout_id_fkey"
+      columns: ["checkout_id"]
+isOneToOne: false
+      referencedRelation: "checkouts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "inventory_reservations_listing_id_fkey"
+      columns: ["listing_id"]
+isOneToOne: false
+      referencedRelation: "inventory"
+      referencedColumns: ["listing_id"]
+    }
+                  ]
                 },"invitation_redemptions": {
                   Row: {
                     "community_id": string,"id": string,"invitation_id": string,"membership_id": string | null,"redeemed_at": string,"user_id": string
@@ -550,6 +694,72 @@ isOneToOne: false
       columns: ["revoked_by"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ledger_accounts": {
+                  Row: {
+                    "community_id": string | null,"created_at": string,"currency": string,"id": string,"kind": string,"owner_user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"kind": string,"owner_user_id"?: string | null
+                  }
+                  Update: {
+                    "community_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"kind"?: string,"owner_user_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ledger_accounts_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ledger_entries": {
+                  Row: {
+                    "account_id": string,"amount_minor": number,"created_at": string,"id": string,"transaction_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"amount_minor": number,"created_at"?: string,"id"?: string,"transaction_id": string
+                  }
+                  Update: {
+                    "account_id"?: string,"amount_minor"?: number,"created_at"?: string,"id"?: string,"transaction_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ledger_entries_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "ledger_accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ledger_entries_transaction_id_fkey"
+      columns: ["transaction_id"]
+isOneToOne: false
+      referencedRelation: "ledger_transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ledger_transactions": {
+                  Row: {
+                    "community_id": string | null,"created_at": string,"id": string,"kind": string,"reference_id": string,"reference_type": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "community_id"?: string | null,"created_at"?: string,"id"?: string,"kind": string,"reference_id": string,"reference_type": string
+                  }
+                  Update: {
+                    "community_id"?: string | null,"created_at"?: string,"id"?: string,"kind"?: string,"reference_id"?: string,"reference_type"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ledger_transactions_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
       referencedColumns: ["id"]
     }
                   ]
@@ -735,6 +945,148 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"order_events": {
+                  Row: {
+                    "actor_user_id": string | null,"created_at": string,"from_status": string | null,"id": string,"order_id": string,"reason": string | null,"to_status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_user_id"?: string | null,"created_at"?: string,"from_status"?: string | null,"id"?: string,"order_id": string,"reason"?: string | null,"to_status": string
+                  }
+                  Update: {
+                    "actor_user_id"?: string | null,"created_at"?: string,"from_status"?: string | null,"id"?: string,"order_id"?: string,"reason"?: string | null,"to_status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "order_events_actor_user_id_fkey"
+      columns: ["actor_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "order_events_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: false
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"order_items": {
+                  Row: {
+                    "id": string,"image_path_snapshot": string | null,"line_total_minor": number,"listing_id": string | null,"order_id": string,"quantity": number,"tax_minor": number,"title_snapshot": string,"unit_price_minor": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"image_path_snapshot"?: string | null,"line_total_minor": number,"listing_id"?: string | null,"order_id": string,"quantity": number,"tax_minor": number,"title_snapshot": string,"unit_price_minor": number
+                  }
+                  Update: {
+                    "id"?: string,"image_path_snapshot"?: string | null,"line_total_minor"?: number,"listing_id"?: string | null,"order_id"?: string,"quantity"?: number,"tax_minor"?: number,"title_snapshot"?: string,"unit_price_minor"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "order_items_listing_id_fkey"
+      columns: ["listing_id"]
+isOneToOne: false
+      referencedRelation: "listings"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "order_items_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: false
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"orders": {
+                  Row: {
+                    "address_snapshot": Json | null,"buyer_user_id": string | null,"checkout_id": string,"community_id": string,"contact_snapshot": NonNullable<Json>,"created_at": string,"currency": string,"delivery_minor": number,"estimated_days_max": number | null,"estimated_days_min": number | null,"fulfillment_method": string,"id": string,"seller_name": string,"seller_profile_id": string | null,"seller_user_id": string | null,"status": string,"status_reason": string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id": string,"community_id": string,"contact_snapshot": NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor": number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method": string,"id"?: string,"seller_name": string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor": number,"tax_minor": number,"total_minor": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "address_snapshot"?: Json | null,"buyer_user_id"?: string | null,"checkout_id"?: string,"community_id"?: string,"contact_snapshot"?: NonNullable<Json>,"created_at"?: string,"currency"?: string,"delivery_minor"?: number,"estimated_days_max"?: number | null,"estimated_days_min"?: number | null,"fulfillment_method"?: string,"id"?: string,"seller_name"?: string,"seller_profile_id"?: string | null,"seller_user_id"?: string | null,"status"?: string,"status_reason"?: string | null,"subtotal_minor"?: number,"tax_minor"?: number,"total_minor"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "orders_buyer_user_id_fkey"
+      columns: ["buyer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "orders_checkout_fkey"
+      columns: ["checkout_id","community_id"]
+isOneToOne: false
+      referencedRelation: "checkouts"
+      referencedColumns: ["id","community_id"]
+    },{
+      foreignKeyName: "orders_seller_profile_id_fkey"
+      columns: ["seller_profile_id"]
+isOneToOne: false
+      referencedRelation: "seller_profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "orders_seller_user_id_fkey"
+      columns: ["seller_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"payment_events": {
+                  Row: {
+                    "amount_minor": number | null,"created_at": string,"currency": string | null,"id": string,"occurred_at": string | null,"outcome": string,"payment_id": string,"provider_event_id": string | null,"raw_sha256": string | null,"source": string,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor"?: number | null,"created_at"?: string,"currency"?: string | null,"id"?: string,"occurred_at"?: string | null,"outcome": string,"payment_id": string,"provider_event_id"?: string | null,"raw_sha256"?: string | null,"source": string,"status": string
+                  }
+                  Update: {
+                    "amount_minor"?: number | null,"created_at"?: string,"currency"?: string | null,"id"?: string,"occurred_at"?: string | null,"outcome"?: string,"payment_id"?: string,"provider_event_id"?: string | null,"raw_sha256"?: string | null,"source"?: string,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payment_events_payment_id_fkey"
+      columns: ["payment_id"]
+isOneToOne: false
+      referencedRelation: "payments"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"payments": {
+                  Row: {
+                    "amount_minor": number,"booking_id": string | null,"checkout_id": string | null,"community_id": string,"confirmed_at": string | null,"created_at": string,"currency": string,"failure_code": string | null,"id": string,"mode": string,"payer_user_id": string | null,"provider": string,"provider_reference": string | null,"redirect_url": string | null,"session_expires_at": string | null,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor": number,"booking_id"?: string | null,"checkout_id"?: string | null,"community_id": string,"confirmed_at"?: string | null,"created_at"?: string,"currency": string,"failure_code"?: string | null,"id"?: string,"mode": string,"payer_user_id"?: string | null,"provider": string,"provider_reference"?: string | null,"redirect_url"?: string | null,"session_expires_at"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"booking_id"?: string | null,"checkout_id"?: string | null,"community_id"?: string,"confirmed_at"?: string | null,"created_at"?: string,"currency"?: string,"failure_code"?: string | null,"id"?: string,"mode"?: string,"payer_user_id"?: string | null,"provider"?: string,"provider_reference"?: string | null,"redirect_url"?: string | null,"session_expires_at"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payments_checkout_id_fkey"
+      columns: ["checkout_id"]
+isOneToOne: false
+      referencedRelation: "checkouts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payments_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payments_payer_user_id_fkey"
+      columns: ["payer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"permissions": {
                   Row: {
                     "created_at": string,"description": string,"id": string,"key": string,"module": string
@@ -881,6 +1233,114 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"refund_events": {
+                  Row: {
+                    "actor_user_id": string | null,"created_at": string,"from_status": string | null,"id": string,"note": string | null,"refund_id": string,"to_status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_user_id"?: string | null,"created_at"?: string,"from_status"?: string | null,"id"?: string,"note"?: string | null,"refund_id": string,"to_status": string
+                  }
+                  Update: {
+                    "actor_user_id"?: string | null,"created_at"?: string,"from_status"?: string | null,"id"?: string,"note"?: string | null,"refund_id"?: string,"to_status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "refund_events_actor_user_id_fkey"
+      columns: ["actor_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refund_events_refund_id_fkey"
+      columns: ["refund_id"]
+isOneToOne: false
+      referencedRelation: "refunds"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"refund_items": {
+                  Row: {
+                    "amount_minor": number,"order_item_id": string,"quantity": number,"refund_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor": number,"order_item_id": string,"quantity": number,"refund_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"order_item_id"?: string,"quantity"?: number,"refund_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "refund_items_order_item_id_fkey"
+      columns: ["order_item_id"]
+isOneToOne: false
+      referencedRelation: "order_items"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refund_items_refund_id_fkey"
+      columns: ["refund_id"]
+isOneToOne: false
+      referencedRelation: "refunds"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"refunds": {
+                  Row: {
+                    "amount_minor": number,"attempts": number,"booking_id": string | null,"buyer_user_id": string | null,"community_id": string,"created_at": string,"currency": string,"decided_by": string | null,"decision_note": string | null,"failure_code": string | null,"id": string,"kind": string,"order_id": string | null,"payment_id": string,"provider_refund_reference": string | null,"reason": string,"requested_by": string | null,"seller_user_id": string | null,"status": string,"succeeded_at": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor": number,"attempts"?: number,"booking_id"?: string | null,"buyer_user_id"?: string | null,"community_id": string,"created_at"?: string,"currency": string,"decided_by"?: string | null,"decision_note"?: string | null,"failure_code"?: string | null,"id"?: string,"kind": string,"order_id"?: string | null,"payment_id": string,"provider_refund_reference"?: string | null,"reason": string,"requested_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"succeeded_at"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"attempts"?: number,"booking_id"?: string | null,"buyer_user_id"?: string | null,"community_id"?: string,"created_at"?: string,"currency"?: string,"decided_by"?: string | null,"decision_note"?: string | null,"failure_code"?: string | null,"id"?: string,"kind"?: string,"order_id"?: string | null,"payment_id"?: string,"provider_refund_reference"?: string | null,"reason"?: string,"requested_by"?: string | null,"seller_user_id"?: string | null,"status"?: string,"succeeded_at"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "refunds_buyer_user_id_fkey"
+      columns: ["buyer_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_community_id_fkey"
+      columns: ["community_id"]
+isOneToOne: false
+      referencedRelation: "communities"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_decided_by_fkey"
+      columns: ["decided_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: false
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_payment_id_fkey"
+      columns: ["payment_id"]
+isOneToOne: false
+      referencedRelation: "payments"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_requested_by_fkey"
+      columns: ["requested_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "refunds_seller_user_id_fkey"
+      columns: ["seller_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"role_permissions": {
                   Row: {
                     "permission_id": string,"role_id": string
@@ -969,14 +1429,14 @@ isOneToOne: false
                   ]
                 },"seller_profiles": {
                   Row: {
-                    "bio": string | null,"community_id": string,"created_at": string,"display_name": string,"id": string,"status": string,"updated_at": string,"user_id": string,"verification_status": string
+                    "bio": string | null,"community_id": string,"created_at": string,"display_name": string,"gct_registered": boolean,"id": string,"status": string,"updated_at": string,"user_id": string,"verification_status": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "bio"?: string | null,"community_id": string,"created_at"?: string,"display_name": string,"id"?: string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_status"?: string
+                    "bio"?: string | null,"community_id": string,"created_at"?: string,"display_name": string,"gct_registered"?: boolean,"id"?: string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_status"?: string
                   }
                   Update: {
-                    "bio"?: string | null,"community_id"?: string,"created_at"?: string,"display_name"?: string,"id"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_status"?: string
+                    "bio"?: string | null,"community_id"?: string,"created_at"?: string,"display_name"?: string,"gct_registered"?: boolean,"id"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_status"?: string
                   }
                   Relationships: [
                     {
@@ -1051,6 +1511,48 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"tax_rates": {
+                  Row: {
+                    "code": string,"effective_from": string,"effective_to": string | null,"id": string,"note": string | null,"rate_bps": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"effective_from": string,"effective_to"?: string | null,"id"?: string,"note"?: string | null,"rate_bps": number
+                  }
+                  Update: {
+                    "code"?: string,"effective_from"?: string,"effective_to"?: string | null,"id"?: string,"note"?: string | null,"rate_bps"?: number
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"test_provider_sessions": {
+                  Row: {
+                    "amount_minor": number,"created_at": string,"currency": string,"expires_at": string,"payment_id": string,"reference": string,"refunded_minor": number,"return_url": string,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_minor": number,"created_at"?: string,"currency": string,"expires_at": string,"payment_id": string,"reference": string,"refunded_minor"?: number,"return_url": string,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"created_at"?: string,"currency"?: string,"expires_at"?: string,"payment_id"?: string,"reference"?: string,"refunded_minor"?: number,"return_url"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"webhook_events": {
+                  Row: {
+                    "id": string,"outcome": string | null,"processed_at": string | null,"provider": string,"provider_event_id": string,"received_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"outcome"?: string | null,"processed_at"?: string | null,"provider": string,"provider_event_id": string,"received_at"?: string
+                  }
+                  Update: {
+                    "id"?: string,"outcome"?: string | null,"processed_at"?: string | null,"provider"?: string,"provider_event_id"?: string,"received_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
@@ -1081,6 +1583,26 @@ isOneToOne: false
                            },
 "cancel_rsvp":
 { Args: { "p_event_id": string }; Returns: boolean
+                           },
+"cart_clear":
+{ Args: { "p_community_id": string }; Returns: undefined
+                           },
+"cart_quote":
+{ Args: { "p_community_id": string }; Returns: {
+              "available": number,"cover_image_path": string,"currency": string,"fulfillment": (string)[],"issue": string,"item_count": number,"line_total_minor": number,"listing_id": string,"quantity": number,"seen_price_minor": number,"seller_display_name": string,"seller_profile_id": string,"subtotal_minor": number,"title": string,"unit_price_minor": number
+            }[]
+                           },
+"cart_set_item":
+{ Args: { "p_listing_id": string,"p_quantity": number }; Returns: number
+                           },
+"checkout_cancel":
+{ Args: { "p_checkout_id": string }; Returns: undefined
+                           },
+"checkout_create":
+{ Args: { "p_address_id": string,"p_choices": Json,"p_client_request_id": string,"p_community_id": string,"p_contact_name": string,"p_contact_phone": string,"p_expected_total_minor": number,"p_terms_version": string }; Returns: string
+                           },
+"checkout_preview":
+{ Args: { "p_address_id"?: string,"p_choices"?: Json,"p_community_id": string }; Returns: Json
                            },
 "community_stats":
 { Args: { "p_community_id": string }; Returns: {
@@ -1199,6 +1721,9 @@ isOneToOne: false
                            },
 "delete_story":
 { Args: { "p_story_id": string }; Returns: boolean
+                           },
+"expire_checkouts":
+{ Args: Record<PropertyKey, never>; Returns: number
                            },
 "expire_due_alerts":
 { Args: Record<PropertyKey, never>; Returns: number
@@ -1491,6 +2016,22 @@ isOneToOne: false
 "my_profile_stats":
 { Args: Record<PropertyKey, never>; Returns: {
               "communities": number,"events_going": number,"member_since": string,"posts": number
+            }[]
+                           },
+"payment_apply_event":
+{ Args: { "p_amount_minor": number,"p_currency": string,"p_occurred_at": string,"p_provider": string,"p_provider_event_id": string,"p_provider_reference": string,"p_raw_sha256": string,"p_source": string,"p_status": string }; Returns: string
+                           },
+"payment_attach_session":
+{ Args: { "p_payment_id": string,"p_provider_reference": string,"p_redirect_url": string,"p_session_expires_at": string }; Returns: undefined
+                           },
+"payment_begin":
+{ Args: { "p_checkout_id": string,"p_mode": string,"p_provider": string,"p_user_id": string }; Returns: {
+              "amount_minor": number,"currency": string,"description": string,"payment_id": string,"provider_reference": string,"redirect_url": string,"session_expires_at": string
+            }[]
+                           },
+"payments_to_reconcile":
+{ Args: { "p_age"?: string }; Returns: {
+              "amount_minor": number,"currency": string,"payment_id": string,"provider": string,"provider_reference": string,"status": string
             }[]
                            },
 "preview_invitation":
