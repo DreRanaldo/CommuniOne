@@ -50,7 +50,7 @@ until D1 to D8 are decided.
 
 | # | Decision | Needed by | Recommendation |
 |---|---|---|---|
-| D1 | **Scope.** Is the marketplace per community (only members of that community see and buy) or platform-wide? | B | Per community. It matches CommuniOne's tenant isolation and every existing rule. Platform-wide listing can come later as an opt-in. |
+| D1 | **Scope:** per community or platform-wide? | B | **Decided (owner, 2026-10-14): per community.** Listings, carts, orders and bookings belong to one community; only its active members (with `marketplace.*` permissions) see, buy or sell there. |
 | D2 | **Payment provider and merchant of record.** Is CommuniOne's business the merchant that collects payments for sellers, or does each seller collect their own? | E | Apply to PowerTranz (formerly First Atlantic Commerce) through a Jamaican acquiring bank, and ask WiPay in parallel. Before applying, ask both whether a **marketplace that collects for third-party sellers** is allowed under their merchant terms. See [`payments.md`](payments.md). |
 | D3 | **Legal check.** Does collecting money for sellers and paying them later need Bank of Jamaica authorization (Electronic Retail Payment Services guidelines) or other licensing? | E (before live) | A Jamaican lawyer and the acquiring bank must confirm. Do not go live without it. |
 | D4 | Platform commission and seller fees | K (before live) | Undecided: a business decision. |

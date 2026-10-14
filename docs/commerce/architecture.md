@@ -5,7 +5,7 @@
 | Capability | Existing piece | How commerce uses it |
 |---|---|---|
 | Identity | Supabase Auth; `private.current_active_user_id()` (live session, active account) | Every commerce operation is attributed to it. Buyer and seller ids are never taken from the client. |
-| Tenancy | `communities`, `memberships`; `has_community_permission(community, key)` | Listings, carts and orders belong to one community (decision D1). Buying and selling need an active membership and a permission. |
+| Tenancy | `communities`, `memberships`; `has_community_permission(community, key)` | Listings, carts, orders and bookings belong to one community (decision D1: **per community**, decided by the owner). Buying and selling need an active membership and a permission. |
 | Permissions | `permissions`, role templates, `role_permissions`; anti-escalation and cover rules | New keys: `marketplace.view`, `marketplace.buy`, `marketplace.sell`, `marketplace.manage`. They are added to the templates by migration, as migration 31 did for `alerts.create`. |
 | RLS pattern | Explicit column grants; SECURITY DEFINER functions with `search_path = ''`; `private` schema helpers | Same pattern. Money-moving writes go only through functions; tables get no client INSERT or UPDATE grants. |
 | Private files | Private buckets with own-folder upload policies and signed URLs (`post-images`, `alert-images`) | A `listing-images` bucket uses the same layout and rules (`{community}/{user}/{uuid}.jpg`). |
